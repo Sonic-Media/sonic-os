@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 
 interface TodayProgressProps {
   progress: BranchProgress[];
+  className?: string;
 }
 
 function statusLabel(item: BranchProgress): string {
@@ -20,9 +21,9 @@ function statusLabel(item: BranchProgress): string {
   }
 }
 
-export function TodayProgress({ progress }: TodayProgressProps) {
+export function TodayProgress({ progress, className }: TodayProgressProps) {
   return (
-    <section className="mb-8">
+    <section className={cn("mb-8", className)}>
       <h2 className="text-sm font-medium text-zinc-500 mb-3 tracking-wide uppercase">
         Today&apos;s Entries
       </h2>

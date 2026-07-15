@@ -11,7 +11,7 @@ interface HistoryListProps {
 
 export function HistoryList({ entries, onDelete, onDuplicate }: HistoryListProps) {
   return (
-    <div className="space-y-3">
+    <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-2">
       {entries.map((entry) => (
         <HistoryCard
           key={entry.id}

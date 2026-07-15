@@ -18,6 +18,8 @@ import {
   saveStaffList,
   sortStaffByName,
 } from "@/lib/staff-storage";
+import { recordActivity } from "@/lib/activity-log";
+import { getSettings } from "@/lib/settings-storage";
 import type { Branch, Staff } from "@/types";
 
 interface StaffContextValue {
@@ -97,6 +99,11 @@ export function StaffProvider({ children }: { children: React.ReactNode }) {
         active: true,
       };
       persistStaff(sortStaffByName([...staffRef.current, member]));
+      recordActivity({
+        type: "staff-added",
+        title: "Staff added",
+        description: `${member.name} was added to the ${getSettings().branchNames[input.branch]} team.`,
+      });
       return member;
     },
     [persistStaff]

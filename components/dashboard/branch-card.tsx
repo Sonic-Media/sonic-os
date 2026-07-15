@@ -11,7 +11,7 @@ interface BranchCardProps {
 
 export function BranchCard({ name, totals }: BranchCardProps) {
   return (
-    <div className="rounded-2xl border border-zinc-800/80 bg-zinc-900/60 p-5 shadow-lg shadow-black/20">
+    <div className="rounded-2xl border border-zinc-800/80 bg-zinc-900/60 p-5 shadow-lg shadow-black/20 transition-[border-color,box-shadow,transform] duration-200 hover:-translate-y-0.5 hover:border-zinc-700/80 hover:shadow-lg">
       <h3 className="text-base font-semibold text-white mb-4">{name}</h3>
       <div className="grid grid-cols-2 gap-4">
         <div>
@@ -43,11 +43,12 @@ export function BranchCard({ name, totals }: BranchCardProps) {
 interface DashboardGreetingProps {
   greeting: string;
   date: string;
+  className?: string;
 }
 
-export function DashboardGreeting({ greeting, date }: DashboardGreetingProps) {
+export function DashboardGreeting({ greeting, date, className }: DashboardGreetingProps) {
   return (
-    <section className="mb-8">
+    <section className={cn("mb-8", className)}>
       <p className="text-sm font-medium text-zinc-500 mb-1">Sonic OS</p>
       <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight text-white">
         {greeting} 👋

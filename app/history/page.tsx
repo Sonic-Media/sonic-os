@@ -31,22 +31,24 @@ export default function HistoryPage() {
         subtitle={`${filteredEntries.length} ${filteredEntries.length === 1 ? "entry" : "entries"}`}
       />
 
-      <HistoryFilters
-        criteria={criteria}
-        sortOrder={sortOrder}
-        onCriteriaChange={updateCriteria}
-        onSortOrderChange={setSortOrder}
-      />
-
-      {filteredEntries.length === 0 ? (
-        <HistoryEmptyState />
-      ) : (
-        <HistoryList
-          entries={filteredEntries}
-          onDelete={(entry) => deleteEntry(entry.id)}
-          onDuplicate={duplicateEntry}
+      <div className="lg:grid lg:grid-cols-[minmax(280px,320px)_1fr] lg:gap-8 lg:items-start">
+        <HistoryFilters
+          criteria={criteria}
+          sortOrder={sortOrder}
+          onCriteriaChange={updateCriteria}
+          onSortOrderChange={setSortOrder}
         />
-      )}
+
+        {filteredEntries.length === 0 ? (
+          <HistoryEmptyState />
+        ) : (
+          <HistoryList
+            entries={filteredEntries}
+            onDelete={(entry) => deleteEntry(entry.id)}
+            onDuplicate={duplicateEntry}
+          />
+        )}
+      </div>
     </PageContainer>
   );
 }

@@ -10,6 +10,7 @@ import {
   HISTORY_STATUS_OPTIONS,
 } from "@/lib/constants";
 import { getStaffOptions } from "@/lib/staff-reports";
+import { cn } from "@/lib/utils";
 import type { HistoryFilterCriteria, HistorySortOrder } from "@/types";
 
 interface HistoryFiltersProps {
@@ -17,6 +18,7 @@ interface HistoryFiltersProps {
   sortOrder: HistorySortOrder;
   onCriteriaChange: (patch: Partial<HistoryFilterCriteria>) => void;
   onSortOrderChange: (order: HistorySortOrder) => void;
+  className?: string;
 }
 
 const sortOptions = HISTORY_SORT_OPTIONS;
@@ -26,6 +28,7 @@ export function HistoryFilters({
   sortOrder,
   onCriteriaChange,
   onSortOrderChange,
+  className,
 }: HistoryFiltersProps) {
   const { branches } = useSettings();
   const { staff: staffMembers } = useStaff();
@@ -39,7 +42,7 @@ export function HistoryFilters({
   ];
 
   return (
-    <section className="space-y-4 mb-8">
+    <section className={cn("space-y-4 mb-8 lg:mb-0 lg:sticky lg:top-8", className)}>
       <Input
         label="Search by date"
         type="date"

@@ -57,27 +57,44 @@ function findBestPerformingBranch(
   return { bestPerformingBranch, bestPerformingBranchSavings };
 }
 
+const TEMPLATE_CATEGORY_MAP: Record<string, ExpenseBreakdownKey> = {
+  "common-rent": "rent",
+  "common-staff-payments": "staff-payments",
+  "common-lunch": "lunch",
+  "common-electricity": "electricity",
+  "common-internet": "internet",
+  "common-transport": "transport",
+  "common-repairs": "repairs",
+  "common-inventory": "inventory",
+  "template-fuel": "transport",
+};
+
+const NAME_CATEGORY_MAP: Record<string, ExpenseBreakdownKey> = {
+  rent: "rent",
+  staff: "staff-payments",
+  "staff payments": "staff-payments",
+  lunch: "lunch",
+  electricity: "electricity",
+  internet: "internet",
+  transport: "transport",
+  fuel: "transport",
+  repairs: "repairs",
+  inventory: "inventory",
+};
+
 export function classifyExpense(expense: Expense): ExpenseBreakdownKey {
-  if (expense.id === "template-fuel") return "other";
-  if (expense.id === "common-rent") return "rent";
-  if (expense.id === "common-lunch") return "lunch";
-  if (expense.id === "common-staff-payments") return "staff-payments";
+  if (TEMPLATE_CATEGORY_MAP[expense.id]) {
+    return TEMPLATE_CATEGORY_MAP[expense.id];
+  }
 
   const name = expense.name.trim().toLowerCase();
-  if (name === "rent") return "rent";
-  if (name === "lunch") return "lunch";
-  if (name === "staff payments") return "staff-payments";
-
-  return "other";
+  return NAME_CATEGORY_MAP[name] ?? "other";
 }
 
 export function buildExpenseBreakdown(entries: Entry[]) {
-  const totals: Record<ExpenseBreakdownKey, number> = {
-    rent: 0,
-    lunch: 0,
-    "staff-payments": 0,
-    other: 0,
-  };
+  const totals = Object.fromEntries(
+    EXPENSE_BREAKDOWN_ITEMS.map(({ key }) => [key, 0])
+  ) as Record<ExpenseBreakdownKey, number>;
 
   for (const entry of filterCompletedEntries(entries)) {
     for (const expense of entry.expenses) {
@@ -226,6 +243,8 @@ function buildQuickInsights(
   return {
     highestExpenseCategory: getHighestExpenseCategory(expenseBreakdown),
     mostExpensiveDay: summary.insights.highestExpenseDay ?? null,
+    highestSalesDay: summary.insights.highestSalesDay ?? null,
+    highestSavingsDay: summary.insights.highestSavingsDay ?? null,
     averageDailySales:
       dayCount > 0 ? summary.totalSales / dayCount : 0,
     averageDailyExpenses:
@@ -235,18 +254,15 @@ function buildQuickInsights(
   };
 }
 
-export function getDashboardAnalytics(
-  entries: Entry[],
+export function getDashboardAnalyticsFromEntries(
+  currentEntries: Entry[],
+  previousEntries: Entry[],
   period: DashboardPeriod,
   options: {
     branchNames: Record<Branch, string>;
     staff: Staff[];
-    ref?: Date;
   }
 ): DashboardAnalytics {
-  const ref = options.ref ?? new Date();
-  const currentEntries = filterEntriesByPeriod(entries, period, ref);
-  const previousEntries = filterEntriesByPreviousPeriod(entries, period, ref);
   const current = aggregateEntries(currentEntries);
   const previous = aggregateEntries(previousEntries);
 
@@ -275,6 +291,30 @@ export function getDashboardAnalytics(
     bestStaff: getBestStaff(currentEntries, options.staff, options.branchNames),
     quickInsights: buildQuickInsights(currentEntries, current),
   };
+}
+
+export function getDashboardAnalytics(
+  entries: Entry[],
+  period: DashboardPeriod,
+  options: {
+    branchNames: Record<Branch, string>;
+    staff: Staff[];
+    ref?: Date;
+  }
+): DashboardAnalytics {
+  const ref = options.ref ?? new Date();
+  const currentEntries = filterEntriesByPeriod(entries, period, ref);
+  const previousEntries = filterEntriesByPreviousPeriod(entries, period, ref);
+
+  return getDashboardAnalyticsFromEntries(
+    currentEntries,
+    previousEntries,
+    period,
+    {
+      branchNames: options.branchNames,
+      staff: options.staff,
+    }
+  );
 }
 
 export function buildReportInsights(

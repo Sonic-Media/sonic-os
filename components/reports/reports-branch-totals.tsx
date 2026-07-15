@@ -17,7 +17,7 @@ export function ReportsBranchTotals({ byBranch }: ReportsBranchTotalsProps) {
       <h2 className="text-sm font-medium text-zinc-500 mb-3 tracking-wide uppercase">
         By Branch
       </h2>
-      <div className="space-y-3">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
         {branches.map((branch) => {
           const totals = byBranch[branch.id];
           return (

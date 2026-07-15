@@ -37,6 +37,8 @@ export interface BestStaffResult {
 export interface DashboardQuickInsights {
   highestExpenseCategory: { label: string; amount: number } | null;
   mostExpensiveDay: ReportDayInsight | null;
+  highestSalesDay: ReportDayInsight | null;
+  highestSavingsDay: ReportDayInsight | null;
   averageDailySales: number;
   averageDailyExpenses: number;
   averageDailySavings: number;
@@ -59,7 +61,16 @@ export type HistoryBranchFilter = Branch | "all";
 
 export type BranchEntryStatus = "pending" | "draft" | "completed";
 
-export type ExpenseBreakdownKey = "rent" | "lunch" | "staff-payments" | "other";
+export type ExpenseBreakdownKey =
+  | "rent"
+  | "staff-payments"
+  | "lunch"
+  | "electricity"
+  | "internet"
+  | "transport"
+  | "repairs"
+  | "inventory"
+  | "other";
 
 export interface Expense {
   id: string;
@@ -86,6 +97,7 @@ export interface Entry {
   staffId: string;
   staffName: string;
   notes: string;
+  savingsAllocation?: number;
   createdAt: string;
   status: EntryStatus;
 }
@@ -97,6 +109,7 @@ export interface EntryFormData {
   expenses: Expense[];
   staffId: string;
   notes: string;
+  savingsAllocation: string;
 }
 
 export interface BranchTotals {

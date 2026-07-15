@@ -1,147 +1,171 @@
 "use client";
 
-import { Card } from "@/components/shared/ui/card";
-import { StatCard } from "@/components/shared/ui/stat-card";
+import { DashboardFilterToolbar } from "@/components/dashboard/analytics/dashboard-filter-toolbar";
+import { AnalyticsSkeleton } from "@/components/dashboard/analytics/analytics-skeleton";
+import { DrillDownPanel } from "@/components/dashboard/analytics/drill-down-panel";
+import { InsightsSection } from "@/components/dashboard/analytics/insights-section";
+import { InteractiveCharts } from "@/components/dashboard/analytics/interactive-charts";
+import { KpiDetailDrawer } from "@/components/dashboard/analytics/kpi-detail-drawer";
+import { MetricCard } from "@/components/dashboard/analytics/metric-card";
+import {
+  DashboardProvider,
+  useDashboardContext,
+} from "@/context/dashboard-context";
 import { formatCurrency, formatPercent } from "@/lib/format";
-import type {
-  DashboardAnalytics,
-  DashboardMetricWithTrend,
-  DashboardPeriod,
-} from "@/types";
-import { DashboardPeriodTabs } from "@/components/dashboard/dashboard-period-tabs";
+import type { MetricFocus } from "@/lib/analytics-view";
+import type { DashboardMetricWithTrend } from "@/types";
 
-interface DashboardAnalyticsSectionProps {
-  analytics: DashboardAnalytics;
-  period: DashboardPeriod;
-  onPeriodChange: (period: DashboardPeriod) => void;
-}
+const METRIC_CONFIG: {
+  key: MetricFocus;
+  label: string;
+  getValue: (
+    analytics: ReturnType<typeof useDashboardContext>["analytics"]
+  ) => number;
+  getMetric: (
+    analytics: ReturnType<typeof useDashboardContext>["analytics"]
+  ) => DashboardMetricWithTrend;
+  formatValue?: (value: number) => string;
+  variant?: (
+    analytics: ReturnType<typeof useDashboardContext>["analytics"]
+  ) => "default" | "accent";
+  className?: string;
+}[] = [
+  {
+    key: "sales",
+    label: "Sales",
+    getValue: (a) => a.sales.value,
+    getMetric: (a) => a.sales,
+  },
+  {
+    key: "expenses",
+    label: "Expenses",
+    getValue: (a) => a.expenses.value,
+    getMetric: (a) => a.expenses,
+  },
+  {
+    key: "savings",
+    label: "Savings",
+    getValue: (a) => a.savings.value,
+    getMetric: (a) => a.savings,
+    variant: (a) => (a.savings.value >= 0 ? "accent" : "default"),
+  },
+  {
+    key: "profit",
+    label: "Profit Margin %",
+    getValue: (a) => a.profitMargin.value,
+    getMetric: (a) => a.profitMargin,
+    formatValue: formatPercent,
+    className: "col-span-2 sm:col-span-1",
+  },
+];
 
 function trendTone(metric: DashboardMetricWithTrend) {
   return metric.trend.isPositive ? "positive" : "negative";
 }
 
-export function DashboardAnalyticsSection({
-  analytics,
-  period,
-  onPeriodChange,
-}: DashboardAnalyticsSectionProps) {
-  const { bestBranch, bestStaff, quickInsights } = analytics;
+function DashboardAnalyticsContent() {
+  const {
+    analytics,
+    chartData,
+    entries,
+    isLoaded,
+    activeMetric,
+    openKpiDrawer,
+    closeKpiDrawer,
+    kpiDrawer,
+    openDrillDown,
+    expenseCategory,
+    drillDown,
+    closeDrillDown,
+    branchNames,
+    filteredEntries,
+    timeFilter,
+    customRange,
+    branchFilter,
+    staffFilter,
+  } = useDashboardContext();
+
+  if (!isLoaded) {
+    return <AnalyticsSkeleton />;
+  }
+
+  const handleMetricClick = (key: MetricFocus) => {
+    openKpiDrawer(key);
+  };
+
+  const expenseCategoryLabel = expenseCategory
+    ? chartData.expenseBreakdown.find((slice) => slice.key === expenseCategory)
+        ?.label ?? null
+    : analytics.quickInsights.highestExpenseCategory?.label ?? null;
 
   return (
     <section className="mb-8">
-      <DashboardPeriodTabs period={period} onPeriodChange={onPeriodChange} />
+      <DashboardFilterToolbar />
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 mb-6">
-        <StatCard
-          label="Sales"
-          value={analytics.sales.value}
-          size="large"
-          detail={analytics.sales.trend.label}
-          detailTone={trendTone(analytics.sales)}
-        />
-        <StatCard
-          label="Expenses"
-          value={analytics.expenses.value}
-          size="large"
-          detail={analytics.expenses.trend.label}
-          detailTone={trendTone(analytics.expenses)}
-        />
-        <StatCard
-          label="Savings"
-          value={analytics.savings.value}
-          size="large"
-          variant={analytics.savings.value >= 0 ? "accent" : "default"}
-          detail={analytics.savings.trend.label}
-          detailTone={trendTone(analytics.savings)}
-        />
-        <StatCard
-          label="Profit Margin %"
-          value={analytics.profitMargin.value}
-          size="large"
-          formatValue={formatPercent}
-          detail={analytics.profitMargin.trend.label}
-          detailTone={trendTone(analytics.profitMargin)}
-          className="col-span-2 sm:col-span-1"
-        />
+      <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4 lg:gap-4">
+        {METRIC_CONFIG.map((metric) => {
+          const data = metric.getMetric(analytics);
+          const isSelected = activeMetric === metric.key;
+
+          return (
+            <MetricCard
+              key={metric.key}
+              label={metric.label}
+              value={metric.getValue(analytics)}
+              detail={data.trend.label}
+              detailTone={trendTone(data)}
+              formatValue={metric.formatValue ?? formatCurrency}
+              variant={metric.variant?.(analytics)}
+              isSelected={isSelected}
+              onClick={() => handleMetricClick(metric.key)}
+              className={metric.className}
+              animateFromZeroOnMount
+            />
+          );
+        })}
       </div>
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 mb-6">
-        <Card>
-          <p className="text-sm font-medium text-zinc-500 tracking-wide">
-            Best Branch
-          </p>
-          {bestBranch ? (
-            <>
-              <p className="text-2xl font-semibold text-white mt-1 tracking-tight">
-                {bestBranch.name}
-              </p>
-              <p className="text-sm text-zinc-500 mt-1">
-                {formatCurrency(bestBranch.totalSales)} sales
-              </p>
-              <p className="text-sm text-zinc-500 mt-1">
-                {formatPercent(bestBranch.revenuePercentage)} of total revenue
-              </p>
-            </>
-          ) : (
-            <p className="text-2xl font-semibold text-white mt-1 tracking-tight">
-              No data
-            </p>
-          )}
-        </Card>
+      <InteractiveCharts />
 
-        <Card>
-          <p className="text-sm font-medium text-zinc-500 tracking-wide">
-            Best Staff
-          </p>
-          {bestStaff ? (
-            <>
-              <p className="text-2xl font-semibold text-white mt-1 tracking-tight">
-                {bestStaff.staffName}
-              </p>
-              <p className="text-sm text-zinc-500 mt-1">
-                {formatCurrency(bestStaff.totalSales)} sales handled
-              </p>
-              <p className="text-sm text-zinc-500 mt-1">{bestStaff.branchName}</p>
-            </>
-          ) : (
-            <p className="text-2xl font-semibold text-white mt-1 tracking-tight">
-              No data
-            </p>
-          )}
-        </Card>
-      </div>
+      <InsightsSection />
 
-      <div>
-        <h2 className="text-sm font-medium text-zinc-500 mb-3 tracking-wide uppercase">
-          Quick Insights
-        </h2>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <StatCard
-            label="Highest Expense Category"
-            value={quickInsights.highestExpenseCategory?.amount ?? 0}
-            detail={quickInsights.highestExpenseCategory?.label ?? "No data"}
-          />
-          <StatCard
-            label="Most Expensive Day"
-            value={quickInsights.mostExpensiveDay?.value ?? 0}
-            detail={quickInsights.mostExpensiveDay?.label ?? "No data"}
-          />
-          <StatCard
-            label="Average Daily Sales"
-            value={quickInsights.averageDailySales}
-          />
-          <StatCard
-            label="Average Daily Expenses"
-            value={quickInsights.averageDailyExpenses}
-          />
-          <StatCard
-            label="Average Savings"
-            value={quickInsights.averageDailySavings}
-            variant={quickInsights.averageDailySavings >= 0 ? "accent" : "default"}
-            className="sm:col-span-2"
-          />
-        </div>
-      </div>
+      <KpiDetailDrawer
+        metric={kpiDrawer}
+        onClose={closeKpiDrawer}
+        onOpenReport={openDrillDown}
+        entries={entries}
+        analytics={analytics}
+        quickInsights={analytics.quickInsights}
+        salesTrend={chartData.salesTrend}
+        chartData={chartData}
+        bestBranch={analytics.bestBranch}
+        branchNames={branchNames}
+        timeFilter={timeFilter}
+        customRange={customRange}
+        branchFilter={branchFilter}
+        staffFilter={staffFilter}
+      />
+
+      <DrillDownPanel
+        view={drillDown}
+        onClose={closeDrillDown}
+        entries={filteredEntries}
+        bestBranch={analytics.bestBranch}
+        bestStaff={analytics.bestStaff}
+        quickInsights={analytics.quickInsights}
+        salesTrend={chartData.salesTrend}
+        chartData={chartData}
+        branchNames={branchNames}
+        expenseCategoryLabel={expenseCategoryLabel}
+      />
     </section>
+  );
+}
+
+export function DashboardAnalyticsSection() {
+  return (
+    <DashboardProvider>
+      <DashboardAnalyticsContent />
+    </DashboardProvider>
   );
 }

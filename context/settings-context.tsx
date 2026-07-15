@@ -16,6 +16,7 @@ import {
   normalizeSettings,
   saveSettings,
 } from "@/lib/settings-storage";
+import { recordActivity } from "@/lib/activity-log";
 import type { AppSettings, Branch, BranchConfig } from "@/types";
 
 interface SettingsContextValue {
@@ -48,6 +49,20 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     setSettings((prev) => {
       const next = normalizeSettings({ ...prev, ...patch });
       saveSettings(next);
+
+      const changedKeys = Object.keys(patch);
+      const isSignificant = changedKeys.some((key) =>
+        ["businessName", "ownerName", "defaultLunchAmount"].includes(key)
+      );
+
+      if (isSignificant) {
+        recordActivity({
+          type: "settings-changed",
+          title: "Settings changed",
+          description: "Business or account settings were updated.",
+        });
+      }
+
       return next;
     });
   }, []);

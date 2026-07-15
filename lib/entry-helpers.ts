@@ -19,6 +19,9 @@ import type {
 } from "@/types";
 
 export function entryToForm(entry: Entry): EntryFormData {
+  const netCash = entry.sales - entry.expenses.reduce((sum, e) => sum + e.amount, 0);
+  const allocation = entry.savingsAllocation ?? netCash;
+
   return {
     date: entry.date,
     branch: entry.branch,
@@ -26,6 +29,7 @@ export function entryToForm(entry: Entry): EntryFormData {
     expenses: entry.expenses.map((expense) => ({ ...expense })),
     staffId: entry.staffId,
     notes: entry.notes,
+    savingsAllocation: String(allocation),
   };
 }
 
@@ -56,6 +60,7 @@ export function formToEntry(
     staffId: form.staffId,
     staffName,
     notes: form.notes.trim(),
+    savingsAllocation: parseAmount(form.savingsAllocation),
     createdAt: existing?.createdAt ?? now.toISOString(),
     status: options?.status ?? existing?.status ?? "draft",
   };
@@ -110,12 +115,12 @@ export function findMostRecentEntryForDate(
 
 export function getBranchEntryHref(item: BranchProgress): string {
   if (item.status === "completed" && item.entryId) {
-    return `/entry/${item.entryId}`;
+    return `/operations/today?branch=${item.branch}`;
   }
   if (item.status === "draft" && item.entryId) {
-    return `/entry/${item.entryId}/edit`;
+    return `/operations/today?branch=${item.branch}`;
   }
-  return `/entry/new?branch=${item.branch}`;
+  return `/operations/today?branch=${item.branch}`;
 }
 
 export function getTodayBranchProgress(

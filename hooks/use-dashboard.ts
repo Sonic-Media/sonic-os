@@ -9,6 +9,7 @@ import {
 } from "@/lib/entry-helpers";
 import { formatDisplayDate, getTodayISO } from "@/lib/dates";
 import { getGreeting } from "@/lib/format";
+import { getDashboardChartData } from "@/lib/chart-data";
 import { getDashboardAnalytics } from "@/lib/report-insights";
 import { useEntriesContext } from "@/context/entries-context";
 import { useSettings } from "@/context/settings-context";
@@ -34,6 +35,11 @@ export function useDashboard() {
       branchNames: settings.branchNames,
       staff,
     });
+    const chartData = getDashboardChartData(
+      entries,
+      period,
+      settings.branchNames
+    );
 
     const dashboard: DashboardSummary = {
       summary,
@@ -47,6 +53,7 @@ export function useDashboard() {
       greeting: getGreeting(settings.ownerName),
       date: formatDisplayDate(),
       analytics,
+      chartData,
       ...dashboard,
     };
   }, [entries, today, branches, settings.ownerName, settings.branchNames, staff, period]);

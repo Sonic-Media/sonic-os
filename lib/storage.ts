@@ -82,6 +82,10 @@ function migrateEntry(raw: Record<string, unknown>): Entry {
     staffId: typeof raw.staffId === "string" ? raw.staffId : "",
     staffName: typeof raw.staffName === "string" ? raw.staffName : "",
     notes: typeof raw.notes === "string" ? raw.notes : "",
+    savingsAllocation:
+      typeof raw.savingsAllocation === "number"
+        ? Math.max(0, raw.savingsAllocation)
+        : undefined,
     createdAt,
     status: raw.status === "draft" ? "draft" : "completed",
   };

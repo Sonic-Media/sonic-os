@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist } from "next/font/google";
-import { BottomNav } from "@/components/shared/layout/bottom-nav";
+import { AppShell } from "@/components/shared/layout/app-shell";
+import { CommandPaletteProvider } from "@/context/command-palette-context";
 import { EntriesProvider } from "@/context/entries-context";
 import { ExpenseTemplatesProvider } from "@/context/expense-templates-context";
 import { SettingsProvider } from "@/context/settings-context";
@@ -34,8 +35,9 @@ export default function RootLayout({
           <ExpenseTemplatesProvider>
             <StaffProvider>
               <EntriesProvider>
-                <main className="min-h-full">{children}</main>
-                <BottomNav />
+                <CommandPaletteProvider>
+                  <AppShell>{children}</AppShell>
+                </CommandPaletteProvider>
               </EntriesProvider>
             </StaffProvider>
           </ExpenseTemplatesProvider>

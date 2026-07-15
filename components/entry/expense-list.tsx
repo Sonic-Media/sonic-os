@@ -39,7 +39,7 @@ export function ExpenseList({
     <div className="space-y-6">
       <section className="space-y-3">
         <h3 className="text-sm font-medium text-zinc-500 uppercase tracking-wide">
-          Common Expenses
+          Expense Categories
         </h3>
         <div className="space-y-3">
           {commonExpenses.map((expense) => (
@@ -66,6 +66,9 @@ export function ExpenseList({
       </section>
 
       <section className="space-y-3">
+        <h3 className="text-sm font-medium text-zinc-500 uppercase tracking-wide">
+          Other Expense
+        </h3>
         {additionalExpenses.map((expense) => (
           <ExpenseRow
             key={expense.id}
@@ -96,7 +99,7 @@ export function ExpenseList({
             onClick={openAddForm}
             className="text-sm font-medium text-white hover:text-zinc-300 transition-colors"
           >
-            + Add Expense
+            + Add Other Expense
           </button>
         )}
       </section>

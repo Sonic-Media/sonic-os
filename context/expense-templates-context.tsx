@@ -19,6 +19,7 @@ import {
   saveExpenseTemplates,
   sortExpenseTemplates,
 } from "@/lib/expense-template-storage";
+import { recordActivity } from "@/lib/activity-log";
 import type { Expense, ExpenseBreakdownKey, ExpenseTemplate } from "@/types";
 
 interface ExpenseTemplatesContextValue {
@@ -115,6 +116,11 @@ export function ExpenseTemplatesProvider({
         active: true,
       };
       persistTemplates([...templatesRef.current, template]);
+      recordActivity({
+        type: "template-updated",
+        title: "Expense template updated",
+        description: `${template.name} template was added.`,
+      });
       return template;
     },
     [persistTemplates]
@@ -152,6 +158,15 @@ export function ExpenseTemplatesProvider({
           })
         )
       );
+
+      const updated = templatesRef.current.find((template) => template.id === id);
+      if (updated) {
+        recordActivity({
+          type: "template-updated",
+          title: "Expense template updated",
+          description: `${updated.name} template was updated.`,
+        });
+      }
     },
     [persistTemplates]
   );

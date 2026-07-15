@@ -34,14 +34,20 @@ function createBlankForm(
     expenses: createDefaultExpenses(templateExpenses),
     staffId: "",
     notes: "",
+    savingsAllocation: "",
   };
 }
+
+export type OperationsMode = "today" | "historical";
 
 interface UseEntryFormOptions {
   entry?: Entry;
   redirectTo?: string;
   initialBranch?: Branch;
+  initialDate?: string;
   lockBranch?: boolean;
+  lockDate?: boolean;
+  mode?: OperationsMode;
 }
 
 export function useEntryForm(options: UseEntryFormOptions = {}) {
@@ -58,11 +64,13 @@ export function useEntryForm(options: UseEntryFormOptions = {}) {
       ? entryToForm(options.entry)
       : createBlankForm(
           options.initialBranch ?? "salaama",
-          activeTemplateExpenses
+          activeTemplateExpenses,
+          options.initialDate ?? getTodayISO()
         )
   );
   const [isSaving, setIsSaving] = useState(false);
   const [duplicateEntry, setDuplicateEntry] = useState<Entry | null>(null);
+  const [showCloseDayDialog, setShowCloseDayDialog] = useState(false);
   const [hasStarted, setHasStarted] = useState(isEdit);
   const hasInteracted = useRef(isEdit);
   const draftIdRef = useRef<string | null>(
@@ -79,6 +87,7 @@ export function useEntryForm(options: UseEntryFormOptions = {}) {
   const sales = parseAmount(form.sales);
   const totalExpenses = calculateExpenses(form);
   const balance = calculateFormSavings(form);
+  const mode = options.mode ?? "today";
   const status = isEdit ? options.entry!.status : "draft";
   const showStatus = isEdit || hasStarted;
 
@@ -130,21 +139,13 @@ export function useEntryForm(options: UseEntryFormOptions = {}) {
     [form.staffId, getStaffById]
   );
 
-  function saveDraftSync(entryId: string, existing?: Entry): Entry {
-    const draft = formToEntry(form, {
-      id: entryId,
-      status: "draft",
-      existing,
-      staffName: resolveStaffName(existing),
-    });
-    upsertEntry(draft);
-    syncEntriesRef(draft);
-    draftIdRef.current = entryId;
-    return draft;
-  }
 
-  function promoteToCompletedSync(entryId: string, existing?: Entry): Entry {
-    const completed = formToEntry(form, {
+  function promoteToCompletedSync(
+    entryId: string,
+    existing?: Entry,
+    formData: EntryFormData = form
+  ): Entry {
+    const completed = formToEntry(formData, {
       id: entryId,
       status: "completed",
       existing,
@@ -169,8 +170,18 @@ export function useEntryForm(options: UseEntryFormOptions = {}) {
       draftIdRef.current = branchDraft.id;
       setForm(entryToForm(branchDraft));
     } else {
-      draftIdRef.current = null;
-      setForm(createBlankForm(nextBranch, activeTemplateExpenses, form.date));
+      const completed = findCompletedEntryForBranchDate(
+        entriesRef.current,
+        nextBranch,
+        form.date
+      );
+      if (completed && mode === "today") {
+        draftIdRef.current = completed.id;
+        setForm(entryToForm(completed));
+      } else {
+        draftIdRef.current = null;
+        setForm(createBlankForm(nextBranch, activeTemplateExpenses, form.date));
+      }
     }
 
     hasInteracted.current = true;
@@ -233,6 +244,28 @@ export function useEntryForm(options: UseEntryFormOptions = {}) {
       return;
     }
 
+    if (key === "date" && value !== form.date && !options.lockDate) {
+      cancelPendingAutosave();
+      const nextDate = value as string;
+      const branchDraft = findDraftForBranchDate(
+        entriesRef.current,
+        form.branch,
+        nextDate
+      );
+      if (branchDraft) {
+        draftIdRef.current = branchDraft.id;
+        setForm(entryToForm(branchDraft));
+      } else {
+        draftIdRef.current = null;
+        setForm(
+          createBlankForm(form.branch, activeTemplateExpenses, nextDate)
+        );
+      }
+      hasInteracted.current = true;
+      setHasStarted(true);
+      return;
+    }
+
     hasInteracted.current = true;
     setHasStarted(true);
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -244,6 +277,14 @@ export function useEntryForm(options: UseEntryFormOptions = {}) {
     setIsSaving(true);
 
     try {
+      const formWithAllocation = {
+        ...form,
+        savingsAllocation:
+          form.savingsAllocation.trim() === ""
+            ? String(balance)
+            : form.savingsAllocation,
+      };
+
       let entryId =
         resolveActiveDraftId() ??
         draftIdRef.current ??
@@ -251,12 +292,12 @@ export function useEntryForm(options: UseEntryFormOptions = {}) {
         null;
       const conflict = findCompletedEntryForBranchDate(
         entriesRef.current,
-        form.branch,
-        form.date,
+        formWithAllocation.branch,
+        formWithAllocation.date,
         entryId ?? undefined
       );
 
-      if (conflict) {
+      if (conflict && !(options.entry?.id === conflict.id)) {
         setDuplicateEntry(conflict);
         setIsSaving(false);
         return;
@@ -271,7 +312,15 @@ export function useEntryForm(options: UseEntryFormOptions = {}) {
 
       if (shouldPersistDraft) {
         entryId = entryId ?? crypto.randomUUID();
-        saveDraftSync(entryId, existing);
+        const draft = formToEntry(formWithAllocation, {
+          id: entryId,
+          status: "draft",
+          existing,
+          staffName: resolveStaffName(existing),
+        });
+        upsertEntry(draft);
+        syncEntriesRef(draft);
+        draftIdRef.current = entryId;
       }
 
       const recordId = entryId ?? crypto.randomUUID();
@@ -279,12 +328,37 @@ export function useEntryForm(options: UseEntryFormOptions = {}) {
         (entry) => entry.id === recordId
       );
 
-      promoteToCompletedSync(recordId, promoteFrom ?? existing);
+      promoteToCompletedSync(recordId, promoteFrom ?? existing, formWithAllocation);
 
-      router.push(options.redirectTo ?? (isEdit ? "/history" : "/"));
+      const redirect =
+        options.redirectTo ??
+        (mode === "today" ? "/operations/today" : "/history");
+      router.push(
+        mode === "today"
+          ? `/operations/today?branch=${formWithAllocation.branch}`
+          : redirect
+      );
     } finally {
       saveLockRef.current = false;
+      setShowCloseDayDialog(false);
     }
+  }
+
+  function handleSubmitRequest() {
+    if (mode === "today") {
+      setShowCloseDayDialog(true);
+      setIsSaving(false);
+      return;
+    }
+    handleSave();
+  }
+
+  function handleConfirmCloseDay() {
+    handleSave();
+  }
+
+  function handleCancelCloseDay() {
+    setShowCloseDayDialog(false);
   }
 
   function handleEditExisting() {
@@ -305,13 +379,18 @@ export function useEntryForm(options: UseEntryFormOptions = {}) {
     isEdit,
     isDraftEdit,
     lockBranch,
+    mode,
     status: showStatus ? status : undefined,
     sales,
     totalExpenses,
     balance,
     duplicateEntry,
+    showCloseDayDialog,
     updateField,
     handleSave,
+    handleSubmitRequest,
+    handleConfirmCloseDay,
+    handleCancelCloseDay,
     handleEditExisting,
     handleCancelDuplicate,
     seedCommonExpenses: !isEdit,

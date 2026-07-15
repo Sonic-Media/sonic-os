@@ -14,6 +14,8 @@ export const STORAGE_KEY = "sonic-os-entries";
 export const SETTINGS_STORAGE_KEY = "sonic-os-settings";
 export const STAFF_STORAGE_KEY = "sonic-os-staff";
 export const EXPENSE_TEMPLATES_STORAGE_KEY = "sonic-os-expense-templates";
+export const NOTIFICATIONS_STORAGE_KEY = "sonic-os-notifications";
+export const ACTIVITY_LOG_STORAGE_KEY = "sonic-os-activity-log";
 
 export const BRANCH_IDS: Branch[] = ["salaama", "kansanga"];
 
@@ -32,8 +34,13 @@ export const EXPENSE_BREAKDOWN_ITEMS: {
   label: string;
 }[] = [
   { key: "rent", label: "Rent" },
+  { key: "staff-payments", label: "Staff" },
   { key: "lunch", label: "Lunch" },
-  { key: "staff-payments", label: "Staff Payments" },
+  { key: "electricity", label: "Electricity" },
+  { key: "internet", label: "Internet" },
+  { key: "transport", label: "Transport" },
+  { key: "repairs", label: "Repairs" },
+  { key: "inventory", label: "Inventory" },
   { key: "other", label: "Other" },
 ];
 
@@ -47,13 +54,6 @@ export const EXPENSE_TEMPLATE_CATEGORIES: {
 
 export const DEFAULT_EXPENSE_TEMPLATES: ExpenseTemplate[] = [
   {
-    id: "common-lunch",
-    name: "Lunch",
-    category: "lunch",
-    defaultAmount: DEFAULT_APP_SETTINGS.defaultLunchAmount,
-    active: true,
-  },
-  {
     id: "common-rent",
     name: "Rent",
     category: "rent",
@@ -61,14 +61,45 @@ export const DEFAULT_EXPENSE_TEMPLATES: ExpenseTemplate[] = [
   },
   {
     id: "common-staff-payments",
-    name: "Staff Payments",
+    name: "Staff",
     category: "staff-payments",
     active: true,
   },
   {
-    id: "template-fuel",
-    name: "Fuel",
-    category: "other",
+    id: "common-lunch",
+    name: "Lunch",
+    category: "lunch",
+    defaultAmount: DEFAULT_APP_SETTINGS.defaultLunchAmount,
+    active: true,
+  },
+  {
+    id: "common-electricity",
+    name: "Electricity",
+    category: "electricity",
+    active: true,
+  },
+  {
+    id: "common-internet",
+    name: "Internet",
+    category: "internet",
+    active: true,
+  },
+  {
+    id: "common-transport",
+    name: "Transport",
+    category: "transport",
+    active: true,
+  },
+  {
+    id: "common-repairs",
+    name: "Repairs",
+    category: "repairs",
+    active: true,
+  },
+  {
+    id: "common-inventory",
+    name: "Inventory",
+    category: "inventory",
     active: true,
   },
 ];
@@ -135,7 +166,7 @@ export const DEFAULT_STAFF: Staff[] = [
   { id: "staff-k", name: "Staff K", branch: "kansanga", active: true },
 ];
 
-export const APP_VERSION = "Sonic OS V1.3";
+export const APP_VERSION = "Sonic OS V2.0";
 
 export const AUTOSAVE_DEBOUNCE_MS = 400;
 

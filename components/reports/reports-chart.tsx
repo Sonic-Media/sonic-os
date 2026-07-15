@@ -11,7 +11,7 @@ import {
   YAxis,
 } from "recharts";
 import { Card } from "@/components/shared/ui/card";
-import { formatCurrency } from "@/lib/format";
+import { formatCurrency, formatChartAxisValue } from "@/lib/format";
 import type { ChartDataPoint } from "@/types";
 
 interface ReportsChartProps {
@@ -62,9 +62,7 @@ export default function ReportsChart({ data }: ReportsChartProps) {
                 tick={{ fill: "#71717a", fontSize: 11 }}
                 axisLine={false}
                 tickLine={false}
-                tickFormatter={(v) =>
-                  v >= 1000 ? `${(v / 1000).toFixed(0)}k` : String(v)
-                }
+                tickFormatter={(value) => formatChartAxisValue(Number(value))}
               />
               <Tooltip content={<CustomTooltip />} />
               <Legend wrapperStyle={{ fontSize: 12, color: "#a1a1aa" }} />
