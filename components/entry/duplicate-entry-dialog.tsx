@@ -2,7 +2,7 @@
 
 import { Button } from "@/components/shared/ui/button";
 import { formatEntryDisplayDate } from "@/lib/dates";
-import { getBranchName } from "@/lib/entry-helpers";
+import { useSettings } from "@/context/settings-context";
 import type { Entry } from "@/types";
 
 interface DuplicateEntryDialogProps {
@@ -16,6 +16,8 @@ export function DuplicateEntryDialog({
   onEditExisting,
   onCancel,
 }: DuplicateEntryDialogProps) {
+  const { getBranchName } = useSettings();
+
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 p-4 sm:items-center">
       <div

@@ -1,6 +1,6 @@
 "use client";
 
-import { BRANCHES } from "@/lib/constants";
+import { useSettings } from "@/context/settings-context";
 import type { Branch } from "@/types";
 import { cn } from "@/lib/utils";
 
@@ -11,11 +11,13 @@ interface BranchPickerProps {
 }
 
 export function BranchPicker({ value, onChange, disabled = false }: BranchPickerProps) {
+  const { branches } = useSettings();
+
   return (
     <div className="space-y-2">
       <label className="block text-sm font-medium text-zinc-400">Branch</label>
       <div className="grid grid-cols-2 gap-3">
-        {BRANCHES.map((branch) => (
+        {branches.map((branch) => (
           <button
             key={branch.id}
             type="button"

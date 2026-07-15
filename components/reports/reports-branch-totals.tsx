@@ -1,6 +1,8 @@
-import { BRANCHES } from "@/lib/constants";
+"use client";
+
 import { Card } from "@/components/shared/ui/card";
 import { TotalsGrid } from "@/components/shared/totals-grid";
+import { useSettings } from "@/context/settings-context";
 import type { ReportSummary } from "@/types";
 
 interface ReportsBranchTotalsProps {
@@ -8,13 +10,15 @@ interface ReportsBranchTotalsProps {
 }
 
 export function ReportsBranchTotals({ byBranch }: ReportsBranchTotalsProps) {
+  const { branches } = useSettings();
+
   return (
     <section className="mb-8">
       <h2 className="text-sm font-medium text-zinc-500 mb-3 tracking-wide uppercase">
         By Branch
       </h2>
       <div className="space-y-3">
-        {BRANCHES.map((branch) => {
+        {branches.map((branch) => {
           const totals = byBranch[branch.id];
           return (
             <Card key={branch.id}>

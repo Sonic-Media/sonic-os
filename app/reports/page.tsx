@@ -3,6 +3,7 @@
 import dynamic from "next/dynamic";
 import { ReportsBranchTotals } from "@/components/reports/reports-branch-totals";
 import { ReportsEmptyState } from "@/components/reports/reports-empty-state";
+import { ReportsInsights } from "@/components/reports/reports-insights";
 import { ReportsPeriodTabs } from "@/components/reports/reports-period-tabs";
 import { ReportsSummary } from "@/components/reports/reports-summary";
 import { PageContainer } from "@/components/shared/layout/page-container";
@@ -29,6 +30,8 @@ export default function ReportsPage() {
       <ReportsPeriodTabs period={period} onPeriodChange={setPeriod} />
 
       <ReportsSummary summary={summary} />
+
+      <ReportsInsights insights={summary.insights} />
 
       <ReportsBranchTotals byBranch={summary.byBranch} />
 

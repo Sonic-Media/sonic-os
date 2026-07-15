@@ -5,6 +5,7 @@ import {
 } from "@/lib/amounts";
 import { formatChartLabel } from "@/lib/dates";
 import { filterCompletedEntries } from "@/lib/entry-helpers";
+import { buildReportInsights } from "@/lib/report-insights";
 
 export function aggregateEntries(entries: Entry[]): ReportSummary {
   const byBranch: ReportSummary["byBranch"] = {
@@ -31,12 +32,17 @@ export function aggregateEntries(entries: Entry[]): ReportSummary {
 
   const chartData = buildChartData(completedEntries);
 
-  return {
+  const summary = {
     totalSales,
     totalExpenses,
     totalSavings: calculateSavingsFromTotals(totalSales, totalExpenses),
     byBranch,
     chartData,
+  };
+
+  return {
+    ...summary,
+    insights: buildReportInsights(completedEntries, summary),
   };
 }
 

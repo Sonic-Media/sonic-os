@@ -1,8 +1,7 @@
-import { DEFAULT_EXPENSES } from "@/lib/constants";
 import type { Expense } from "@/types";
 
-export function createDefaultExpenses(): Expense[] {
-  return DEFAULT_EXPENSES.map((expense) => ({ ...expense }));
+export function createDefaultExpenses(template: Expense[]): Expense[] {
+  return template.map((expense) => ({ ...expense }));
 }
 
 export function upsertExpense(expenses: Expense[], expense: Expense): Expense[] {

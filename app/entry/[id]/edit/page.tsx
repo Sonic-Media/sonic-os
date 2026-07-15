@@ -41,7 +41,7 @@ function EditEntryForm({ entry }: { entry: Entry }) {
         balance={balance}
         submitLabel={isDraftEdit ? "Save Entry" : "Save Changes"}
         status={status}
-        showStaffName
+        seedCommonExpenses={false}
         lockBranch={lockBranch}
         updateField={updateField}
         onSubmit={handleSave}

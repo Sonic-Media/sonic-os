@@ -7,6 +7,7 @@ import { BranchPicker } from "@/components/entry/branch-picker";
 import { EntryStatusBadge } from "@/components/entry/entry-status-badge";
 import { EntrySummary } from "@/components/entry/entry-summary";
 import { ExpenseList } from "@/components/entry/expense-list";
+import { StaffPicker } from "@/components/entry/staff-picker";
 import type { EntryFormData, EntryStatus } from "@/types";
 
 interface EntryFormProps {
@@ -17,8 +18,8 @@ interface EntryFormProps {
   balance: number;
   submitLabel: string;
   status?: EntryStatus;
-  showStaffName?: boolean;
   lockBranch?: boolean;
+  seedCommonExpenses?: boolean;
   updateField: <K extends keyof EntryFormData>(
     key: K,
     value: EntryFormData[K]
@@ -34,8 +35,8 @@ export function EntryForm({
   balance,
   submitLabel,
   status,
-  showStaffName = false,
   lockBranch = false,
+  seedCommonExpenses = false,
   updateField,
   onSubmit,
 }: EntryFormProps) {
@@ -71,6 +72,7 @@ export function EntryForm({
       <ExpenseList
         expenses={form.expenses}
         onChange={(expenses) => updateField("expenses", expenses)}
+        seedFromTemplates={seedCommonExpenses}
       />
 
       <EntrySummary
@@ -79,15 +81,11 @@ export function EntryForm({
         balance={balance}
       />
 
-      {showStaffName && (
-        <Input
-          label="Staff Name"
-          type="text"
-          placeholder="Optional"
-          value={form.staffName}
-          onChange={(e) => updateField("staffName", e.target.value)}
-        />
-      )}
+      <StaffPicker
+        branch={form.branch}
+        value={form.staffId}
+        onChange={(staffId) => updateField("staffId", staffId)}
+      />
 
       <Textarea
         label="Notes"

@@ -34,6 +34,7 @@ export function NewEntryForm({ branch }: NewEntryFormProps) {
         balance={balance}
         submitLabel="Save Entry"
         status={status}
+        seedCommonExpenses
         updateField={updateField}
         onSubmit={handleSave}
       />

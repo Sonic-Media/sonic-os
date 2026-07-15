@@ -18,15 +18,21 @@ import { createDefaultExpenses } from "@/lib/expenses";
 import { getTodayISO } from "@/lib/dates";
 import { upsertEntryInList } from "@/lib/storage";
 import { useEntriesContext } from "@/context/entries-context";
-import type { Branch, Entry, EntryFormData } from "@/types";
+import { useExpenseTemplates } from "@/context/expense-templates-context";
+import { useStaff } from "@/context/staff-context";
+import type { Branch, Entry, EntryFormData, Expense } from "@/types";
 
-function createBlankForm(branch: Branch, date = getTodayISO()): EntryFormData {
+function createBlankForm(
+  branch: Branch,
+  templateExpenses: Expense[],
+  date = getTodayISO()
+): EntryFormData {
   return {
     date,
     branch,
     sales: "",
-    expenses: createDefaultExpenses(),
-    staffName: "",
+    expenses: createDefaultExpenses(templateExpenses),
+    staffId: "",
     notes: "",
   };
 }
@@ -41,6 +47,8 @@ interface UseEntryFormOptions {
 export function useEntryForm(options: UseEntryFormOptions = {}) {
   const router = useRouter();
   const { entries, upsertEntry } = useEntriesContext();
+  const { activeTemplateExpenses } = useExpenseTemplates();
+  const { getStaffById } = useStaff();
   const isEdit = !!options.entry;
   const isDraftEdit = isEdit && options.entry?.status === "draft";
   const lockBranch =
@@ -48,7 +56,10 @@ export function useEntryForm(options: UseEntryFormOptions = {}) {
   const [form, setForm] = useState<EntryFormData>(() =>
     options.entry
       ? entryToForm(options.entry)
-      : createBlankForm(options.initialBranch ?? "salaama")
+      : createBlankForm(
+          options.initialBranch ?? "salaama",
+          activeTemplateExpenses
+        )
   );
   const [isSaving, setIsSaving] = useState(false);
   const [duplicateEntry, setDuplicateEntry] = useState<Entry | null>(null);
@@ -109,11 +120,22 @@ export function useEntryForm(options: UseEntryFormOptions = {}) {
     return null;
   }, [form.branch, form.date]);
 
+  const resolveStaffName = useCallback(
+    (existing?: Entry) => {
+      if (!form.staffId) {
+        return existing?.staffName ?? "";
+      }
+      return getStaffById(form.staffId)?.name ?? existing?.staffName ?? "";
+    },
+    [form.staffId, getStaffById]
+  );
+
   function saveDraftSync(entryId: string, existing?: Entry): Entry {
     const draft = formToEntry(form, {
       id: entryId,
       status: "draft",
       existing,
+      staffName: resolveStaffName(existing),
     });
     upsertEntry(draft);
     syncEntriesRef(draft);
@@ -126,6 +148,7 @@ export function useEntryForm(options: UseEntryFormOptions = {}) {
       id: entryId,
       status: "completed",
       existing,
+      staffName: resolveStaffName(existing),
     });
     upsertEntry(completed);
     syncEntriesRef(completed);
@@ -147,7 +170,7 @@ export function useEntryForm(options: UseEntryFormOptions = {}) {
       setForm(entryToForm(branchDraft));
     } else {
       draftIdRef.current = null;
-      setForm(createBlankForm(nextBranch, form.date));
+      setForm(createBlankForm(nextBranch, activeTemplateExpenses, form.date));
     }
 
     hasInteracted.current = true;
@@ -175,6 +198,7 @@ export function useEntryForm(options: UseEntryFormOptions = {}) {
           id: activeDraftId ?? undefined,
           status: "draft",
           existing,
+          staffName: resolveStaffName(existing),
         });
 
         upsertEntry(entry);
@@ -194,6 +218,7 @@ export function useEntryForm(options: UseEntryFormOptions = {}) {
     cancelPendingAutosave,
     resolveActiveDraftId,
     syncEntriesRef,
+    resolveStaffName,
   ]);
 
   function updateField<K extends keyof EntryFormData>(
@@ -289,5 +314,6 @@ export function useEntryForm(options: UseEntryFormOptions = {}) {
     handleSave,
     handleEditExisting,
     handleCancelDuplicate,
+    seedCommonExpenses: !isEdit,
   };
 }

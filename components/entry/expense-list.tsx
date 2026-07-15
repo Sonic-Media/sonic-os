@@ -9,11 +9,16 @@ import type { Expense } from "@/types";
 interface ExpenseListProps {
   expenses: Expense[];
   onChange: (expenses: Expense[]) => void;
+  seedFromTemplates?: boolean;
 }
 
-export function ExpenseList({ expenses, onChange }: ExpenseListProps) {
+export function ExpenseList({
+  expenses,
+  onChange,
+  seedFromTemplates = false,
+}: ExpenseListProps) {
   const {
-    defaultExpenses,
+    commonExpenses,
     additionalExpenses,
     editingId,
     setEditingId,
@@ -28,7 +33,7 @@ export function ExpenseList({ expenses, onChange }: ExpenseListProps) {
     handleAddExpense,
     handleCancelAdd,
     openAddForm,
-  } = useExpenseList(expenses, onChange);
+  } = useExpenseList(expenses, onChange, seedFromTemplates);
 
   return (
     <div className="space-y-6">
@@ -37,7 +42,7 @@ export function ExpenseList({ expenses, onChange }: ExpenseListProps) {
           Common Expenses
         </h3>
         <div className="space-y-3">
-          {defaultExpenses.map((expense) => (
+          {commonExpenses.map((expense) => (
             <ExpenseRow
               key={expense.id}
               expense={expense}

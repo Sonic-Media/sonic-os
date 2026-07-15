@@ -1,24 +1,23 @@
 "use client";
 
+import { useHistory } from "@/hooks/use-history";
 import { HistoryEmptyState } from "@/components/history/history-empty-state";
 import { HistoryFilters } from "@/components/history/history-filters";
 import { HistoryList } from "@/components/history/history-list";
 import { PageContainer } from "@/components/shared/layout/page-container";
 import { PageHeader } from "@/components/shared/layout/page-header";
 import { PageSkeleton } from "@/components/shared/page-skeleton";
-import { useHistory } from "@/hooks/use-history";
 
 export default function HistoryPage() {
   const {
     isLoaded,
-    date,
-    branch,
+    criteria,
     sortOrder,
     filteredEntries,
-    setDate,
-    setBranch,
+    updateCriteria,
     setSortOrder,
     deleteEntry,
+    duplicateEntry,
   } = useHistory();
 
   if (!isLoaded) {
@@ -33,11 +32,9 @@ export default function HistoryPage() {
       />
 
       <HistoryFilters
-        date={date}
-        branch={branch}
+        criteria={criteria}
         sortOrder={sortOrder}
-        onDateChange={setDate}
-        onBranchChange={setBranch}
+        onCriteriaChange={updateCriteria}
         onSortOrderChange={setSortOrder}
       />
 
@@ -47,6 +44,7 @@ export default function HistoryPage() {
         <HistoryList
           entries={filteredEntries}
           onDelete={(entry) => deleteEntry(entry.id)}
+          onDuplicate={duplicateEntry}
         />
       )}
     </PageContainer>

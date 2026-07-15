@@ -9,8 +9,8 @@ import { QuickActions } from "@/components/dashboard/quick-actions";
 import { TodayProgress } from "@/components/dashboard/today-progress";
 import { PageContainer } from "@/components/shared/layout/page-container";
 import { PageSkeleton } from "@/components/shared/page-skeleton";
-import { BRANCHES } from "@/lib/constants";
 import { useDashboard } from "@/hooks/use-dashboard";
+import { useSettings } from "@/context/settings-context";
 
 export default function DashboardPage() {
   const {
@@ -23,6 +23,7 @@ export default function DashboardPage() {
     completedEntry,
     allEntriesCompleted,
   } = useDashboard();
+  const { branches } = useSettings();
 
   if (!isLoaded) {
     return <PageSkeleton variant="dashboard" />;
@@ -45,7 +46,7 @@ export default function DashboardPage() {
           Branches
         </h2>
         <div className="space-y-3">
-          {BRANCHES.map((branch) => (
+          {branches.map((branch) => (
             <BranchCard
               key={branch.id}
               name={branch.name}

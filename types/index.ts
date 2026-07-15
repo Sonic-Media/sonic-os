@@ -10,10 +10,20 @@ export type HistoryBranchFilter = Branch | "all";
 
 export type BranchEntryStatus = "pending" | "draft" | "completed";
 
+export type ExpenseBreakdownKey = "rent" | "lunch" | "staff-payments" | "other";
+
 export interface Expense {
   id: string;
   name: string;
   amount: number;
+}
+
+export interface ExpenseTemplate {
+  id: string;
+  name: string;
+  defaultAmount?: number;
+  category: ExpenseBreakdownKey;
+  active: boolean;
 }
 
 export interface Entry {
@@ -24,6 +34,7 @@ export interface Entry {
   branch: Branch;
   sales: number;
   expenses: Expense[];
+  staffId: string;
   staffName: string;
   notes: string;
   createdAt: string;
@@ -35,7 +46,7 @@ export interface EntryFormData {
   branch: Branch;
   sales: string;
   expenses: Expense[];
-  staffName: string;
+  staffId: string;
   notes: string;
 }
 
@@ -58,6 +69,30 @@ export interface ReportSummary {
   totalSavings: number;
   byBranch: Record<Branch, BranchTotals>;
   chartData: ChartDataPoint[];
+  insights: ReportInsights;
+}
+
+export interface ReportDayInsight {
+  label: string;
+  value: number;
+}
+
+
+export interface ExpenseBreakdownItem {
+  key: ExpenseBreakdownKey;
+  label: string;
+  amount: number;
+}
+
+export interface ReportInsights {
+  highestSalesDay?: ReportDayInsight;
+  highestSavingsDay?: ReportDayInsight;
+  highestExpenseDay?: ReportDayInsight;
+  averageDailySales: number;
+  averageDailySavings: number;
+  bestPerformingBranch?: Branch;
+  bestPerformingBranchSavings: number;
+  expenseBreakdown: ExpenseBreakdownItem[];
 }
 
 export interface DashboardSummary {
@@ -68,9 +103,23 @@ export interface DashboardSummary {
   allEntriesCompleted: boolean;
 }
 
-export interface HistoryFilter {
+export type HistoryStaffFilter = "all" | string;
+
+export type HistoryStatusFilter = "all" | EntryStatus;
+
+export interface HistoryFilterCriteria {
   date?: string;
   branch: HistoryBranchFilter;
+  staff: HistoryStaffFilter;
+  status: HistoryStatusFilter;
+  search?: string;
+  minSales?: number;
+  maxSales?: number;
+  minExpenses?: number;
+  maxExpenses?: number;
+}
+
+export interface HistoryFilter extends HistoryFilterCriteria {
   sortOrder: HistorySortOrder;
 }
 
@@ -80,4 +129,23 @@ export interface BranchProgress {
   status: BranchEntryStatus;
   completed: boolean;
   entryId?: string;
+}
+
+export interface BranchConfig {
+  id: Branch;
+  name: string;
+}
+
+export interface AppSettings {
+  businessName: string;
+  ownerName: string;
+  branchNames: Record<Branch, string>;
+  defaultLunchAmount: number;
+}
+
+export interface Staff {
+  id: string;
+  name: string;
+  branch: Branch;
+  active: boolean;
 }

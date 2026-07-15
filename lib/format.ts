@@ -1,4 +1,4 @@
-import { DATE_FORMATS, GREETING_DEFAULT_NAME, PERIOD_LABELS } from "@/lib/constants";
+import { DATE_FORMATS, DEFAULT_APP_SETTINGS, PERIOD_LABELS } from "@/lib/constants";
 import type { ReportPeriod } from "@/types";
 
 export function formatCurrency(amount: number): string {
@@ -9,7 +9,7 @@ export function formatCurrency(amount: number): string {
   }).format(amount);
 }
 
-export function getGreeting(name = GREETING_DEFAULT_NAME): string {
+export function getGreeting(name = DEFAULT_APP_SETTINGS.ownerName): string {
   const hour = new Date().getHours();
   if (hour < 12) return `Good Morning ${name}`;
   if (hour < 17) return `Good Afternoon ${name}`;

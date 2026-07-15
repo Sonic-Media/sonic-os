@@ -79,6 +79,7 @@ function migrateEntry(raw: Record<string, unknown>): Entry {
     ),
     sales: parseAmount(raw.sales),
     expenses: migrateLegacyExpenses(raw),
+    staffId: typeof raw.staffId === "string" ? raw.staffId : "",
     staffName: typeof raw.staffName === "string" ? raw.staffName : "",
     notes: typeof raw.notes === "string" ? raw.notes : "",
     createdAt,

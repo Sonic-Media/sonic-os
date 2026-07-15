@@ -10,7 +10,8 @@ import {
   calculateSavingsFromTotals,
 } from "@/lib/amounts";
 import { formatCurrency } from "@/lib/format";
-import { getBranchName } from "@/lib/entry-helpers";
+import { useSettings } from "@/context/settings-context";
+import { useStaff } from "@/context/staff-context";
 import type { Entry } from "@/types";
 import { cn } from "@/lib/utils";
 
@@ -19,8 +20,11 @@ interface EntryDetailCardProps {
 }
 
 export function EntryDetailCard({ entry }: EntryDetailCardProps) {
+  const { getBranchName } = useSettings();
+  const { getStaffDisplayName } = useStaff();
   const expenses = calculateExpenses(entry);
   const savings = calculateSavingsFromTotals(entry.sales, expenses);
+  const staffLabel = getStaffDisplayName(entry.staffId, entry.staffName);
 
   return (
     <>
@@ -36,9 +40,9 @@ export function EntryDetailCard({ entry }: EntryDetailCardProps) {
 
         <div className="space-y-4 border-t border-zinc-800/80 pt-4 mt-6">
           <TotalsField
-            label="Staff Name"
-            value={entry.staffName.trim() || "—"}
-            valueClassName={entry.staffName.trim() ? undefined : "text-zinc-500 font-medium"}
+            label="Staff"
+            value={staffLabel}
+            valueClassName={staffLabel === "—" ? "text-zinc-500 font-medium" : undefined}
           />
           <TotalsField
             label="Notes"

@@ -9,17 +9,22 @@ import {
   calculateSavingsFromTotals,
 } from "@/lib/amounts";
 import { formatEntryDisplayDate } from "@/lib/dates";
-import { getBranchName } from "@/lib/entry-helpers";
+import { useSettings } from "@/context/settings-context";
+import { useStaff } from "@/context/staff-context";
 import type { Entry } from "@/types";
 
 interface HistoryCardProps {
   entry: Entry;
   onDelete: (entry: Entry) => void;
+  onDuplicate: (entry: Entry) => void;
 }
 
-export function HistoryCard({ entry, onDelete }: HistoryCardProps) {
+export function HistoryCard({ entry, onDelete, onDuplicate }: HistoryCardProps) {
+  const { getBranchName } = useSettings();
+  const { getStaffDisplayName } = useStaff();
   const expenses = calculateExpenses(entry);
   const savings = calculateSavingsFromTotals(entry.sales, expenses);
+  const staffLabel = getStaffDisplayName(entry.staffId, entry.staffName);
 
   function handleDelete() {
     const confirmed = window.confirm(
@@ -58,9 +63,10 @@ export function HistoryCard({ entry, onDelete }: HistoryCardProps) {
 
       <div className="space-y-3 mb-4">
         <TotalsField
-          label="Staff Name"
-          value={entry.staffName.trim() || "—"}
+          label="Staff"
+          value={staffLabel}
           size="sm"
+          valueClassName={staffLabel === "—" ? "text-zinc-500" : undefined}
         />
         <TotalsField
           label="Notes"
@@ -83,6 +89,13 @@ export function HistoryCard({ entry, onDelete }: HistoryCardProps) {
         >
           Edit
         </Link>
+        <button
+          type="button"
+          onClick={() => onDuplicate(entry)}
+          className="px-2 py-1 text-xs font-medium text-zinc-400 hover:text-white transition-colors"
+        >
+          Duplicate
+        </button>
         <button
           type="button"
           onClick={handleDelete}

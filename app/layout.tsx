@@ -2,6 +2,9 @@ import type { Metadata } from "next";
 import { Geist } from "next/font/google";
 import { BottomNav } from "@/components/shared/layout/bottom-nav";
 import { EntriesProvider } from "@/context/entries-context";
+import { ExpenseTemplatesProvider } from "@/context/expense-templates-context";
+import { SettingsProvider } from "@/context/settings-context";
+import { StaffProvider } from "@/context/staff-context";
 import "./globals.css";
 
 const geist = Geist({
@@ -27,10 +30,16 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${geist.variable} dark h-full`}>
       <body className="min-h-full bg-black text-white font-sans antialiased">
-        <EntriesProvider>
-          <main className="min-h-full">{children}</main>
-          <BottomNav />
-        </EntriesProvider>
+        <SettingsProvider>
+          <ExpenseTemplatesProvider>
+            <StaffProvider>
+              <EntriesProvider>
+                <main className="min-h-full">{children}</main>
+                <BottomNav />
+              </EntriesProvider>
+            </StaffProvider>
+          </ExpenseTemplatesProvider>
+        </SettingsProvider>
       </body>
     </html>
   );

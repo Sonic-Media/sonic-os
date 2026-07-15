@@ -1,38 +1,37 @@
+"use client";
+
 import { useMemo, useState } from "react";
-import { DEFAULT_EXPENSES } from "@/lib/constants";
 import { parseAmount } from "@/lib/amounts";
+import {
+  buildAdditionalExpenses,
+  buildSeededCommonExpenses,
+  buildStoredCommonExpenses,
+} from "@/lib/expense-templates";
 import { removeExpense, upsertExpense } from "@/lib/expenses";
+import { useExpenseTemplates } from "@/context/expense-templates-context";
 import type { Expense } from "@/types";
 
 export function useExpenseList(
   expenses: Expense[],
-  onChange: (expenses: Expense[]) => void
+  onChange: (expenses: Expense[]) => void,
+  seedFromTemplates: boolean
 ) {
+  const { templates, templateIds } = useExpenseTemplates();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
   const [newName, setNewName] = useState("");
   const [newAmount, setNewAmount] = useState("");
 
-  const defaultExpenseIds = useMemo(
-    () => new Set(DEFAULT_EXPENSES.map((expense) => expense.id)),
-    []
-  );
-
-  const defaultExpenses = useMemo(
-    () =>
-      DEFAULT_EXPENSES.map(
-        (template) =>
-          expenses.find((expense) => expense.id === template.id) ?? {
-            ...template,
-            amount: 0,
-          }
-      ),
-    [expenses]
-  );
+  const commonExpenses = useMemo(() => {
+    if (seedFromTemplates) {
+      return buildSeededCommonExpenses(expenses, templates);
+    }
+    return buildStoredCommonExpenses(expenses, templateIds);
+  }, [expenses, seedFromTemplates, templates, templateIds]);
 
   const additionalExpenses = useMemo(
-    () => expenses.filter((expense) => !defaultExpenseIds.has(expense.id)),
-    [expenses, defaultExpenseIds]
+    () => buildAdditionalExpenses(expenses, templateIds),
+    [expenses, templateIds]
   );
 
   function saveExpense(expense: Expense) {
@@ -85,7 +84,7 @@ export function useExpenseList(
   }
 
   return {
-    defaultExpenses,
+    commonExpenses,
     additionalExpenses,
     editingId,
     setEditingId,

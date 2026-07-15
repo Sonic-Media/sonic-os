@@ -1,54 +1,84 @@
 "use client";
 
 import { Input } from "@/components/shared/ui/input";
+import { Select } from "@/components/shared/ui/select";
 import { SegmentedControl } from "@/components/shared/segmented-control";
-import { BRANCHES, HISTORY_SORT_OPTIONS } from "@/lib/constants";
-import type { HistoryBranchFilter, HistorySortOrder } from "@/types";
+import { useSettings } from "@/context/settings-context";
+import { useStaff } from "@/context/staff-context";
+import {
+  HISTORY_SORT_OPTIONS,
+  HISTORY_STATUS_OPTIONS,
+} from "@/lib/constants";
+import { getStaffOptions } from "@/lib/staff-reports";
+import type { HistoryFilterCriteria, HistorySortOrder } from "@/types";
 
 interface HistoryFiltersProps {
-  date: string;
-  branch: HistoryBranchFilter;
+  criteria: HistoryFilterCriteria;
   sortOrder: HistorySortOrder;
-  onDateChange: (date: string) => void;
-  onBranchChange: (branch: HistoryBranchFilter) => void;
+  onCriteriaChange: (patch: Partial<HistoryFilterCriteria>) => void;
   onSortOrderChange: (order: HistorySortOrder) => void;
 }
 
-const branchOptions = [
-  { id: "all" as const, label: "All" },
-  ...BRANCHES.map((b) => ({ id: b.id, label: b.name })),
-];
+const sortOptions = HISTORY_SORT_OPTIONS;
 
 export function HistoryFilters({
-  date,
-  branch,
+  criteria,
   sortOrder,
-  onDateChange,
-  onBranchChange,
+  onCriteriaChange,
   onSortOrderChange,
 }: HistoryFiltersProps) {
+  const { branches } = useSettings();
+  const { staff: staffMembers } = useStaff();
+  const branchOptions = [
+    { id: "all" as const, label: "All" },
+    ...branches.map((b) => ({ id: b.id, label: b.name })),
+  ];
+  const staffOptions = [
+    { value: "all", label: "All Staff" },
+    ...getStaffOptions(staffMembers),
+  ];
+
   return (
     <section className="space-y-4 mb-8">
       <Input
         label="Search by date"
         type="date"
-        value={date}
-        onChange={(e) => onDateChange(e.target.value)}
+        value={criteria.date ?? ""}
+        onChange={(e) =>
+          onCriteriaChange({ date: e.target.value || undefined })
+        }
       />
 
       <div>
         <p className="block text-sm font-medium text-zinc-400 mb-2">Branch</p>
         <SegmentedControl
           options={branchOptions}
-          value={branch}
-          onChange={onBranchChange}
+          value={criteria.branch}
+          onChange={(branch) => onCriteriaChange({ branch })}
         />
       </div>
 
       <div>
+        <p className="block text-sm font-medium text-zinc-400 mb-2">Status</p>
+        <SegmentedControl
+          options={HISTORY_STATUS_OPTIONS}
+          value={criteria.status}
+          onChange={(status) => onCriteriaChange({ status })}
+        />
+      </div>
+
+      <Select
+        label="Staff"
+        value={criteria.staff}
+        placeholder="All Staff"
+        options={staffOptions}
+        onChange={(e) => onCriteriaChange({ staff: e.target.value })}
+      />
+
+      <div>
         <p className="block text-sm font-medium text-zinc-400 mb-2">Sort</p>
         <SegmentedControl
-          options={HISTORY_SORT_OPTIONS}
+          options={sortOptions}
           value={sortOrder}
           onChange={onSortOrderChange}
         />

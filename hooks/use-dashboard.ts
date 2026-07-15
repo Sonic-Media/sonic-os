@@ -10,16 +10,18 @@ import {
 import { formatDisplayDate, getTodayISO } from "@/lib/dates";
 import { getGreeting } from "@/lib/format";
 import { useEntriesContext } from "@/context/entries-context";
+import { useSettings } from "@/context/settings-context";
 import type { DashboardSummary } from "@/types";
 
 export function useDashboard() {
   const { entries, isLoaded } = useEntriesContext();
+  const { settings, branches, isLoaded: settingsLoaded } = useSettings();
   const today = getTodayISO();
 
   const data = useMemo(() => {
     const todayEntries = filterEntriesByDate(entries, today);
     const summary = aggregateEntries(todayEntries);
-    const progress = getTodayBranchProgress(entries, today);
+    const progress = getTodayBranchProgress(entries, today, branches);
     const draftEntry = findMostRecentEntryForDate(entries, today, "draft");
     const completedEntry = findMostRecentEntryForDate(entries, today, "completed");
     const allEntriesCompleted =
@@ -34,11 +36,11 @@ export function useDashboard() {
     };
 
     return {
-      greeting: getGreeting(),
+      greeting: getGreeting(settings.ownerName),
       date: formatDisplayDate(),
       ...dashboard,
     };
-  }, [entries, today]);
+  }, [entries, today, branches, settings.ownerName]);
 
-  return { isLoaded, ...data };
+  return { isLoaded: isLoaded && settingsLoaded, ...data };
 }

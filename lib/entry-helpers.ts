@@ -1,15 +1,14 @@
-import { BRANCHES } from "@/lib/constants";
-import { formatEntryTime, isInPeriod } from "@/lib/dates";
+import { formatEntryTime, getTodayISO, isInPeriod } from "@/lib/dates";
 import { parseAmount } from "@/lib/amounts";
-import { createDefaultExpenses, prepareExpensesForSave } from "@/lib/expenses";
+import { prepareExpensesForSave } from "@/lib/expenses";
 import type {
   Branch,
+  BranchConfig,
   BranchEntryStatus,
   BranchProgress,
   Entry,
   EntryFormData,
   EntryStatus,
-  HistoryBranchFilter,
   HistorySortOrder,
   ReportPeriod,
 } from "@/types";
@@ -19,8 +18,8 @@ export function entryToForm(entry: Entry): EntryFormData {
     date: entry.date,
     branch: entry.branch,
     sales: String(entry.sales),
-    expenses: entry.expenses.length ? entry.expenses : createDefaultExpenses(),
-    staffName: entry.staffName,
+    expenses: entry.expenses.map((expense) => ({ ...expense })),
+    staffId: entry.staffId,
     notes: entry.notes,
   };
 }
@@ -31,10 +30,15 @@ export function formToEntry(
     id?: string;
     status?: EntryStatus;
     existing?: Entry;
+    staffName?: string;
   }
 ): Entry {
   const now = new Date();
   const existing = options?.existing;
+  const staffName =
+    options?.staffName?.trim() ??
+    existing?.staffName ??
+    "";
 
   return {
     id: options?.id ?? existing?.id ?? crypto.randomUUID(),
@@ -44,7 +48,8 @@ export function formToEntry(
     branch: form.branch,
     sales: parseAmount(form.sales),
     expenses: prepareExpensesForSave(form.expenses),
-    staffName: form.staffName.trim(),
+    staffId: form.staffId,
+    staffName,
     notes: form.notes.trim(),
     createdAt: existing?.createdAt ?? now.toISOString(),
     status: options?.status ?? existing?.status ?? "draft",
@@ -110,9 +115,10 @@ export function getBranchEntryHref(item: BranchProgress): string {
 
 export function getTodayBranchProgress(
   entries: Entry[],
-  date: string
+  date: string,
+  branches: BranchConfig[]
 ): BranchProgress[] {
-  return BRANCHES.map(({ id, name }) => {
+  return branches.map(({ id, name }) => {
     const draft = findDraftForBranchDate(entries, id, date);
     const completed = findCompletedEntryForBranchDate(entries, id, date);
     const status: BranchEntryStatus = completed
@@ -143,8 +149,27 @@ export function filterEntriesByDate(entries: Entry[], date: string): Entry[] {
   return entries.filter((e) => e.date === date);
 }
 
-function filterEntriesByBranch(entries: Entry[], branch: Branch): Entry[] {
-  return entries.filter((e) => e.branch === branch);
+
+export function duplicateEntryAsTodayDraft(source: Entry): Entry {
+  const now = new Date();
+
+  return {
+    id: crypto.randomUUID(),
+    date: getTodayISO(),
+    time: formatEntryTime(now),
+    timestamp: Math.floor(now.getTime() / 1000),
+    branch: source.branch,
+    sales: source.sales,
+    expenses: source.expenses.map((expense) => ({
+      ...expense,
+      id: expense.id.startsWith("common-") ? expense.id : crypto.randomUUID(),
+    })),
+    staffId: source.staffId,
+    staffName: source.staffName,
+    notes: source.notes,
+    createdAt: now.toISOString(),
+    status: "draft",
+  };
 }
 
 export function sortEntries(
@@ -159,23 +184,6 @@ export function sortEntries(
   return order === "newest" ? sorted : sorted.reverse();
 }
 
-export function filterHistoryEntries(
-  entries: Entry[],
-  options: { date?: string; branch?: HistoryBranchFilter }
-): Entry[] {
-  let result = entries;
-  if (options.date) {
-    result = filterEntriesByDate(result, options.date);
-  }
-  if (options.branch && options.branch !== "all") {
-    result = filterEntriesByBranch(result, options.branch);
-  }
-  return result;
-}
-
-export function getBranchName(branch: Branch): string {
-  return BRANCHES.find((b) => b.id === branch)?.name ?? branch;
-}
 
 export function parseBranch(value: string | null): Branch {
   return value === "kansanga" ? "kansanga" : "salaama";
