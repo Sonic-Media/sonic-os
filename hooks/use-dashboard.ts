@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { aggregateEntries } from "@/lib/aggregations";
 import {
   filterEntriesByDate,
@@ -9,13 +9,17 @@ import {
 } from "@/lib/entry-helpers";
 import { formatDisplayDate, getTodayISO } from "@/lib/dates";
 import { getGreeting } from "@/lib/format";
+import { getDashboardAnalytics } from "@/lib/report-insights";
 import { useEntriesContext } from "@/context/entries-context";
 import { useSettings } from "@/context/settings-context";
-import type { DashboardSummary } from "@/types";
+import { useStaff } from "@/context/staff-context";
+import type { DashboardPeriod, DashboardSummary } from "@/types";
 
 export function useDashboard() {
   const { entries, isLoaded } = useEntriesContext();
   const { settings, branches, isLoaded: settingsLoaded } = useSettings();
+  const { staff, isLoaded: staffLoaded } = useStaff();
+  const [period, setPeriod] = useState<DashboardPeriod>("daily");
   const today = getTodayISO();
 
   const data = useMemo(() => {
@@ -26,6 +30,10 @@ export function useDashboard() {
     const completedEntry = findMostRecentEntryForDate(entries, today, "completed");
     const allEntriesCompleted =
       progress.length > 0 && progress.every((item) => item.completed);
+    const analytics = getDashboardAnalytics(entries, period, {
+      branchNames: settings.branchNames,
+      staff,
+    });
 
     const dashboard: DashboardSummary = {
       summary,
@@ -38,9 +46,15 @@ export function useDashboard() {
     return {
       greeting: getGreeting(settings.ownerName),
       date: formatDisplayDate(),
+      analytics,
       ...dashboard,
     };
-  }, [entries, today, branches, settings.ownerName]);
+  }, [entries, today, branches, settings.ownerName, settings.branchNames, staff, period]);
 
-  return { isLoaded: isLoaded && settingsLoaded, ...data };
+  return {
+    isLoaded: isLoaded && settingsLoaded && staffLoaded,
+    period,
+    setPeriod,
+    ...data,
+  };
 }

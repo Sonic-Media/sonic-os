@@ -8,6 +8,8 @@ interface StatCardProps {
   variant?: "default" | "accent";
   size?: "default" | "large";
   detail?: string;
+  detailTone?: "positive" | "negative" | "neutral";
+  formatValue?: (value: number) => string;
 }
 
 export function StatCard({
@@ -17,6 +19,8 @@ export function StatCard({
   variant = "default",
   size = "default",
   detail,
+  detailTone = "neutral",
+  formatValue = formatCurrency,
 }: StatCardProps) {
   return (
     <div
@@ -44,13 +48,16 @@ export function StatCard({
           variant === "default" ? "text-white" : "text-black"
         )}
       >
-        {formatCurrency(value)}
+        {formatValue(value)}
       </p>
       {detail && (
         <p
           className={cn(
             "text-sm mt-1",
-            variant === "default" ? "text-zinc-500" : "text-zinc-600"
+            detailTone === "positive" && "text-emerald-400",
+            detailTone === "negative" && "text-red-400",
+            detailTone === "neutral" &&
+              (variant === "default" ? "text-zinc-500" : "text-zinc-600")
           )}
         >
           {detail}

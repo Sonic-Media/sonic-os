@@ -1,6 +1,5 @@
 "use client";
 
-import { StatCard } from "@/components/shared/ui/stat-card";
 import { formatCurrency } from "@/lib/format";
 import type { BranchTotals } from "@/types";
 import { cn } from "@/lib/utils";
@@ -54,30 +53,6 @@ export function DashboardGreeting({ greeting, date }: DashboardGreetingProps) {
         {greeting} 👋
       </h1>
       <p className="text-sm text-zinc-500 mt-2">{date}</p>
-    </section>
-  );
-}
-
-export function DashboardStats({
-  sales,
-  expenses,
-  savings,
-}: {
-  sales: number;
-  expenses: number;
-  savings: number;
-}) {
-  return (
-    <section className="grid grid-cols-2 gap-3 sm:grid-cols-3 mb-8">
-      <StatCard label="Today's Sales" value={sales} size="large" />
-      <StatCard label="Today's Expenses" value={expenses} size="large" />
-      <StatCard
-        label="Today's Savings"
-        value={savings}
-        size="large"
-        variant={savings >= 0 ? "accent" : "default"}
-        className="col-span-2 sm:col-span-1"
-      />
     </section>
   );
 }

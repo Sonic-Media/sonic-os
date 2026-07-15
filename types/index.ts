@@ -4,6 +4,55 @@ export type EntryStatus = "draft" | "completed";
 
 export type ReportPeriod = "daily" | "weekly" | "monthly" | "yearly";
 
+export type DashboardPeriod = Extract<ReportPeriod, "daily" | "weekly" | "monthly">;
+
+export type TrendDirection = "up" | "down" | "flat";
+
+export interface TrendResult {
+  percent: number;
+  direction: TrendDirection;
+  isPositive: boolean;
+  label: string;
+}
+
+export interface DashboardMetricWithTrend {
+  value: number;
+  trend: TrendResult;
+}
+
+export interface BestBranchResult {
+  branch: Branch;
+  name: string;
+  totalSales: number;
+  revenuePercentage: number;
+}
+
+export interface BestStaffResult {
+  staffName: string;
+  totalSales: number;
+  branch: Branch;
+  branchName: string;
+}
+
+export interface DashboardQuickInsights {
+  highestExpenseCategory: { label: string; amount: number } | null;
+  mostExpensiveDay: ReportDayInsight | null;
+  averageDailySales: number;
+  averageDailyExpenses: number;
+  averageDailySavings: number;
+}
+
+export interface DashboardAnalytics {
+  period: DashboardPeriod;
+  sales: DashboardMetricWithTrend;
+  expenses: DashboardMetricWithTrend;
+  savings: DashboardMetricWithTrend;
+  profitMargin: DashboardMetricWithTrend;
+  bestBranch: BestBranchResult | null;
+  bestStaff: BestStaffResult | null;
+  quickInsights: DashboardQuickInsights;
+}
+
 export type HistorySortOrder = "newest" | "oldest";
 
 export type HistoryBranchFilter = Branch | "all";

@@ -14,10 +14,16 @@ export function PageSkeleton({ variant = "default" }: PageSkeletonProps) {
         {variant === "dashboard" ? (
           <>
             <div className="h-16 bg-zinc-900 rounded-2xl" />
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+            <div className="h-10 bg-zinc-900 rounded-xl" />
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <div className="h-28 bg-zinc-900 rounded-2xl" />
               <div className="h-28 bg-zinc-900 rounded-2xl" />
               <div className="h-28 bg-zinc-900 rounded-2xl" />
               <div className="h-28 bg-zinc-900 rounded-2xl col-span-2 sm:col-span-1" />
+            </div>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div className="h-32 bg-zinc-900 rounded-2xl" />
+              <div className="h-32 bg-zinc-900 rounded-2xl" />
             </div>
           </>
         ) : (

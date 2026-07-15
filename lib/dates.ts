@@ -47,6 +47,28 @@ function endOfWeek(date: Date): Date {
   return end;
 }
 
+export function getPreviousPeriodReference(
+  ref: Date,
+  period: ReportPeriod
+): Date {
+  const previous = new Date(ref);
+
+  switch (period) {
+    case "daily":
+      previous.setDate(previous.getDate() - 1);
+      return previous;
+    case "weekly":
+      previous.setDate(previous.getDate() - 7);
+      return previous;
+    case "monthly":
+      previous.setMonth(previous.getMonth() - 1);
+      return previous;
+    case "yearly":
+      previous.setFullYear(previous.getFullYear() - 1);
+      return previous;
+  }
+}
+
 export function isInPeriod(
   dateStr: string,
   period: ReportPeriod,

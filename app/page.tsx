@@ -3,8 +3,8 @@
 import {
   BranchCard,
   DashboardGreeting,
-  DashboardStats,
 } from "@/components/dashboard/branch-card";
+import { DashboardAnalyticsSection } from "@/components/dashboard/dashboard-analytics";
 import { QuickActions } from "@/components/dashboard/quick-actions";
 import { TodayProgress } from "@/components/dashboard/today-progress";
 import { PageContainer } from "@/components/shared/layout/page-container";
@@ -22,6 +22,9 @@ export default function DashboardPage() {
     draftEntry,
     completedEntry,
     allEntriesCompleted,
+    analytics,
+    period,
+    setPeriod,
   } = useDashboard();
   const { branches } = useSettings();
 
@@ -33,10 +36,10 @@ export default function DashboardPage() {
     <PageContainer>
       <DashboardGreeting greeting={greeting} date={date} />
 
-      <DashboardStats
-        sales={summary.totalSales}
-        expenses={summary.totalExpenses}
-        savings={summary.totalSavings}
+      <DashboardAnalyticsSection
+        analytics={analytics}
+        period={period}
+        onPeriodChange={setPeriod}
       />
 
       <TodayProgress progress={progress} />

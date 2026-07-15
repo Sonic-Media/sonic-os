@@ -1,4 +1,9 @@
-import { formatEntryTime, getTodayISO, isInPeriod } from "@/lib/dates";
+import {
+  formatEntryTime,
+  getPreviousPeriodReference,
+  getTodayISO,
+  isInPeriod,
+} from "@/lib/dates";
 import { parseAmount } from "@/lib/amounts";
 import { prepareExpensesForSave } from "@/lib/expenses";
 import type {
@@ -143,6 +148,18 @@ export function filterEntriesByPeriod(
   ref = new Date()
 ): Entry[] {
   return entries.filter((e) => isInPeriod(e.date, period, ref));
+}
+
+export function filterEntriesByPreviousPeriod(
+  entries: Entry[],
+  period: ReportPeriod,
+  ref = new Date()
+): Entry[] {
+  return filterEntriesByPeriod(
+    entries,
+    period,
+    getPreviousPeriodReference(ref, period)
+  );
 }
 
 export function filterEntriesByDate(entries: Entry[], date: string): Entry[] {

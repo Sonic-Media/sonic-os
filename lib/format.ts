@@ -19,3 +19,7 @@ export function getGreeting(name = DEFAULT_APP_SETTINGS.ownerName): string {
 export function getPeriodLabel(period: ReportPeriod): string {
   return PERIOD_LABELS[period];
 }
+
+export function formatPercent(value: number): string {
+  return `${Math.round(value)}%`;
+}

@@ -1,6 +1,7 @@
 import type {
   AppSettings,
   Branch,
+  DashboardPeriod,
   ExpenseBreakdownKey,
   HistorySortOrder,
   HistoryStatusFilter,
@@ -99,6 +100,12 @@ export const REPORT_PERIODS: { id: ReportPeriod; label: string }[] = [
   { id: "weekly", label: "Weekly" },
   { id: "monthly", label: "Monthly" },
   { id: "yearly", label: "Yearly" },
+];
+
+export const DASHBOARD_PERIODS: { id: DashboardPeriod; label: string }[] = [
+  { id: "daily", label: "Today" },
+  { id: "weekly", label: "Week" },
+  { id: "monthly", label: "Month" },
 ];
 
 export const PERIOD_LABELS: Record<ReportPeriod, string> = {
