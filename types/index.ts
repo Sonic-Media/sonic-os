@@ -1,4 +1,8 @@
-export type Branch = "kansanga" | "salaama";
+export type Branch = string;
+
+import type { StaffRoleId, StaffStatus } from "@/types/staff-role";
+
+export type { StaffRoleId, StaffStatus } from "@/types/staff-role";
 
 export type EntryStatus = "draft" | "completed";
 
@@ -209,5 +213,9 @@ export interface Staff {
   id: string;
   name: string;
   branch: Branch;
+  role: StaffRoleId;
+  loginEnabled: boolean;
+  status: StaffStatus;
+  userId?: string;
   active: boolean;
 }

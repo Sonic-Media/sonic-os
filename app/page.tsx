@@ -10,6 +10,7 @@ import { DashboardAnalyticsSection } from "@/components/dashboard/dashboard-anal
 import { DashboardNotificationCenter } from "@/components/dashboard/dashboard-notification-center";
 import { QuickActions } from "@/components/dashboard/quick-actions";
 import { TodayAtAGlance } from "@/components/dashboard/today-at-a-glance";
+import { CashFlowGlanceCard } from "@/components/dashboard/cash-flow-glance-card";
 import { TodayProgress } from "@/components/dashboard/today-progress";
 import { PageContainer } from "@/components/shared/layout/page-container";
 import { PageSkeleton } from "@/components/shared/page-skeleton";
@@ -62,11 +63,14 @@ export default function DashboardPage() {
             <DashboardGreeting greeting={greeting} date={date} className="mb-0" />
             <CompactBusinessPulseCard />
           </div>
-          <TodayAtAGlance
-            summary={summary}
-            progress={progress}
-            lastUpdatedAt={lastUpdatedAt}
-          />
+          <div className="space-y-4">
+            <TodayAtAGlance
+              summary={summary}
+              progress={progress}
+              lastUpdatedAt={lastUpdatedAt}
+            />
+            <CashFlowGlanceCard />
+          </div>
         </div>
       </div>
 

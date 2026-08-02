@@ -1,6 +1,7 @@
 "use client";
 
 import { Input } from "@/components/shared/ui/input";
+import { Button } from "@/components/shared/ui/button";
 import { Card } from "@/components/shared/ui/card";
 import { useSettings } from "@/context/settings-context";
 import { BRANCH_IDS } from "@/lib/constants";
@@ -9,11 +10,13 @@ import { parseAmount } from "@/lib/amounts";
 import { StaffSection } from "@/components/settings/staff-section";
 import { ExpenseTemplatesSection } from "@/components/settings/expense-templates-section";
 import { useExpenseTemplates } from "@/context/expense-templates-context";
+import { useAuth } from "@/context/auth-context";
 import type { Branch } from "@/types";
 
 export function SettingsContent() {
   const { settings, updateSettings, version } = useSettings();
   const { updateTemplate } = useExpenseTemplates();
+  const { canManageUsers, canImportHistoricalData, canManageRoles } = useAuth();
 
   function updateBranchName(branch: Branch, name: string) {
     updateSettings({
@@ -70,6 +73,49 @@ export function SettingsContent() {
           onChange={(e) => updateSettings({ ownerName: e.target.value })}
         />
       </Card>
+
+      {canManageUsers && (
+        <Card>
+          <h3 className="text-sm font-medium text-zinc-500 uppercase tracking-wide mb-3">
+            Users
+          </h3>
+          <p className="text-sm text-zinc-400 mb-4">
+            Manage local Sonic OS users, roles, and passwords.
+          </p>
+          <Button href="/settings/users" variant="secondary">
+            Manage Users
+          </Button>
+        </Card>
+      )}
+
+      {canImportHistoricalData && (
+        <Card>
+          <h3 className="text-sm font-medium text-zinc-500 uppercase tracking-wide mb-3">
+            Historical Import
+          </h3>
+          <p className="text-sm text-zinc-400 mb-4">
+            Import historical daily operations records with preview, validation,
+            and undo support.
+          </p>
+          <Button href="/settings/import" variant="secondary">
+            Import Historical Data
+          </Button>
+        </Card>
+      )}
+
+      {canManageRoles && (
+        <Card>
+          <h3 className="text-sm font-medium text-zinc-500 uppercase tracking-wide mb-3">
+            Roles
+          </h3>
+          <p className="text-sm text-zinc-400 mb-4">
+            Review default staff roles and the modules each role can access.
+          </p>
+          <Button href="/settings/roles" variant="secondary">
+            Manage Roles
+          </Button>
+        </Card>
+      )}
 
       <StaffSection />
 

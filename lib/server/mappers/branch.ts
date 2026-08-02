@@ -1,5 +1,5 @@
 import type { BranchEntity } from "@/types/branch";
-import type { Branch as PrismaBranch } from "@/lib/generated/prisma/client";
+import type { Branch as PrismaBranch } from "@/lib/prisma";
 
 export function mapBranchToEntity(branch: PrismaBranch): BranchEntity {
   return {

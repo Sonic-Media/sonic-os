@@ -208,5 +208,7 @@ export function sortEntries(
 
 
 export function parseBranch(value: string | null): Branch {
-  return value === "kansanga" ? "kansanga" : "salaama";
+  if (value === "kansanga") return "kansanga";
+  if (value === "salaama") return "salaama";
+  return "kansanga";
 }

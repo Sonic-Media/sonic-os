@@ -91,6 +91,10 @@ function migrateEntry(raw: Record<string, unknown>): Entry {
   };
 }
 
+export function normalizeEntry(raw: Record<string, unknown>): Entry {
+  return migrateEntry(raw);
+}
+
 export function getEntries(): Entry[] {
   if (typeof window === "undefined") return [];
   try {

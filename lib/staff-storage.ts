@@ -1,5 +1,13 @@
 import { BRANCH_IDS, DEFAULT_STAFF, STAFF_STORAGE_KEY } from "@/lib/constants";
+import { normalizeBranchCode } from "@/lib/branch-storage";
+import { isStaffRoleId } from "@/lib/staff/roles";
 import type { Branch, Staff } from "@/types";
+import type { StaffStatus } from "@/types/staff-role";
+
+function normalizeStaffStatus(value: unknown, active: boolean): StaffStatus {
+  if (value === "active" || value === "inactive") return value;
+  return active ? "active" : "inactive";
+}
 
 function normalizeStaffMember(value: unknown): Staff | null {
   if (!value || typeof value !== "object") return null;
@@ -7,7 +15,10 @@ function normalizeStaffMember(value: unknown): Staff | null {
   const raw = value as Record<string, unknown>;
   const id = typeof raw.id === "string" ? raw.id.trim() : "";
   const name = typeof raw.name === "string" ? raw.name.trim() : "";
-  const branch = raw.branch === "kansanga" ? "kansanga" : "salaama";
+  const branch = normalizeBranchCode(raw.branch);
+  const active = raw.active !== false;
+  const status = normalizeStaffStatus(raw.status, active);
+  const role = isStaffRoleId(raw.role) ? raw.role : "store-attendant";
 
   if (!id || !name) return null;
 
@@ -15,7 +26,14 @@ function normalizeStaffMember(value: unknown): Staff | null {
     id,
     name,
     branch,
-    active: raw.active !== false,
+    role,
+    loginEnabled: raw.loginEnabled === true,
+    status,
+    userId:
+      typeof raw.userId === "string" && raw.userId.trim()
+        ? raw.userId.trim()
+        : undefined,
+    active: status === "active",
   };
 }
 
@@ -52,12 +70,42 @@ export function saveStaffList(staff: Staff[]): void {
   localStorage.setItem(STAFF_STORAGE_KEY, JSON.stringify(staff));
 }
 
+export function linkStaffToUser(staffId: string, userId: string): Staff[] {
+  const next = getStaffList().map((member) =>
+    member.id === staffId
+      ? {
+          ...member,
+          userId,
+          loginEnabled: true,
+        }
+      : member
+  );
+  saveStaffList(next);
+  return next;
+}
+
+export function unlinkStaffUser(staffId: string): Staff[] {
+  const next = getStaffList().map((member) =>
+    member.id === staffId
+      ? {
+          ...member,
+          userId: undefined,
+          loginEnabled: false,
+        }
+      : member
+  );
+  saveStaffList(next);
+  return next;
+}
+
 export function buildStaffLookup(staff: Staff[]): Map<string, Staff> {
   return new Map(staff.map((member) => [member.id, member]));
 }
 
 export function getActiveStaffForBranch(staff: Staff[], branch: Branch): Staff[] {
-  return staff.filter((member) => member.active && member.branch === branch);
+  return staff.filter(
+    (member) => member.active && member.status === "active" && member.branch === branch
+  );
 }
 
 export function resolveStaffDisplayName(

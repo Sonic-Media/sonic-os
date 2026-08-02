@@ -5,28 +5,43 @@ import { Button } from "@/components/shared/ui/button";
 import { Card } from "@/components/shared/ui/card";
 import { Input } from "@/components/shared/ui/input";
 import { Select } from "@/components/shared/ui/select";
+import { useAuth } from "@/context/auth-context";
 import { useSettings } from "@/context/settings-context";
 import { useStaff } from "@/context/staff-context";
-import { BRANCH_IDS } from "@/lib/constants";
+import { useBranches } from "@/context/branches-context";
+import { STAFF_ROLE_OPTIONS, getStaffRoleName } from "@/lib/staff/roles";
 import type { Branch, Staff } from "@/types";
+import type { StaffRoleId } from "@/types/staff-role";
 import { cn } from "@/lib/utils";
 
 function StaffRow({ member }: { member: Staff }) {
   const { getBranchName } = useSettings();
+  const { activeBranches } = useBranches();
   const { updateStaff, deactivateStaff, deleteStaff } = useStaff();
   const [isEditing, setIsEditing] = useState(false);
   const [name, setName] = useState(member.name);
   const [branch, setBranch] = useState<Branch>(member.branch);
+  const [role, setRole] = useState<StaffRoleId>(member.role);
+
+  const branchOptions = useMemo(
+    () =>
+      activeBranches.map((item) => ({
+        value: item.code,
+        label: item.name,
+      })),
+    [activeBranches]
+  );
 
   function handleSave() {
     if (!name.trim()) return;
-    updateStaff(member.id, { name: name.trim(), branch });
+    updateStaff(member.id, { name: name.trim(), branch, role });
     setIsEditing(false);
   }
 
   function handleCancel() {
     setName(member.name);
     setBranch(member.branch);
+    setRole(member.role);
     setIsEditing(false);
   }
 
@@ -34,8 +49,11 @@ function StaffRow({ member }: { member: Staff }) {
     const confirmed = window.confirm(
       `Delete ${member.name}? Entries linked to this staff member will keep their saved name.`
     );
-    if (confirmed) {
-      deleteStaff(member.id);
+    if (!confirmed) return;
+
+    const result = deleteStaff(member.id);
+    if (!result.success) {
+      window.alert(result.errors.form ?? "Unable to delete this staff member.");
     }
   }
 
@@ -50,11 +68,14 @@ function StaffRow({ member }: { member: Staff }) {
         <Select
           label="Branch"
           value={branch}
-          options={BRANCH_IDS.map((id) => ({
-            value: id,
-            label: getBranchName(id),
-          }))}
+          options={branchOptions}
           onChange={(e) => setBranch(e.target.value as Branch)}
+        />
+        <Select
+          label="Role"
+          value={role}
+          options={STAFF_ROLE_OPTIONS}
+          onChange={(e) => setRole(e.target.value as StaffRoleId)}
         />
         <div className="grid grid-cols-2 gap-3">
           <Button type="button" onClick={handleSave}>
@@ -72,10 +93,21 @@ function StaffRow({ member }: { member: Staff }) {
     <div className="flex items-start justify-between gap-3 rounded-xl border border-zinc-800/80 bg-zinc-950/40 px-4 py-3">
       <div>
         <p className="font-medium text-white">{member.name}</p>
-        <p className="text-sm text-zinc-500 mt-0.5">{getBranchName(member.branch)}</p>
-        {!member.active && (
-          <p className="text-xs text-amber-400 mt-1">Inactive</p>
-        )}
+        <p className="text-sm text-zinc-500 mt-0.5">
+          {getBranchName(member.branch)} · {getStaffRoleName(member.role)}
+        </p>
+        <div className="mt-2 flex flex-wrap gap-2 text-xs">
+          <span
+            className={cn(
+              member.status === "active" ? "text-emerald-400" : "text-amber-400"
+            )}
+          >
+            {member.status === "active" ? "Active" : "Inactive"}
+          </span>
+          {member.loginEnabled && (
+            <span className="text-zinc-400">Login enabled</span>
+          )}
+        </div>
       </div>
       <div className="flex flex-wrap justify-end gap-1">
         <button
@@ -85,7 +117,7 @@ function StaffRow({ member }: { member: Staff }) {
         >
           Edit
         </button>
-        {member.active ? (
+        {member.status === "active" ? (
           <button
             type="button"
             onClick={() => deactivateStaff(member.id)}
@@ -96,7 +128,7 @@ function StaffRow({ member }: { member: Staff }) {
         ) : (
           <button
             type="button"
-            onClick={() => updateStaff(member.id, { active: true })}
+            onClick={() => updateStaff(member.id, { status: "active", active: true })}
             className="px-2 py-1 text-xs font-medium text-zinc-400 hover:text-emerald-400 transition-colors"
           >
             Activate
@@ -115,25 +147,97 @@ function StaffRow({ member }: { member: Staff }) {
 }
 
 export function StaffSection() {
-  const { staff, addStaff } = useStaff();
-  const { getBranchName } = useSettings();
+  const { staff, addStaff, linkStaffAccount } = useStaff();
+  const { addUser } = useAuth();
+  const { activeBranches } = useBranches();
+
   const [name, setName] = useState("");
-  const [branch, setBranch] = useState<Branch>("salaama");
+  const [branch, setBranch] = useState<Branch>(
+    activeBranches[0]?.code ?? "kansanga"
+  );
+  const [role, setRole] = useState<StaffRoleId>("store-attendant");
+  const [loginEnabled, setLoginEnabled] = useState(false);
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [errors, setErrors] = useState<Record<string, string | undefined>>({});
 
   const branchOptions = useMemo(
     () =>
-      BRANCH_IDS.map((id) => ({
-        value: id,
-        label: getBranchName(id),
+      activeBranches.map((item) => ({
+        value: item.code,
+        label: item.name,
       })),
-    [getBranchName]
+    [activeBranches]
   );
 
   function handleAddStaff() {
+    setErrors({});
+
     const trimmedName = name.trim();
-    if (!trimmedName) return;
-    addStaff({ name: trimmedName, branch });
+    const nextErrors: Record<string, string | undefined> = {};
+
+    if (!trimmedName) {
+      nextErrors.name = "Name is required.";
+    }
+
+    if (!branch) {
+      nextErrors.branch = "Branch is required.";
+    }
+
+    if (!role) {
+      nextErrors.role = "Role is required.";
+    }
+
+    if (loginEnabled) {
+      if (!username.trim()) {
+        nextErrors.username = "Username is required when login is enabled.";
+      }
+      if (!password.trim()) {
+        nextErrors.password = "Password is required when login is enabled.";
+      }
+    }
+
+    if (Object.values(nextErrors).some(Boolean)) {
+      setErrors(nextErrors);
+      return;
+    }
+
+    const staffResult = addStaff({
+      name: trimmedName,
+      branch,
+      role,
+      loginEnabled: false,
+      status: "active",
+    });
+
+    if (!staffResult.success || !staffResult.staff) {
+      setErrors(staffResult.errors);
+      return;
+    }
+
+    if (loginEnabled) {
+      const userResult = addUser({
+        username,
+        displayName: trimmedName,
+        role,
+        branch,
+        password,
+        staffId: staffResult.staff.id,
+      });
+
+      if (!userResult.success || !userResult.user) {
+        setErrors(userResult.errors);
+        return;
+      }
+
+      linkStaffAccount(staffResult.staff.id, userResult.user.id);
+    }
+
     setName("");
+    setUsername("");
+    setPassword("");
+    setLoginEnabled(false);
+    setErrors({});
   }
 
   return (
@@ -157,16 +261,65 @@ export function StaffSection() {
           value={name}
           onChange={(e) => setName(e.target.value)}
         />
+        <StockFieldError message={errors.name} />
+
         <Select
           label="Branch"
           value={branch}
           options={branchOptions}
           onChange={(e) => setBranch(e.target.value as Branch)}
         />
+        <StockFieldError message={errors.branch} />
+
+        <Select
+          label="Role"
+          value={role}
+          options={STAFF_ROLE_OPTIONS}
+          onChange={(e) => setRole(e.target.value as StaffRoleId)}
+        />
+        <StockFieldError message={errors.role} />
+
+        <label className="flex items-center gap-3 text-sm text-zinc-300">
+          <input
+            type="checkbox"
+            checked={loginEnabled}
+            onChange={(event) => setLoginEnabled(event.target.checked)}
+            className="h-4 w-4 rounded border-zinc-700 bg-zinc-900"
+          />
+          Enable login for this staff member
+        </label>
+
+        {loginEnabled && (
+          <>
+            <Input
+              label="Username"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              placeholder="username"
+            />
+            <StockFieldError message={errors.username} />
+            <Input
+              label="Password"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Temporary password"
+            />
+            <StockFieldError message={errors.password} />
+          </>
+        )}
+
+        <StockFieldError message={errors.form} />
+
         <Button type="button" className="w-full" onClick={handleAddStaff}>
           Add Staff
         </Button>
       </div>
     </Card>
   );
+}
+
+function StockFieldError({ message }: { message?: string }) {
+  if (!message) return null;
+  return <p className="text-sm text-red-400">{message}</p>;
 }

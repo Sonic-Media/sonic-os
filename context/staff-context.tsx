@@ -13,14 +13,47 @@ import {
   buildStaffLookup,
   getActiveStaffForBranch,
   getStaffList,
+  linkStaffToUser,
   normalizeStaffList,
   resolveStaffDisplayName,
   saveStaffList,
   sortStaffByName,
+  unlinkStaffUser,
 } from "@/lib/staff-storage";
+import { isStaffRoleId } from "@/lib/staff/roles";
 import { recordActivity } from "@/lib/activity-log";
+import { getExpenseRecords } from "@/lib/expenses-module-storage";
+import { getPurchases } from "@/lib/purchasing-storage";
+import { getSales } from "@/lib/sales-storage";
 import { getSettings } from "@/lib/settings-storage";
+import { getEntries } from "@/lib/storage";
 import type { Branch, Staff } from "@/types";
+import type { StaffInput, StaffRoleId, StaffStatus } from "@/types/staff-role";
+
+export interface StaffValidationResult {
+  success: boolean;
+  errors: Record<string, string | undefined>;
+  staff?: Staff;
+}
+
+function createStaffValidationResult(
+  errors: Record<string, string | undefined>,
+  staff?: Staff
+): StaffValidationResult {
+  return {
+    success: !Object.values(errors).some(Boolean),
+    errors,
+    staff,
+  };
+}
+
+function isStaffReferenced(id: string): boolean {
+  if (getSales().some((sale) => sale.staffId === id)) return true;
+  if (getPurchases().some((purchase) => purchase.staffId === id)) return true;
+  if (getExpenseRecords().some((expense) => expense.staffId === id)) return true;
+  if (getEntries().some((entry) => entry.staffId === id)) return true;
+  return false;
+}
 
 interface StaffContextValue {
   staff: Staff[];
@@ -29,16 +62,37 @@ interface StaffContextValue {
   getStaffById: (id: string) => Staff | undefined;
   getActiveStaffForBranch: (branch: Branch) => Staff[];
   getStaffDisplayName: (staffId: string, fallbackName?: string) => string;
-  addStaff: (input: { name: string; branch: Branch }) => Staff;
+  addStaff: (input: StaffInput) => StaffValidationResult;
   updateStaff: (
     id: string,
-    patch: Partial<Pick<Staff, "name" | "branch" | "active">>
+    patch: Partial<
+      Pick<Staff, "name" | "branch" | "role" | "loginEnabled" | "status" | "active">
+    >
   ) => void;
+  linkStaffAccount: (staffId: string, userId: string) => void;
+  unlinkStaffAccount: (staffId: string) => void;
   deactivateStaff: (id: string) => void;
-  deleteStaff: (id: string) => void;
+  deleteStaff: (id: string) => StaffValidationResult;
 }
 
 const StaffContext = createContext<StaffContextValue | null>(null);
+
+function normalizeStaffPatch(patch: Partial<Pick<Staff, "name" | "branch" | "role" | "loginEnabled" | "status" | "active">>) {
+  const next: Partial<Staff> = { ...patch };
+
+  if (typeof patch.name === "string") {
+    next.name = patch.name.trim() || undefined;
+  }
+
+  if (patch.status) {
+    next.active = patch.status === "active";
+  } else if (typeof patch.active === "boolean") {
+    next.status = patch.active ? "active" : "inactive";
+    next.active = patch.active;
+  }
+
+  return next;
+}
 
 export function StaffProvider({ children }: { children: React.ReactNode }) {
   const [staff, setStaff] = useState<Staff[]>(() => getStaffList());
@@ -70,7 +124,7 @@ export function StaffProvider({ children }: { children: React.ReactNode }) {
   const lookup = useMemo(() => buildStaffLookup(staff), [staff]);
 
   const activeStaff = useMemo(
-    () => staff.filter((member) => member.active),
+    () => staff.filter((member) => member.active && member.status === "active"),
     [staff]
   );
 
@@ -91,20 +145,45 @@ export function StaffProvider({ children }: { children: React.ReactNode }) {
   );
 
   const addStaff = useCallback(
-    (input: { name: string; branch: Branch }) => {
+    (input: StaffInput): StaffValidationResult => {
+      const errors: Record<string, string | undefined> = {};
+      const name = input.name.trim();
+
+      if (!name) {
+        errors.name = "Name is required.";
+      }
+
+      if (!input.branch?.trim()) {
+        errors.branch = "Branch is required.";
+      }
+
+      if (!input.role || !isStaffRoleId(input.role)) {
+        errors.role = "Role is required.";
+      }
+
+      if (Object.values(errors).some(Boolean)) {
+        return createStaffValidationResult(errors);
+      }
+
+      const status: StaffStatus = input.status ?? "active";
       const member: Staff = {
         id: crypto.randomUUID(),
-        name: input.name.trim(),
+        name,
         branch: input.branch,
-        active: true,
+        role: input.role as StaffRoleId,
+        loginEnabled: input.loginEnabled === true,
+        status,
+        active: status === "active",
       };
+
       persistStaff(sortStaffByName([...staffRef.current, member]));
       recordActivity({
         type: "staff-added",
         title: "Staff added",
-        description: `${member.name} was added to the ${getSettings().branchNames[input.branch]} team.`,
+        description: `${member.name} was added to the ${getSettings().branchNames[input.branch as Branch]} team.`,
       });
-      return member;
+
+      return createStaffValidationResult({}, member);
     },
     [persistStaff]
   );
@@ -112,18 +191,22 @@ export function StaffProvider({ children }: { children: React.ReactNode }) {
   const updateStaff = useCallback(
     (
       id: string,
-      patch: Partial<Pick<Staff, "name" | "branch" | "active">>
+      patch: Partial<
+        Pick<Staff, "name" | "branch" | "role" | "loginEnabled" | "status" | "active">
+      >
     ) => {
+      const normalizedPatch = normalizeStaffPatch(patch);
+
       persistStaff(
         sortStaffByName(
           staffRef.current.map((member) =>
             member.id === id
               ? {
                   ...member,
-                  ...patch,
+                  ...normalizedPatch,
                   name:
-                    typeof patch.name === "string"
-                      ? patch.name.trim() || member.name
+                    typeof normalizedPatch.name === "string"
+                      ? normalizedPatch.name.trim() || member.name
                       : member.name,
                 }
               : member
@@ -134,16 +217,38 @@ export function StaffProvider({ children }: { children: React.ReactNode }) {
     [persistStaff]
   );
 
+  const linkStaffAccount = useCallback(
+    (staffId: string, userId: string) => {
+      const next = linkStaffToUser(staffId, userId);
+      staffRef.current = next;
+      setStaff(next);
+    },
+    []
+  );
+
+  const unlinkStaffAccount = useCallback((staffId: string) => {
+    const next = unlinkStaffUser(staffId);
+    staffRef.current = next;
+    setStaff(next);
+  }, []);
+
   const deactivateStaff = useCallback(
     (id: string) => {
-      updateStaff(id, { active: false });
+      updateStaff(id, { status: "inactive", active: false });
     },
     [updateStaff]
   );
 
   const deleteStaff = useCallback(
-    (id: string) => {
+    (id: string): StaffValidationResult => {
+      if (isStaffReferenced(id)) {
+        return createStaffValidationResult({
+          form: "Cannot delete a staff member linked to sales, purchases, expenses, or entries.",
+        });
+      }
+
       persistStaff(staffRef.current.filter((member) => member.id !== id));
+      return createStaffValidationResult({});
     },
     [persistStaff]
   );
@@ -158,6 +263,8 @@ export function StaffProvider({ children }: { children: React.ReactNode }) {
       getStaffDisplayName,
       addStaff,
       updateStaff,
+      linkStaffAccount,
+      unlinkStaffAccount,
       deactivateStaff,
       deleteStaff,
     }),
@@ -170,6 +277,8 @@ export function StaffProvider({ children }: { children: React.ReactNode }) {
       getStaffDisplayName,
       addStaff,
       updateStaff,
+      linkStaffAccount,
+      unlinkStaffAccount,
       deactivateStaff,
       deleteStaff,
     ]

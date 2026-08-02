@@ -1,15 +1,24 @@
 "use client";
 
+import { useMemo } from "react";
+import { StaffMemberCard } from "@/components/staff/staff-member-card";
+import { StaffSubnav } from "@/components/staff/staff-subnav";
 import { PageContainer } from "@/components/shared/layout/page-container";
 import { PageHeader } from "@/components/shared/layout/page-header";
-import { Card } from "@/components/shared/ui/card";
 import { PageSkeleton } from "@/components/shared/page-skeleton";
+import { Button } from "@/components/shared/ui/button";
 import { useSettings } from "@/context/settings-context";
-import { useStaff } from "@/context/staff-context";
+import { useStaffPayments } from "@/hooks/use-staff-payments";
+import Link from "next/link";
 
 export default function StaffPage() {
-  const { isLoaded, activeStaff } = useStaff();
+  const { summaries, isLoaded } = useStaffPayments();
   const { getBranchName } = useSettings();
+
+  const sortedSummaries = useMemo(
+    () => [...summaries].sort((left, right) => left.staffName.localeCompare(right.staffName)),
+    [summaries]
+  );
 
   if (!isLoaded) {
     return <PageSkeleton />;
@@ -19,21 +28,36 @@ export default function StaffPage() {
     <PageContainer>
       <PageHeader
         title="Staff"
-        subtitle="Team members across both branches"
+        subtitle="Team members and daily payment status"
       />
 
+      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:justify-end">
+        <Button href="/staff/payments" variant="secondary">
+          View Payments
+        </Button>
+        <Button href="/staff/payments?record=1">Record Payment</Button>
+      </div>
+
+      <StaffSubnav />
+
       <div className="space-y-3">
-        {activeStaff.map((member) => (
-          <Card key={member.id} className="flex items-center gap-4">
-            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-white/10 text-white font-semibold text-lg">
-              {member.name.split(" ").pop()?.[0]}
-            </div>
-            <div>
-              <p className="font-medium text-white">{member.name}</p>
-              <p className="text-sm text-zinc-500">{getBranchName(member.branch)}</p>
-            </div>
-          </Card>
-        ))}
+        {sortedSummaries.length === 0 ? (
+          <p className="text-sm text-zinc-500">
+            No active staff members yet. Add staff in{" "}
+            <Link href="/settings" className="text-white underline">
+              Settings
+            </Link>
+            .
+          </p>
+        ) : (
+          sortedSummaries.map((summary) => (
+            <StaffMemberCard
+              key={summary.staffId}
+              summary={summary}
+              branchName={getBranchName(summary.branch)}
+            />
+          ))
+        )}
       </div>
     </PageContainer>
   );

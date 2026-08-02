@@ -2,7 +2,6 @@
 
 import { Input } from "@/components/shared/ui/input";
 import { Button } from "@/components/shared/ui/button";
-import { EXPENSE_NAME_SUGGESTIONS } from "@/lib/constants";
 
 interface AddExpenseFormProps {
   name: string;
@@ -26,16 +25,10 @@ export function AddExpenseForm({
       <Input
         label="Expense Name"
         type="text"
-        list="expense-name-suggestions"
         placeholder="e.g. Generator Repair"
         value={name}
         onChange={(e) => onNameChange(e.target.value)}
       />
-      <datalist id="expense-name-suggestions">
-        {EXPENSE_NAME_SUGGESTIONS.map((suggestion) => (
-          <option key={suggestion} value={suggestion} />
-        ))}
-      </datalist>
       <Input
         label="Amount (UGX)"
         type="number"

@@ -17,6 +17,8 @@ interface EntriesContextValue {
   isLoaded: boolean;
   upsertEntry: (entry: Entry) => Entry;
   deleteEntry: (id: string) => void;
+  importEntries: (entries: Entry[]) => Entry[];
+  removeEntriesByIds: (ids: string[]) => number;
 }
 
 const EntriesContext = createContext<EntriesContextValue | null>(null);
@@ -60,14 +62,45 @@ export function EntriesProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
+  const importEntries = useCallback((imported: Entry[]): Entry[] => {
+    let next = entriesRef.current;
+
+    for (const entry of imported) {
+      next = upsertEntryInList(next, entry);
+    }
+
+    saveEntries(next);
+    entriesRef.current = next;
+    setEntries(next);
+    return imported;
+  }, []);
+
+  const removeEntriesByIds = useCallback((ids: string[]): number => {
+    if (ids.length === 0) return 0;
+
+    const idSet = new Set(ids);
+    const previous = entriesRef.current;
+    const next = previous.filter((entry) => !idSet.has(entry.id));
+    const removedCount = previous.length - next.length;
+
+    if (removedCount === 0) return 0;
+
+    saveEntries(next);
+    entriesRef.current = next;
+    setEntries(next);
+    return removedCount;
+  }, []);
+
   const value = useMemo(
     () => ({
       entries,
       isLoaded,
       upsertEntry,
       deleteEntry,
+      importEntries,
+      removeEntriesByIds,
     }),
-    [entries, isLoaded, upsertEntry, deleteEntry]
+    [entries, isLoaded, upsertEntry, deleteEntry, importEntries, removeEntriesByIds]
   );
 
   return (
