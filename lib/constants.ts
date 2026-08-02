@@ -16,6 +16,26 @@ export const STAFF_STORAGE_KEY = "sonic-os-staff";
 export const EXPENSE_TEMPLATES_STORAGE_KEY = "sonic-os-expense-templates";
 export const NOTIFICATIONS_STORAGE_KEY = "sonic-os-notifications";
 export const ACTIVITY_LOG_STORAGE_KEY = "sonic-os-activity-log";
+export const STOCK_PRODUCTS_STORAGE_KEY = "sonic-os-stock-products";
+export const STOCK_MOVEMENTS_STORAGE_KEY = "sonic-os-stock-movements";
+export const STOCK_PRICE_CHANGES_STORAGE_KEY = "sonic-os-stock-price-changes";
+export const SALES_STORAGE_KEY = "sonic-os-sales";
+export const SALES_CUSTOMERS_STORAGE_KEY = "sonic-os-sales-customers";
+export const PURCHASING_PURCHASES_STORAGE_KEY = "sonic-os-purchasing-purchases";
+export const PURCHASING_SUPPLIERS_STORAGE_KEY = "sonic-os-purchasing-suppliers";
+export const EXPENSES_RECORDS_STORAGE_KEY = "sonic-os-expenses-records";
+export const EXPENSES_CATEGORIES_STORAGE_KEY = "sonic-os-expenses-categories";
+export const BRANCHES_STORAGE_KEY = "sonic-os-branches";
+export const USERS_STORAGE_KEY = "sonic-os-users";
+export const SESSION_STORAGE_KEY = "sonic-os-session";
+export const AUTH_AUDIT_STORAGE_KEY = "sonic-os-auth-audit";
+export const IMPORT_UNDO_STORAGE_KEY = "sonic-os-import-undo";
+export const STOCK_ACTIVE_BRANCH_STORAGE_KEY = "sonic-os-stock-active-branch";
+export const STOCK_LAST_MOVEMENT_BRANCH_STORAGE_KEY =
+  "sonic-os-stock-last-movement-branch";
+export const ACTIVE_BRANCH_STORAGE_KEY = "sonic-os-active-branch";
+
+export const DEFAULT_BRANCH_CODE = "kansanga";
 
 export const BRANCH_IDS: Branch[] = ["salaama", "kansanga"];
 
@@ -104,19 +124,6 @@ export const DEFAULT_EXPENSE_TEMPLATES: ExpenseTemplate[] = [
   },
 ];
 
-export const EXPENSE_NAME_SUGGESTIONS = [
-  "Generator Repair",
-  "Plastic Bags",
-  "Fuel Advance",
-  "Internet Bundle",
-  "Printer Ink",
-  "Parking",
-  "Tea",
-  "Coffee",
-  "Electricity",
-  "Power Token",
-];
-
 export const LEGACY_EXPENSE_FIELDS = [
   { name: "Lunch", key: "lunch" },
   { name: "Rent", key: "rent" },
@@ -161,9 +168,33 @@ export const HISTORY_SORT_OPTIONS: { id: HistorySortOrder; label: string }[] = [
 ];
 
 export const DEFAULT_STAFF: Staff[] = [
-  { id: "staff-p", name: "Staff P", branch: "salaama", active: true },
-  { id: "staff-f", name: "Staff F", branch: "salaama", active: true },
-  { id: "staff-k", name: "Staff K", branch: "kansanga", active: true },
+  {
+    id: "staff-p",
+    name: "Staff P",
+    branch: "salaama",
+    role: "salesperson",
+    loginEnabled: false,
+    status: "active",
+    active: true,
+  },
+  {
+    id: "staff-f",
+    name: "Staff F",
+    branch: "salaama",
+    role: "store-attendant",
+    loginEnabled: false,
+    status: "active",
+    active: true,
+  },
+  {
+    id: "staff-k",
+    name: "Staff K",
+    branch: "kansanga",
+    role: "technician",
+    loginEnabled: false,
+    status: "active",
+    active: true,
+  },
 ];
 
 export const APP_VERSION = "Sonic OS V2.0";

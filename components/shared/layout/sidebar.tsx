@@ -1,12 +1,26 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { isNavItemActive, navItems } from "@/components/shared/layout/nav-items";
+import { BranchSwitcher } from "@/components/shared/layout/branch-switcher";
+import { useAuth } from "@/context/auth-context";
+import { canAccessRoute } from "@/lib/auth/permissions";
 import { cn } from "@/lib/utils";
 
 export function Sidebar() {
   const pathname = usePathname();
+  const router = useRouter();
+  const { session, lock, logout } = useAuth();
+
+  const visibleNavItems = navItems.filter((item) =>
+    session ? canAccessRoute(session.role, item.href) : false
+  );
+
+  function handleLock() {
+    lock();
+    router.push("/lock");
+  }
 
   return (
     <aside className="hidden lg:flex lg:w-64 lg:shrink-0 lg:flex-col lg:border-r lg:border-zinc-800/80 lg:bg-black">
@@ -14,10 +28,17 @@ export function Sidebar() {
         <div className="mb-10">
           <p className="text-lg font-semibold tracking-tight text-white">Sonic OS</p>
           <p className="mt-1 text-xs text-zinc-500">Business operating system</p>
+          {session && (
+            <p className="mt-3 text-xs text-zinc-400">
+              {session.displayName}
+            </p>
+          )}
         </div>
 
+        <BranchSwitcher className="mb-6" />
+
         <nav className="flex flex-1 flex-col gap-1">
-          {navItems.map((item) => {
+          {visibleNavItems.map((item) => {
             const isActive = isNavItemActive(pathname, item.href);
 
             return (
@@ -44,6 +65,33 @@ export function Sidebar() {
             );
           })}
         </nav>
+
+        {session && (
+          <div className="mt-6 space-y-2 border-t border-zinc-800/80 pt-4">
+            {session.role === "owner" && (
+              <Link
+                href="/settings/users"
+                className="block rounded-xl px-3 py-2 text-sm text-zinc-400 hover:bg-zinc-900/60 hover:text-white"
+              >
+                Users
+              </Link>
+            )}
+            <button
+              type="button"
+              onClick={handleLock}
+              className="block w-full rounded-xl px-3 py-2 text-left text-sm text-zinc-400 hover:bg-zinc-900/60 hover:text-white"
+            >
+              Lock
+            </button>
+            <button
+              type="button"
+              onClick={logout}
+              className="block w-full rounded-xl px-3 py-2 text-left text-sm text-zinc-400 hover:bg-zinc-900/60 hover:text-white"
+            >
+              Sign Out
+            </button>
+          </div>
+        )}
       </div>
     </aside>
   );
