@@ -1,0 +1,308 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../lib/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Role {
+  id          String   @id @default(uuid()) @db.Uuid
+  slug        String   @unique
+  name        String
+  description String?
+  modules     String[]
+  isSystem    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  users       User[]
+  staff       Staff[]
+}
+
+model Branch {
+  id             String           @id @default(uuid()) @db.Uuid
+  name           String
+  code           String           @unique
+  address        String?
+  phone          String?
+  manager        String?
+  active         Boolean          @default(true)
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  users          User[]
+  staff          Staff[]
+  dailyOps       DailyOperation[]
+  sales          Sale[]
+  purchases      Purchase[]
+  expenseRecords ExpenseRecord[]
+  stockMovements StockMovement[]
+}
+
+model User {
+  id           String          @id @default(uuid()) @db.Uuid
+  username     String          @unique
+  displayName  String
+  passwordHash String
+  roleId       String          @db.Uuid
+  role         Role            @relation(fields: [roleId], references: [id])
+  branchId     String          @db.Uuid
+  branch       Branch          @relation(fields: [branchId], references: [id])
+  staffId      String?         @unique @db.Uuid
+  staff        Staff?          @relation(fields: [staffId], references: [id])
+  active       Boolean         @default(true)
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+  sessions     Session[]
+  preferences  UserPreference?
+  auditLogs    AuthAuditLog[]
+}
+
+model Session {
+  id        String   @id @default(uuid()) @db.Uuid
+  token     String   @unique
+  userId    String   @db.Uuid
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  locked    Boolean  @default(false)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+}
+
+model UserPreference {
+  userId           String   @id @db.Uuid
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  activeBranchCode String
+  updatedAt        DateTime @updatedAt
+}
+
+model AuthAuditLog {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @db.Uuid
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  username  String
+  branchCode String
+  action    String
+  detail    String
+  createdAt DateTime @default(now())
+}
+
+model Staff {
+  id           String     @id @default(uuid()) @db.Uuid
+  name         String
+  branchId     String     @db.Uuid
+  branch       Branch     @relation(fields: [branchId], references: [id])
+  roleId       String     @db.Uuid
+  role         Role       @relation(fields: [roleId], references: [id])
+  loginEnabled Boolean    @default(false)
+  status       String     @default("active")
+  active       Boolean    @default(true)
+  user         User?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+}
+
+model AppSetting {
+  id        String   @id @default("default") 
+  businessName      String
+  ownerName         String
+  branchNames       Json
+  defaultLunchAmount Int     @default(0)
+  updatedAt DateTime @updatedAt
+}
+
+model ExpenseTemplate {
+  id            String   @id
+  name          String
+  category      String
+  defaultAmount Int?
+  active        Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model DailyOperation {
+  id                String              @id @default(uuid()) @db.Uuid
+  date              String
+  time              String
+  timestamp         BigInt
+  branchId          String              @db.Uuid
+  branch            Branch              @relation(fields: [branchId], references: [id])
+  sales             Int                 @default(0)
+  staffId           String?
+  staffName         String              @default("")
+  notes             String              @default("")
+  savingsAllocation Int?
+  status            String              @default("draft")
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  expenses          DailyOperationExpense[]
+}
+
+model DailyOperationExpense {
+  id               String         @id @default(uuid()) @db.Uuid
+  dailyOperationId String         @db.Uuid
+  dailyOperation   DailyOperation @relation(fields: [dailyOperationId], references: [id], onDelete: Cascade)
+  name             String
+  amount           Int            @default(0)
+}
+
+model Product {
+  id                String              @id @default(uuid()) @db.Uuid
+  name              String
+  category          String
+  sku               String?
+  buyingPrice       Int                 @default(0)
+  sellingPrice      Int                 @default(0)
+  currentStock      Int                 @default(0)
+  minimumStockLevel Int                 @default(0)
+  notes             String?
+  status            String              @default("in-stock")
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  movements         StockMovement[]
+  priceChanges      StockPriceChange[]
+  saleLineItems     SaleLineItem[]
+  purchaseLineItems PurchaseLineItem[]
+}
+
+model StockMovement {
+  id          String   @id @default(uuid()) @db.Uuid
+  date        String
+  productId   String   @db.Uuid
+  product     Product  @relation(fields: [productId], references: [id])
+  productName String
+  movement    String
+  quantity    Int
+  reason      String
+  branchId    String   @db.Uuid
+  branch      Branch   @relation(fields: [branchId], references: [id])
+  notes       String?
+  createdAt   DateTime @default(now())
+}
+
+model StockPriceChange {
+  id           String   @id @default(uuid()) @db.Uuid
+  productId    String   @db.Uuid
+  product      Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  field        String
+  previousValue Int
+  nextValue    Int
+  reason       String?
+  createdAt    DateTime @default(now())
+}
+
+model Customer {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String
+  phone     String?
+  email     String?
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  sales     Sale[]
+}
+
+model Sale {
+  id            String         @id @default(uuid()) @db.Uuid
+  invoiceNumber String         @unique
+  date          String
+  time          String
+  customerId    String?        @db.Uuid
+  customer      Customer?      @relation(fields: [customerId], references: [id])
+  subtotal      Int            @default(0)
+  discount      Int            @default(0)
+  total         Int            @default(0)
+  profit        Int            @default(0)
+  paymentMethod String
+  branchId      String         @db.Uuid
+  branch        Branch         @relation(fields: [branchId], references: [id])
+  staffId       String?
+  staffName     String?
+  notes         String?
+  status        String         @default("completed")
+  createdAt     DateTime       @default(now())
+  items         SaleLineItem[]
+}
+
+model SaleLineItem {
+  id          String  @id @default(uuid()) @db.Uuid
+  saleId      String  @db.Uuid
+  sale        Sale    @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  productId   String  @db.Uuid
+  product     Product @relation(fields: [productId], references: [id])
+  productName String
+  quantity    Int
+  unitPrice   Int
+  buyingPrice Int
+  lineTotal   Int
+}
+
+model Supplier {
+  id        String     @id @default(uuid()) @db.Uuid
+  name      String
+  phone     String?
+  email     String?
+  address   String?
+  notes     String?
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  purchases Purchase[]
+}
+
+model Purchase {
+  id            String             @id @default(uuid()) @db.Uuid
+  invoiceNumber String             @unique
+  date          String
+  supplierId    String             @db.Uuid
+  supplier      Supplier           @relation(fields: [supplierId], references: [id])
+  supplierName  String
+  totalCost     Int                @default(0)
+  branchId      String             @db.Uuid
+  branch        Branch             @relation(fields: [branchId], references: [id])
+  staffId       String?
+  staffName     String?
+  notes         String?
+  createdAt     DateTime           @default(now())
+  items         PurchaseLineItem[]
+}
+
+model PurchaseLineItem {
+  id          String  @id @default(uuid()) @db.Uuid
+  purchaseId  String  @db.Uuid
+  purchase    Purchase @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  productId   String  @db.Uuid
+  product     Product @relation(fields: [productId], references: [id])
+  productName String
+  quantity    Int
+  buyingPrice Int
+  lineTotal   Int
+}
+
+model ExpenseCategory {
+  id        String          @id
+  name      String
+  isDefault Boolean         @default(false)
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+  records   ExpenseRecord[]
+}
+
+model ExpenseRecord {
+  id               String          @id @default(uuid()) @db.Uuid
+  date             String
+  categoryId       String
+  category         ExpenseCategory @relation(fields: [categoryId], references: [id])
+  categoryName     String
+  description      String
+  amount           Int
+  paymentMethod    String
+  branchId         String          @db.Uuid
+  branch           Branch          @relation(fields: [branchId], references: [id])
+  staffId          String?
+  staffName        String?
+  staffRole        String?
+  staffPaymentType String?
+  notes            String?
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+}

@@ -1,0 +1,16 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: sonic-os-postgres
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: sonic
+      POSTGRES_PASSWORD: sonic
+      POSTGRES_DB: sonic_os
+    volumes:
+      - sonic_os_postgres_data:/var/lib/postgresql/data
+
+volumes:
+  sonic_os_postgres_data:
