@@ -1,19 +1,16 @@
 "use client";
 
 import { useState } from "react";
-import { BranchPicker } from "@/components/entry/branch-picker";
 import { StockDialog, StockFieldError } from "@/components/stock/stock-dialog";
 import { Button } from "@/components/shared/ui/button";
 import { Input } from "@/components/shared/ui/input";
 import { Select } from "@/components/shared/ui/select";
 import { Textarea } from "@/components/shared/ui/textarea";
-import { DEFAULT_BRANCH_CODE } from "@/lib/constants";
+import { useActiveBranch } from "@/context/active-branch-context";
 import { useExpensesModule } from "@/context/expenses-module-context";
-import { useStaff } from "@/context/staff-context";
 import { getTodayISO } from "@/lib/dates";
 import { EXPENSE_PAYMENT_METHODS, filterSelectableExpenseCategories } from "@/lib/expenses-module/constants";
 import type { ExpensePaymentMethod, ExpenseRecord } from "@/types/expenses-module";
-import type { Branch } from "@/types";
 
 interface ExpenseDialogProps {
   mode: "add" | "edit";
@@ -27,7 +24,7 @@ export function ExpenseDialog({
   onClose,
 }: ExpenseDialogProps) {
   const { categories, addExpense, updateExpense } = useExpensesModule();
-  const { staff } = useStaff();
+  const { activeBranch } = useActiveBranch();
 
   const [date, setDate] = useState(expense?.date ?? getTodayISO());
   const [categoryId, setCategoryId] = useState(expense?.categoryId ?? "");
@@ -38,10 +35,6 @@ export function ExpenseDialog({
   const [paymentMethod, setPaymentMethod] = useState<
     ExpensePaymentMethod | ""
   >(expense?.paymentMethod ?? "");
-  const [branch, setBranch] = useState<Branch>(
-    expense?.branch ?? DEFAULT_BRANCH_CODE
-  );
-  const [staffId, setStaffId] = useState(expense?.staffId ?? "");
   const [notes, setNotes] = useState(expense?.notes ?? "");
   const [errors, setErrors] = useState<Record<string, string | undefined>>({});
 
@@ -57,13 +50,6 @@ export function ExpenseDialog({
     label: method.label,
   }));
 
-  const staffOptions = staff
-    .filter((member) => member.active)
-    .map((member) => ({
-      value: member.id,
-      label: member.name,
-    }));
-
   function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
 
@@ -74,8 +60,7 @@ export function ExpenseDialog({
       description,
       amount: parsedAmount,
       paymentMethod: paymentMethod as ExpensePaymentMethod,
-      branch,
-      staffId: staffId || undefined,
+      branch: mode === "edit" ? expense!.branch : activeBranch,
       notes,
     };
 
@@ -185,16 +170,6 @@ export function ExpenseDialog({
           />
           <StockFieldError message={errors.paymentMethod} />
         </div>
-
-        <BranchPicker value={branch} onChange={setBranch} />
-
-        <Select
-          label="Staff (optional)"
-          value={staffId}
-          placeholder="Select staff"
-          options={staffOptions}
-          onChange={(event) => setStaffId(event.target.value)}
-        />
 
         <Textarea
           label="Notes (optional)"

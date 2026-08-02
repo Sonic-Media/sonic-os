@@ -1,11 +1,14 @@
 import { getTodayISO } from "@/lib/dates";
 import {
-  STAFF_PAYMENT_CATEGORY_ID,
   isStaffPaymentCategory,
 } from "@/lib/expenses-module/constants";
 import type { CashFlowDateRange } from "@/types/expenses-module";
 import type { ExpenseRecord } from "@/types/expenses-module";
-import type { StaffPaymentReportSummary, StaffPaymentSummary } from "@/types/staff-payment";
+import type {
+  StaffPaymentRecord,
+  StaffPaymentReportSummary,
+  StaffPaymentSummary,
+} from "@/types/staff-payment";
 import type { Staff } from "@/types";
 
 function isDateInRange(date: string, range: CashFlowDateRange): boolean {
@@ -14,9 +17,17 @@ function isDateInRange(date: string, range: CashFlowDateRange): boolean {
 
 export function isStaffPaymentExpense(expense: ExpenseRecord): boolean {
   return (
+    expense.staffPaymentId !== undefined ||
     isStaffPaymentCategory(expense.categoryId) ||
     expense.staffPaymentType !== undefined
   );
+}
+
+export function getEffectivePaymentAmount(payment: StaffPaymentRecord): number {
+  if (payment.paymentType === "deduction") {
+    return -Math.abs(payment.amount);
+  }
+  return Math.abs(payment.amount);
 }
 
 export function getEffectiveStaffPaymentAmount(expense: ExpenseRecord): number {
@@ -40,27 +51,35 @@ export function filterStaffPaymentExpenses(
   return expenses.filter(isStaffPaymentExpense);
 }
 
+export function filterStaffPaymentsByRange(
+  payments: StaffPaymentRecord[],
+  range?: CashFlowDateRange
+): StaffPaymentRecord[] {
+  return payments.filter(
+    (payment) => !range || isDateInRange(payment.date, range)
+  );
+}
+
 export function computeStaffPaymentTotal(
-  expenses: ExpenseRecord[],
+  payments: StaffPaymentRecord[],
   range?: CashFlowDateRange
 ): number {
-  return filterStaffPaymentExpenses(expenses)
-    .filter((expense) => !range || isDateInRange(expense.date, range))
-    .reduce((sum, expense) => sum + getEffectiveStaffPaymentAmount(expense), 0);
+  return filterStaffPaymentsByRange(payments, range).reduce(
+    (sum, payment) => sum + getEffectivePaymentAmount(payment),
+    0
+  );
 }
 
 export function computeStaffPaymentsByBranch(
-  expenses: ExpenseRecord[],
+  payments: StaffPaymentRecord[],
   range: CashFlowDateRange
 ): { branch: string; total: number }[] {
   const totals = new Map<string, number>();
 
-  for (const expense of filterStaffPaymentExpenses(expenses)) {
-    if (!isDateInRange(expense.date, range)) continue;
+  for (const payment of filterStaffPaymentsByRange(payments, range)) {
     totals.set(
-      expense.branch,
-      (totals.get(expense.branch) ?? 0) +
-        getEffectiveStaffPaymentAmount(expense)
+      payment.branch,
+      (totals.get(payment.branch) ?? 0) + getEffectivePaymentAmount(payment)
     );
   }
 
@@ -70,7 +89,7 @@ export function computeStaffPaymentsByBranch(
 }
 
 export function computeStaffPaymentsByStaff(
-  expenses: ExpenseRecord[],
+  payments: StaffPaymentRecord[],
   range: CashFlowDateRange
 ): { staffId: string; staffName: string; total: number }[] {
   const totals = new Map<
@@ -78,20 +97,18 @@ export function computeStaffPaymentsByStaff(
     { staffId: string; staffName: string; total: number }
   >();
 
-  for (const expense of filterStaffPaymentExpenses(expenses)) {
-    if (!isDateInRange(expense.date, range) || !expense.staffId) continue;
-
-    const existing = totals.get(expense.staffId);
-    const delta = getEffectiveStaffPaymentAmount(expense);
+  for (const payment of filterStaffPaymentsByRange(payments, range)) {
+    const existing = totals.get(payment.staffId);
+    const delta = getEffectivePaymentAmount(payment);
 
     if (existing) {
       existing.total += delta;
       continue;
     }
 
-    totals.set(expense.staffId, {
-      staffId: expense.staffId,
-      staffName: expense.staffName ?? "Unknown Staff",
+    totals.set(payment.staffId, {
+      staffId: payment.staffId,
+      staffName: payment.staffName,
       total: delta,
     });
   }
@@ -102,17 +119,16 @@ export function computeStaffPaymentsByStaff(
 }
 
 export function computeMonthlyStaffPaymentTotals(
-  expenses: ExpenseRecord[],
+  payments: StaffPaymentRecord[],
   range: CashFlowDateRange
 ): { month: string; total: number }[] {
   const totals = new Map<string, number>();
 
-  for (const expense of filterStaffPaymentExpenses(expenses)) {
-    if (!isDateInRange(expense.date, range)) continue;
-    const month = expense.date.slice(0, 7);
+  for (const payment of filterStaffPaymentsByRange(payments, range)) {
+    const month = payment.date.slice(0, 7);
     totals.set(
       month,
-      (totals.get(month) ?? 0) + getEffectiveStaffPaymentAmount(expense)
+      (totals.get(month) ?? 0) + getEffectivePaymentAmount(payment)
     );
   }
 
@@ -122,14 +138,14 @@ export function computeMonthlyStaffPaymentTotals(
 }
 
 export function computeStaffPaymentReportSummary(
-  expenses: ExpenseRecord[],
+  payments: StaffPaymentRecord[],
   range: CashFlowDateRange
 ): StaffPaymentReportSummary {
   return {
-    totalStaffPayments: computeStaffPaymentTotal(expenses, range),
-    byBranch: computeStaffPaymentsByBranch(expenses, range),
-    byStaff: computeStaffPaymentsByStaff(expenses, range),
-    monthlyTotals: computeMonthlyStaffPaymentTotals(expenses, range),
+    totalStaffPayments: computeStaffPaymentTotal(payments, range),
+    byBranch: computeStaffPaymentsByBranch(payments, range),
+    byStaff: computeStaffPaymentsByStaff(payments, range),
+    monthlyTotals: computeMonthlyStaffPaymentTotals(payments, range),
   };
 }
 
@@ -142,27 +158,30 @@ function getMonthStartISO(): string {
 
 export function computeStaffPaymentSummary(
   staffMember: Staff,
-  expenses: ExpenseRecord[],
+  payments: StaffPaymentRecord[],
   todayISO: string = getTodayISO()
 ): StaffPaymentSummary {
   const monthStart = getMonthStartISO();
-  const staffPayments = filterStaffPaymentExpenses(expenses).filter(
-    (expense) => expense.staffId === staffMember.id
+  const staffPayments = payments.filter(
+    (payment) => payment.staffId === staffMember.id
   );
 
   const paidToday = staffPayments.some(
-    (expense) =>
-      expense.date === todayISO && expense.staffPaymentType !== "deduction"
+    (payment) =>
+      payment.date === todayISO && payment.paymentType !== "deduction"
   );
 
   const lastPaymentDate =
     staffPayments
-      .map((expense) => expense.date)
+      .map((payment) => payment.date)
       .sort((left, right) => right.localeCompare(left))[0] ?? null;
 
   const monthTotal = staffPayments
-    .filter((expense) => expense.date >= monthStart)
-    .reduce((sum, expense) => sum + getEffectiveStaffPaymentAmount(expense), 0);
+    .filter((payment) => payment.date >= monthStart)
+    .reduce(
+      (sum, payment) => sum + getEffectivePaymentAmount(payment),
+      0
+    );
 
   return {
     staffId: staffMember.id,
@@ -177,13 +196,28 @@ export function computeStaffPaymentSummary(
 
 export function getStaffPaymentHistory(
   staffId: string,
-  expenses: ExpenseRecord[]
-): ExpenseRecord[] {
-  return filterStaffPaymentExpenses(expenses)
-    .filter((expense) => expense.staffId === staffId)
+  payments: StaffPaymentRecord[]
+): StaffPaymentRecord[] {
+  return payments
+    .filter((payment) => payment.staffId === staffId)
     .sort((left, right) => {
       const dateCompare = right.date.localeCompare(left.date);
       if (dateCompare !== 0) return dateCompare;
       return right.createdAt.localeCompare(left.createdAt);
     });
+}
+
+export function computeStaffPayoutTotalForBranchDate(
+  payments: StaffPaymentRecord[],
+  branch: string,
+  date: string
+): number {
+  return payments
+    .filter(
+      (payment) =>
+        payment.branch === branch &&
+        payment.date === date &&
+        payment.paymentType !== "deduction"
+    )
+    .reduce((sum, payment) => sum + payment.amount, 0);
 }

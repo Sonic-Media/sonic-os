@@ -3,11 +3,9 @@
 import { Button } from "@/components/shared/ui/button";
 import { Input } from "@/components/shared/ui/input";
 import { Textarea } from "@/components/shared/ui/textarea";
-import { BranchPicker } from "@/components/entry/branch-picker";
 import { EntryStatusBadge } from "@/components/entry/entry-status-badge";
 import { EntrySummary } from "@/components/entry/entry-summary";
 import { ExpenseList } from "@/components/entry/expense-list";
-import { StaffPicker } from "@/components/entry/staff-picker";
 import type { EntryFormData, EntryStatus } from "@/types";
 
 interface EntryFormProps {
@@ -54,12 +52,6 @@ export function EntryForm({
         </div>
       )}
 
-      <BranchPicker
-        value={form.branch}
-        onChange={(branch) => updateField("branch", branch)}
-        disabled={lockBranch}
-      />
-
       <Input
         label="Sales Amount (UGX)"
         type="number"
@@ -79,12 +71,6 @@ export function EntryForm({
         sales={sales}
         totalExpenses={totalExpenses}
         balance={balance}
-      />
-
-      <StaffPicker
-        branch={form.branch}
-        value={form.staffId}
-        onChange={(staffId) => updateField("staffId", staffId)}
       />
 
       <Textarea

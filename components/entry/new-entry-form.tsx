@@ -3,13 +3,10 @@
 import { useEntryForm } from "@/hooks/use-entry-form";
 import { EntryForm } from "@/components/entry/entry-form";
 import { DuplicateEntryDialog } from "@/components/entry/duplicate-entry-dialog";
-import type { Branch } from "@/types";
+import { useActiveBranch } from "@/context/active-branch-context";
 
-interface NewEntryFormProps {
-  branch: Branch;
-}
-
-export function NewEntryForm({ branch }: NewEntryFormProps) {
+export function NewEntryForm() {
+  const { activeBranch } = useActiveBranch();
   const {
     form,
     isSaving,
@@ -22,7 +19,7 @@ export function NewEntryForm({ branch }: NewEntryFormProps) {
     handleSave,
     handleEditExisting,
     handleCancelDuplicate,
-  } = useEntryForm({ initialBranch: branch });
+  } = useEntryForm({ initialBranch: activeBranch });
 
   return (
     <>

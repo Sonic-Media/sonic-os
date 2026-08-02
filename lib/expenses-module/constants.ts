@@ -2,7 +2,7 @@ import type { ExpenseCategory, ExpensePaymentMethod } from "@/types/expenses-mod
 import type { StaffPaymentType } from "@/types/staff-payment";
 
 export const STAFF_PAYMENT_CATEGORY_ID = "staff-payment";
-export const STAFF_PAYMENT_CATEGORY_NAME = "Staff Payment";
+export const STAFF_PAYMENT_CATEGORY_NAME = "Staff";
 
 export const EXPENSES_NAV_ITEMS: {
   href: string;
@@ -42,7 +42,8 @@ export const STAFF_PAYMENT_TYPES: {
   label: string;
 }[] = [
   { id: "daily-wage", label: "Daily Wage" },
-  { id: "salary", label: "Salary" },
+  { id: "weekly-wage", label: "Weekly Wage" },
+  { id: "salary", label: "Monthly Salary" },
   { id: "bonus", label: "Bonus" },
   { id: "advance", label: "Advance" },
   { id: "deduction", label: "Deduction" },

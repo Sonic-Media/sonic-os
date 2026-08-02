@@ -4,6 +4,7 @@ import {
   buildStaffLookup,
   resolveStaffDisplayName,
 } from "@/lib/staff-storage";
+import { getEntryActorId, getEntryActorName } from "@/lib/staff/session";
 import type { Branch, Entry, HistoryStaffFilter, Staff } from "@/types";
 
 export interface StaffReportSummary {
@@ -21,7 +22,7 @@ export function filterEntriesByStaff(
   staffFilter: HistoryStaffFilter
 ): Entry[] {
   if (staffFilter === "all") return entries;
-  return entries.filter((entry) => entry.staffId === staffFilter);
+  return entries.filter((entry) => getEntryActorId(entry) === staffFilter);
 }
 
 export function aggregateEntriesByStaff(
@@ -33,11 +34,12 @@ export function aggregateEntriesByStaff(
   const grouped = new Map<string, StaffReportSummary>();
 
   for (const entry of completedEntries) {
-    if (!entry.staffId) continue;
+    const actorId = getEntryActorId(entry);
+    if (!actorId) continue;
 
-    const member = lookup.get(entry.staffId);
+    const member = lookup.get(actorId);
     const expenses = calculateExpenses(entry);
-    const existing = grouped.get(entry.staffId);
+    const existing = grouped.get(actorId);
 
     if (existing) {
       existing.entryCount += 1;
@@ -47,11 +49,11 @@ export function aggregateEntriesByStaff(
       continue;
     }
 
-    grouped.set(entry.staffId, {
-      staffId: entry.staffId,
+    grouped.set(actorId, {
+      staffId: actorId,
       staffName: resolveStaffDisplayName(
-        entry.staffId,
-        entry.staffName,
+        actorId,
+        getEntryActorName(entry) ?? "",
         lookup
       ),
       branch: member?.branch ?? entry.branch,

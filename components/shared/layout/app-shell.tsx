@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { BottomNav } from "@/components/shared/layout/bottom-nav";
 import { BranchSwitcher } from "@/components/shared/layout/branch-switcher";
+import { AppNotificationCenter } from "@/components/shared/layout/app-notification-center";
 import { Sidebar } from "@/components/shared/layout/sidebar";
 import { PageSkeleton } from "@/components/shared/page-skeleton";
 import { useAuth } from "@/context/auth-context";
@@ -85,8 +86,9 @@ export function AppShell({ children }: AppShellProps) {
     <div className="flex min-h-full">
       <Sidebar />
       <div className="flex min-w-0 flex-1 flex-col">
-        <div className="border-b border-zinc-800/80 px-4 py-3 lg:hidden">
+        <div className="flex items-center justify-between gap-3 border-b border-zinc-800/80 px-4 py-3 lg:hidden">
           <BranchSwitcher />
+          <AppNotificationCenter />
         </div>
         <main className="min-h-full flex-1">{children}</main>
         <BottomNav />

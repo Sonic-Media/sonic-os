@@ -10,6 +10,7 @@ import {
   calculateSavingsFromTotals,
 } from "@/lib/amounts";
 import { formatCurrency } from "@/lib/format";
+import { getEntryActorId, getEntryActorName } from "@/lib/staff/session";
 import { useSettings } from "@/context/settings-context";
 import { useStaff } from "@/context/staff-context";
 import type { Entry } from "@/types";
@@ -24,7 +25,10 @@ export function EntryDetailCard({ entry }: EntryDetailCardProps) {
   const { getStaffDisplayName } = useStaff();
   const expenses = calculateExpenses(entry);
   const savings = calculateSavingsFromTotals(entry.sales, expenses);
-  const staffLabel = getStaffDisplayName(entry.staffId, entry.staffName);
+  const staffLabel = getStaffDisplayName(
+    getEntryActorId(entry) ?? "",
+    getEntryActorName(entry)
+  );
 
   return (
     <>

@@ -1,10 +1,14 @@
 "use client";
 
+import { useMemo } from "react";
 import { formatCurrency } from "@/lib/format";
 import { EntryStatusBadge } from "@/components/entry/entry-status-badge";
 import { CashSummary } from "@/components/operations/cash-summary";
 import { formatEntryDisplayDate } from "@/lib/dates";
 import { calculateExpenses } from "@/lib/amounts";
+import { getEntryActorName } from "@/lib/staff/session";
+import { useStaffPaymentsModule } from "@/context/staff-payments-context";
+import { computeStaffPayoutTotalForBranchDate } from "@/lib/staff-payments/calculations";
 import { useSettings } from "@/context/settings-context";
 import type { Entry } from "@/types";
 
@@ -14,9 +18,21 @@ interface OperationsReadOnlyViewProps {
 
 export function OperationsReadOnlyView({ entry }: OperationsReadOnlyViewProps) {
   const { getBranchName } = useSettings();
+  const { payments } = useStaffPaymentsModule();
   const totalExpenses = calculateExpenses(entry);
-  const netCash = entry.sales - totalExpenses;
+  const staffPayouts = useMemo(
+    () =>
+      computeStaffPayoutTotalForBranchDate(
+        payments,
+        entry.branch,
+        entry.date
+      ),
+    [payments, entry.branch, entry.date]
+  );
+  const netCash = entry.sales - totalExpenses - staffPayouts;
   const allocation = entry.savingsAllocation ?? netCash;
+
+  const staffName = getEntryActorName(entry);
 
   return (
     <div className="space-y-6">
@@ -66,6 +82,7 @@ export function OperationsReadOnlyView({ entry }: OperationsReadOnlyViewProps) {
       <CashSummary
         sales={entry.sales}
         totalExpenses={totalExpenses}
+        staffPayouts={staffPayouts}
         netCash={netCash}
         savingsAllocation={String(allocation)}
         readOnly
@@ -80,10 +97,10 @@ export function OperationsReadOnlyView({ entry }: OperationsReadOnlyViewProps) {
         </div>
       ) : null}
 
-      {entry.staffName ? (
+      {staffName ? (
         <div className="rounded-2xl border border-zinc-800/80 bg-zinc-900/40 px-4 py-3">
           <p className="text-sm text-zinc-500">Staff</p>
-          <p className="text-base font-medium text-white">{entry.staffName}</p>
+          <p className="text-base font-medium text-white">{staffName}</p>
         </div>
       ) : null}
     </div>

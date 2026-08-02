@@ -9,7 +9,6 @@ import {
   useRef,
   useState,
 } from "react";
-import { useStaff } from "@/context/staff-context";
 import { EXPENSES_CATEGORIES_STORAGE_KEY } from "@/lib/constants";
 import { getTodayISO } from "@/lib/dates";
 import {
@@ -38,13 +37,21 @@ import type {
   ExpensesDashboardMetrics,
   ExpenseValidationResult,
 } from "@/types/expenses-module";
-import type { StaffPaymentInput } from "@/types/staff-payment";
+import type { StaffPaymentInput, StaffPaymentRecord } from "@/types/staff-payment";
 import {
   STAFF_PAYMENT_CATEGORY_ID,
   STAFF_PAYMENT_CATEGORY_NAME,
-  getStaffPaymentTypeLabel,
+  isStaffPaymentCategory,
 } from "@/lib/expenses-module/constants";
-import { validateStaffPaymentInput } from "@/lib/staff-payments/validation";
+import {
+  DAY_CLOSED_EDIT_MESSAGE,
+  isBranchDayClosed,
+} from "@/lib/day-closing/storage";
+import { isStaffPaymentExpense } from "@/lib/staff-payments/calculations";
+import { AUDIT_ACTIONS } from "@/lib/audit-log/constants";
+import { pickAuditFields } from "@/lib/audit-log/snapshots";
+import { resolveCurrentStaffAction } from "@/lib/staff/session";
+import { recordStaffAction } from "@/lib/staff/audit";
 
 interface ExpensesModuleContextValue {
   expenses: ExpenseRecord[];
@@ -65,6 +72,8 @@ interface ExpensesModuleContextValue {
     input: ExpenseCategoryUpdateInput
   ) => ExpenseValidationResult;
   deleteCategory: (id: string) => ExpenseValidationResult;
+  upsertStaffPaymentExpense: (expense: ExpenseRecord) => ExpenseValidationResult;
+  linkLegacyStaffPaymentExpenses: (payments: StaffPaymentRecord[]) => void;
   addStaffPayment: (input: StaffPaymentInput) => ExpenseValidationResult;
 }
 
@@ -86,8 +95,6 @@ export function ExpensesModuleProvider({
 }: {
   children: React.ReactNode;
 }) {
-  const { getStaffById } = useStaff();
-
   const [expenses, setExpenses] = useState<ExpenseRecord[]>(() =>
     getExpenseRecords()
   );
@@ -175,6 +182,10 @@ export function ExpensesModuleProvider({
         return createValidationResult(errors);
       }
 
+      if (isBranchDayClosed(input.branch, input.date)) {
+        return createValidationResult({ form: DAY_CLOSED_EDIT_MESSAGE });
+      }
+
       const category = categoriesRef.current.find(
         (item) => item.id === input.categoryId
       );
@@ -182,7 +193,7 @@ export function ExpensesModuleProvider({
         return createValidationResult({ categoryId: "Category not found." });
       }
 
-      const staff = input.staffId ? getStaffById(input.staffId) : undefined;
+      const actor = resolveCurrentStaffAction(input.branch);
       const now = new Date().toISOString();
 
       const record: ExpenseRecord = {
@@ -194,17 +205,34 @@ export function ExpensesModuleProvider({
         amount: input.amount,
         paymentMethod: input.paymentMethod,
         branch: input.branch,
-        staffId: staff?.id,
-        staffName: staff?.name,
+        createdBy: actor,
         notes: input.notes?.trim() || undefined,
         createdAt: now,
         updatedAt: now,
       };
 
       persistExpenses([record, ...expensesRef.current]);
+      recordStaffAction({
+        staffId: actor?.staffId,
+        staffName: actor?.staffName,
+        role: actor?.role,
+        branch: record.branch,
+        action: AUDIT_ACTIONS.EXPENSE_ADDED,
+        module: "expenses",
+        recordId: record.id,
+        newValues: pickAuditFields(record, [
+          "id",
+          "date",
+          "categoryName",
+          "description",
+          "amount",
+          "branch",
+          "paymentMethod",
+        ]),
+      });
       return createValidationResult({});
     },
-    [getStaffById, persistExpenses]
+    [persistExpenses]
   );
 
   const updateExpense = useCallback(
@@ -215,6 +243,12 @@ export function ExpensesModuleProvider({
       const existing = expensesRef.current.find((expense) => expense.id === id);
       if (!existing) {
         return createValidationResult({ form: "Expense not found." });
+      }
+
+      if (existing.staffPaymentId || isStaffPaymentExpense(existing)) {
+        return createValidationResult({
+          form: "Staff payment expenses are managed in Staff Payments.",
+        });
       }
 
       const errors = validateExpenseRecordInput(input);
@@ -229,41 +263,158 @@ export function ExpensesModuleProvider({
         return createValidationResult({ categoryId: "Category not found." });
       }
 
-      const staff = input.staffId ? getStaffById(input.staffId) : undefined;
+      const actor = resolveCurrentStaffAction(input.branch);
       const now = new Date().toISOString();
 
+      const updated = {
+        ...existing,
+        date: input.date,
+        categoryId: category.id,
+        categoryName: category.name,
+        description: input.description.trim(),
+        amount: input.amount,
+        paymentMethod: input.paymentMethod,
+        branch: input.branch,
+        createdBy: actor ?? existing.createdBy,
+        notes: input.notes?.trim() || undefined,
+        updatedAt: now,
+      };
+
       const nextExpenses = expensesRef.current.map((expense) =>
-        expense.id === id
-          ? {
-              ...expense,
-              date: input.date,
-              categoryId: category.id,
-              categoryName: category.name,
-              description: input.description.trim(),
-              amount: input.amount,
-              paymentMethod: input.paymentMethod,
-              branch: input.branch,
-              staffId: staff?.id,
-              staffName: staff?.name,
-              notes: input.notes?.trim() || undefined,
-              updatedAt: now,
-            }
-          : expense
+        expense.id === id ? updated : expense
       );
 
       persistExpenses(nextExpenses);
+      recordStaffAction({
+        staffId: actor?.staffId,
+        staffName: actor?.staffName,
+        role: actor?.role,
+        branch: updated.branch,
+        action: AUDIT_ACTIONS.EXPENSE_EDITED,
+        module: "expenses",
+        recordId: updated.id,
+        oldValues: pickAuditFields(existing, [
+          "date",
+          "categoryName",
+          "description",
+          "amount",
+          "branch",
+          "paymentMethod",
+        ]),
+        newValues: pickAuditFields(updated, [
+          "date",
+          "categoryName",
+          "description",
+          "amount",
+          "branch",
+          "paymentMethod",
+        ]),
+      });
       return createValidationResult({});
     },
-    [getStaffById, persistExpenses]
+    [persistExpenses]
   );
 
   const deleteExpense = useCallback(
     (id: string) => {
+      const existing = expensesRef.current.find((expense) => expense.id === id);
+      if (existing?.staffPaymentId || (existing && isStaffPaymentExpense(existing))) {
+        return;
+      }
+
+      if (existing) {
+        recordStaffAction({
+          branch: existing.branch,
+          action: AUDIT_ACTIONS.DELETE,
+          module: "expenses",
+          recordId: existing.id,
+          oldValues: pickAuditFields(existing, [
+            "date",
+            "categoryName",
+            "description",
+            "amount",
+            "branch",
+          ]),
+        });
+      }
+
       persistExpenses(
         expensesRef.current.filter((expense) => expense.id !== id)
       );
     },
     [persistExpenses]
+  );
+
+  const ensureStaffPaymentCategory = useCallback(() => {
+    let category = categoriesRef.current.find(
+      (item) => item.id === STAFF_PAYMENT_CATEGORY_ID
+    );
+    if (!category) {
+      const now = new Date().toISOString();
+      category = {
+        id: STAFF_PAYMENT_CATEGORY_ID,
+        name: STAFF_PAYMENT_CATEGORY_NAME,
+        isDefault: true,
+        createdAt: now,
+        updatedAt: now,
+      };
+      persistCategories([...categoriesRef.current, category]);
+    }
+    return category;
+  }, [persistCategories]);
+
+  const upsertStaffPaymentExpense = useCallback(
+    (expense: ExpenseRecord): ExpenseValidationResult => {
+      ensureStaffPaymentCategory();
+      persistExpenses([expense, ...expensesRef.current.filter((item) => item.id !== expense.id)]);
+      return createValidationResult({});
+    },
+    [ensureStaffPaymentCategory, persistExpenses]
+  );
+
+  const linkLegacyStaffPaymentExpenses = useCallback(
+    (payments: StaffPaymentRecord[]) => {
+      const paymentByExpenseId = new Map(
+        payments.map((payment) => [payment.expenseId, payment.id])
+      );
+      let changed = false;
+
+      const nextExpenses = expensesRef.current.map((expense) => {
+        if (!isStaffPaymentExpense(expense) || expense.staffPaymentId) {
+          return expense;
+        }
+
+        const paymentId = paymentByExpenseId.get(expense.id);
+        if (!paymentId) return expense;
+
+        changed = true;
+        return {
+          ...expense,
+          staffPaymentId: paymentId,
+          categoryId: STAFF_PAYMENT_CATEGORY_ID,
+          categoryName: STAFF_PAYMENT_CATEGORY_NAME,
+          staffId: undefined,
+          staffName: undefined,
+          staffRole: undefined,
+          staffPaymentType: undefined,
+          paidBy: undefined,
+        };
+      });
+
+      if (changed) {
+        persistExpenses(nextExpenses);
+      }
+    },
+    [persistExpenses]
+  );
+
+  const addStaffPayment = useCallback(
+    (_input: StaffPaymentInput): ExpenseValidationResult => {
+      return createValidationResult({
+        form: "Use the Staff Payments module to record staff payouts.",
+      });
+    },
+    []
   );
 
   const addCategory = useCallback(
@@ -294,6 +445,12 @@ export function ExpensesModuleProvider({
       };
 
       persistCategories([...categoriesRef.current, category]);
+      recordStaffAction({
+        action: AUDIT_ACTIONS.CREATE,
+        module: "expenses",
+        recordId: category.id,
+        newValues: pickAuditFields(category, ["id", "name"]),
+      });
       return createValidationResult({});
     },
     [persistCategories]
@@ -352,6 +509,14 @@ export function ExpensesModuleProvider({
         persistExpenses(nextExpenses);
       }
 
+      recordStaffAction({
+        action: AUDIT_ACTIONS.EDIT,
+        module: "expenses",
+        recordId: existing.id,
+        oldValues: pickAuditFields(existing, ["name"]),
+        newValues: { name: normalizedName },
+      });
+
       return createValidationResult({});
     },
     [persistCategories, persistExpenses]
@@ -374,65 +539,23 @@ export function ExpensesModuleProvider({
         });
       }
 
+      const existing = categoriesRef.current.find((category) => category.id === id);
+      if (!existing) {
+        return createValidationResult({ form: "Category not found." });
+      }
+
       persistCategories(
         categoriesRef.current.filter((category) => category.id !== id)
       );
+      recordStaffAction({
+        action: AUDIT_ACTIONS.DELETE,
+        module: "expenses",
+        recordId: existing.id,
+        oldValues: pickAuditFields(existing, ["id", "name"]),
+      });
       return createValidationResult({});
     },
     [persistCategories]
-  );
-
-  const addStaffPayment = useCallback(
-    (input: StaffPaymentInput): ExpenseValidationResult => {
-      const errors = validateStaffPaymentInput(input);
-      if (hasValidationErrors(errors)) {
-        return createValidationResult(errors);
-      }
-
-      const staff = getStaffById(input.staffId);
-      if (!staff) {
-        return createValidationResult({ staffId: "Staff member not found." });
-      }
-
-      let category = categoriesRef.current.find(
-        (item) => item.id === STAFF_PAYMENT_CATEGORY_ID
-      );
-      if (!category) {
-        const now = new Date().toISOString();
-        category = {
-          id: STAFF_PAYMENT_CATEGORY_ID,
-          name: STAFF_PAYMENT_CATEGORY_NAME,
-          isDefault: true,
-          createdAt: now,
-          updatedAt: now,
-        };
-        persistCategories([...categoriesRef.current, category]);
-      }
-
-      const now = new Date().toISOString();
-      const paymentLabel = getStaffPaymentTypeLabel(input.paymentType);
-      const record: ExpenseRecord = {
-        id: crypto.randomUUID(),
-        date: input.date,
-        categoryId: category.id,
-        categoryName: category.name,
-        description: `${paymentLabel} - ${staff.name}`,
-        amount: Math.abs(input.amount),
-        paymentMethod: input.paymentMethod,
-        branch: staff.branch,
-        staffId: staff.id,
-        staffName: staff.name,
-        staffRole: staff.role,
-        staffPaymentType: input.paymentType,
-        notes: input.notes?.trim() || undefined,
-        createdAt: now,
-        updatedAt: now,
-      };
-
-      persistExpenses([record, ...expensesRef.current]);
-      return createValidationResult({});
-    },
-    [getStaffById, persistCategories, persistExpenses]
   );
 
   const value = useMemo(
@@ -449,6 +572,8 @@ export function ExpensesModuleProvider({
       addCategory,
       updateCategory,
       deleteCategory,
+      upsertStaffPaymentExpense,
+      linkLegacyStaffPaymentExpenses,
       addStaffPayment,
     }),
     [
@@ -464,6 +589,8 @@ export function ExpensesModuleProvider({
       addCategory,
       updateCategory,
       deleteCategory,
+      upsertStaffPaymentExpense,
+      linkLegacyStaffPaymentExpenses,
       addStaffPayment,
     ]
   );

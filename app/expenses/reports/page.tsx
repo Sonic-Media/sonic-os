@@ -7,8 +7,13 @@ import { PageHeader } from "@/components/shared/layout/page-header";
 import { useCashFlow } from "@/hooks/use-cash-flow";
 
 export default function ExpensesReportsPage() {
-  const { topCategories, branchComparison, staffPaymentReport } =
-    useCashFlow("month");
+  const {
+    topCategories,
+    branchComparison,
+    staffPaymentReport,
+    staffExpenseDetails,
+    staffExpenseCategoryName,
+  } = useCashFlow("month");
 
   return (
     <PageContainer>
@@ -23,6 +28,8 @@ export default function ExpensesReportsPage() {
         topCategories={topCategories}
         branchComparison={branchComparison}
         staffPaymentReport={staffPaymentReport}
+        staffExpenseDetails={staffExpenseDetails}
+        staffExpenseCategoryName={staffExpenseCategoryName}
       />
     </PageContainer>
   );

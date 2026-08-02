@@ -1,54 +1,77 @@
 "use client";
 
 import { useCallback, useMemo, useState } from "react";
-import { useEntriesContext } from "@/context/entries-context";
+import { useActiveBranch } from "@/context/active-branch-context";
+import { useExpensesModule } from "@/context/expenses-module-context";
+import { usePurchasing } from "@/context/purchasing-context";
+import { useSales } from "@/context/sales-context";
+import { useStaff } from "@/context/staff-context";
+import { useStock } from "@/context/stock-context";
 import { useSettings } from "@/context/settings-context";
-import { clearActivityRecords } from "@/lib/activity-log";
+import {
+  applyAlertPreferences,
+  filterAlertsByTab,
+  generateBusinessAlerts,
+  getUnreadAlertCount,
+  type AlertFilterTab,
+} from "@/lib/business-alerts";
 import {
   dismissNotifications,
   getNotificationPreferences,
   markAllNotificationsRead,
   markNotificationRead,
 } from "@/lib/notification-storage";
-import {
-  applyNotificationPreferences,
-  filterNotificationsByTab,
-  generateBusinessNotifications,
-  getUnreadCount,
-  type NotificationFilterTab,
-} from "@/lib/notifications";
 
 export function useNotificationCenter() {
-  const { entries } = useEntriesContext();
-  const { branches, settings } = useSettings();
+  const { activeBranch } = useActiveBranch();
+  const { getBranchName } = useSettings();
+  const { products, movements } = useStock();
+  const { sales, customers } = useSales();
+  const { purchases } = usePurchasing();
+  const { expenses } = useExpensesModule();
+  const { staff } = useStaff();
+
   const [isOpen, setIsOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState<NotificationFilterTab>("all");
+  const [activeTab, setActiveTab] = useState<AlertFilterTab>("all");
   const [preferences, setPreferences] = useState(getNotificationPreferences);
 
-  const generatedNotifications = useMemo(
+  const generatedAlerts = useMemo(
     () =>
-      generateBusinessNotifications({
-        entries,
-        branches,
-        branchNames: settings.branchNames,
+      generateBusinessAlerts({
+        activeBranch,
+        branchName: getBranchName(activeBranch),
+        products,
+        movements,
+        sales,
+        customers,
+        purchases,
+        expenses,
+        staff,
       }),
-    [entries, branches, settings.branchNames]
+    [
+      activeBranch,
+      getBranchName,
+      products,
+      movements,
+      sales,
+      customers,
+      purchases,
+      expenses,
+      staff,
+    ]
   );
 
-  const notifications = useMemo(
-    () => applyNotificationPreferences(generatedNotifications, preferences),
-    [generatedNotifications, preferences]
+  const alerts = useMemo(
+    () => applyAlertPreferences(generatedAlerts, preferences),
+    [generatedAlerts, preferences]
   );
 
-  const filteredNotifications = useMemo(
-    () => filterNotificationsByTab(notifications, activeTab),
-    [notifications, activeTab]
+  const filteredAlerts = useMemo(
+    () => filterAlertsByTab(alerts, activeTab),
+    [alerts, activeTab]
   );
 
-  const unreadCount = useMemo(
-    () => getUnreadCount(notifications),
-    [notifications]
-  );
+  const unreadCount = useMemo(() => getUnreadAlertCount(alerts), [alerts]);
 
   const open = useCallback(() => setIsOpen(true), []);
   const close = useCallback(() => setIsOpen(false), []);
@@ -59,21 +82,13 @@ export function useNotificationCenter() {
   }, []);
 
   const markAllRead = useCallback(() => {
-    setPreferences(
-      markAllNotificationsRead(notifications.map((notification) => notification.id))
-    );
-  }, [notifications]);
-
-  const clearAll = useCallback(() => {
-    const ids = notifications.map((notification) => notification.id);
-    setPreferences(dismissNotifications(ids));
-    clearActivityRecords();
-  }, [notifications]);
+    setPreferences(markAllNotificationsRead(alerts.map((alert) => alert.id)));
+  }, [alerts]);
 
   const dismissVisible = useCallback(() => {
-    const ids = filteredNotifications.map((notification) => notification.id);
+    const ids = filteredAlerts.map((alert) => alert.id);
     setPreferences(dismissNotifications(ids));
-  }, [filteredNotifications]);
+  }, [filteredAlerts]);
 
   return {
     isOpen,
@@ -82,12 +97,11 @@ export function useNotificationCenter() {
     toggle,
     activeTab,
     setActiveTab,
-    notifications,
-    filteredNotifications,
+    alerts,
+    filteredAlerts,
     unreadCount,
     markRead,
     markAllRead,
-    clearAll,
     dismissVisible,
   };
 }

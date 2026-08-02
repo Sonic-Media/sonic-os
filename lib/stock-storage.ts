@@ -4,6 +4,7 @@ import {
   STOCK_PRODUCTS_STORAGE_KEY,
 } from "@/lib/constants";
 import { normalizeBranchCode } from "@/lib/branch-storage";
+import { normalizeStaffActionRecord } from "@/lib/staff/session";
 import { withProductStatus } from "@/lib/stock/calculations";
 import { STOCK_PRODUCT_CATEGORIES } from "@/lib/stock/constants";
 import type {
@@ -121,6 +122,7 @@ function normalizeStockMovement(value: unknown): StockMovement | null {
     reason,
     branch: normalizeBranchCode(raw.branch),
     notes: normalizeOptionalString(raw.notes),
+    createdBy: normalizeStaffActionRecord(raw.createdBy),
     createdAt: normalizeTimestamp(raw.createdAt, now),
   };
 }

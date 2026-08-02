@@ -17,6 +17,7 @@ export type StockProductStatus = "in-stock" | "low-stock" | "out-of-stock";
 export type StockMovementType = "in" | "out";
 
 import type { Branch } from "@/types";
+import type { StaffActionRecord } from "@/types/staff-session";
 
 export type StockProductSortField =
   | "name"
@@ -61,6 +62,7 @@ export interface StockMovement {
   reason: string;
   branch: Branch;
   notes?: string;
+  createdBy?: StaffActionRecord;
   createdAt: string;
 }
 

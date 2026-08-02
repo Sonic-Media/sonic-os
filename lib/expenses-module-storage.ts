@@ -3,6 +3,7 @@ import {
   EXPENSES_RECORDS_STORAGE_KEY,
 } from "@/lib/constants";
 import { normalizeBranchCode } from "@/lib/branch-storage";
+import { normalizeStaffActionRecord } from "@/lib/staff/session";
 import { DEFAULT_EXPENSE_CATEGORIES, STAFF_PAYMENT_CATEGORY_ID, STAFF_PAYMENT_CATEGORY_NAME } from "@/lib/expenses-module/constants";
 import type {
   ExpenseCategory,
@@ -50,6 +51,7 @@ function normalizePaymentMethod(value: unknown): ExpensePaymentMethod {
 
 const STAFF_PAYMENT_TYPES = new Set<StaffPaymentType>([
   "daily-wage",
+  "weekly-wage",
   "salary",
   "bonus",
   "advance",
@@ -110,6 +112,9 @@ function normalizeExpenseRecord(value: unknown): ExpenseRecord | null {
     staffName: normalizeOptionalString(raw.staffName),
     staffRole: normalizeStaffRole(raw.staffRole),
     staffPaymentType: normalizeStaffPaymentType(raw.staffPaymentType),
+    staffPaymentId: normalizeOptionalString(raw.staffPaymentId),
+    createdBy: normalizeStaffActionRecord(raw.createdBy),
+    paidBy: normalizeStaffActionRecord(raw.paidBy),
     notes: normalizeOptionalString(raw.notes),
     createdAt: normalizeTimestamp(raw.createdAt, now),
     updatedAt: normalizeTimestamp(raw.updatedAt, now),

@@ -65,6 +65,19 @@ export function validateAppUserInput(
     errors.role = "Owner accounts cannot be created here.";
   }
 
+  if (input.role !== "owner" && !input.staffId?.trim()) {
+    errors.staffId = "Every login must be linked to a staff profile.";
+  }
+
+  if (input.staffId?.trim()) {
+    const linked = users.some(
+      (user) => user.staffId === input.staffId?.trim() && user.id !== excludeId
+    );
+    if (linked) {
+      errors.staffId = "This staff member already has a login account.";
+    }
+  }
+
   return errors;
 }
 

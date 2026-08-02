@@ -1,11 +1,15 @@
 export type StaffRoleId =
   | "ceo"
+  | "branch-manager"
   | "manager"
   | "cashier"
+  | "sales-attendant"
   | "salesperson"
+  | "inventory-officer"
   | "technician"
   | "store-attendant"
-  | "accountant";
+  | "accountant"
+  | "administrator";
 
 export type StaffStatus = "active" | "inactive";
 
@@ -32,10 +36,18 @@ export interface StaffRoleDefinition {
 
 export interface StaffInput {
   name: string;
+  username?: string;
   branch: string;
   role: StaffRoleId;
   loginEnabled?: boolean;
   status?: StaffStatus;
+  phone?: string;
+  email?: string;
+  dailyWage?: number;
+  monthlySalary?: number;
+  dateJoined?: string;
+  emergencyContact?: string;
+  notes?: string;
 }
 
 export interface StaffLoginInput {

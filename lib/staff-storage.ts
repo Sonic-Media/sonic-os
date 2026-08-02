@@ -1,5 +1,6 @@
 import { BRANCH_IDS, DEFAULT_STAFF, STAFF_STORAGE_KEY } from "@/lib/constants";
 import { normalizeBranchCode } from "@/lib/branch-storage";
+import { getTodayISO } from "@/lib/dates";
 import { isStaffRoleId } from "@/lib/staff/roles";
 import type { Branch, Staff } from "@/types";
 import type { StaffStatus } from "@/types/staff-role";
@@ -7,6 +8,19 @@ import type { StaffStatus } from "@/types/staff-role";
 function normalizeStaffStatus(value: unknown, active: boolean): StaffStatus {
   if (value === "active" || value === "inactive") return value;
   return active ? "active" : "inactive";
+}
+
+function normalizeOptionalString(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  return trimmed || undefined;
+}
+
+function normalizeOptionalAmount(value: unknown): number | undefined {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
+    return undefined;
+  }
+  return value;
 }
 
 function normalizeStaffMember(value: unknown): Staff | null {
@@ -19,12 +33,17 @@ function normalizeStaffMember(value: unknown): Staff | null {
   const active = raw.active !== false;
   const status = normalizeStaffStatus(raw.status, active);
   const role = isStaffRoleId(raw.role) ? raw.role : "store-attendant";
+  const dateJoined =
+    typeof raw.dateJoined === "string" && raw.dateJoined.trim()
+      ? raw.dateJoined.trim()
+      : getTodayISO();
 
   if (!id || !name) return null;
 
   return {
     id,
     name,
+    username: normalizeOptionalString(raw.username),
     branch,
     role,
     loginEnabled: raw.loginEnabled === true,
@@ -34,6 +53,13 @@ function normalizeStaffMember(value: unknown): Staff | null {
         ? raw.userId.trim()
         : undefined,
     active: status === "active",
+    phone: normalizeOptionalString(raw.phone),
+    email: normalizeOptionalString(raw.email),
+    dailyWage: normalizeOptionalAmount(raw.dailyWage),
+    monthlySalary: normalizeOptionalAmount(raw.monthlySalary),
+    dateJoined,
+    emergencyContact: normalizeOptionalString(raw.emergencyContact),
+    notes: normalizeOptionalString(raw.notes),
   };
 }
 
@@ -70,13 +96,18 @@ export function saveStaffList(staff: Staff[]): void {
   localStorage.setItem(STAFF_STORAGE_KEY, JSON.stringify(staff));
 }
 
-export function linkStaffToUser(staffId: string, userId: string): Staff[] {
+export function linkStaffToUser(
+  staffId: string,
+  userId: string,
+  username?: string
+): Staff[] {
   const next = getStaffList().map((member) =>
     member.id === staffId
       ? {
           ...member,
           userId,
           loginEnabled: true,
+          username: username?.trim() || member.username,
         }
       : member
   );
@@ -91,6 +122,7 @@ export function unlinkStaffUser(staffId: string): Staff[] {
           ...member,
           userId: undefined,
           loginEnabled: false,
+          username: undefined,
         }
       : member
   );
@@ -129,4 +161,8 @@ export function sortStaffByName(staff: Staff[]): Staff[] {
     if (branchCompare !== 0) return branchCompare;
     return a.name.localeCompare(b.name);
   });
+}
+
+export function getStaffWithoutLogin(staff: Staff[]): Staff[] {
+  return staff.filter((member) => !member.userId && member.status === "active");
 }

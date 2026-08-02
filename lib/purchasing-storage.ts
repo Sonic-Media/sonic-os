@@ -3,6 +3,7 @@ import {
   PURCHASING_SUPPLIERS_STORAGE_KEY,
 } from "@/lib/constants";
 import { normalizeBranchCode } from "@/lib/branch-storage";
+import { normalizeStaffActionRecord } from "@/lib/staff/session";
 import type { Purchase, PurchaseLineItem, Supplier } from "@/types/purchasing";
 
 function normalizeTimestamp(value: unknown, fallback: string): string {
@@ -93,6 +94,7 @@ function normalizePurchase(value: unknown): Purchase | null {
     branch: normalizeBranchCode(raw.branch),
     staffId: normalizeOptionalString(raw.staffId),
     staffName: normalizeOptionalString(raw.staffName),
+    createdBy: normalizeStaffActionRecord(raw.createdBy),
     notes: normalizeOptionalString(raw.notes),
     createdAt: normalizeTimestamp(raw.createdAt, now),
   };

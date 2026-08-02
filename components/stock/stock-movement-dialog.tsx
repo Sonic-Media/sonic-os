@@ -6,7 +6,6 @@ import { Button } from "@/components/shared/ui/button";
 import { Input } from "@/components/shared/ui/input";
 import { Select } from "@/components/shared/ui/select";
 import { Textarea } from "@/components/shared/ui/textarea";
-import { BranchPicker } from "@/components/entry/branch-picker";
 import { useStock } from "@/context/stock-context";
 import { STOCK_MOVEMENT_REASONS } from "@/lib/stock/constants";
 import { parsePositiveInteger } from "@/lib/stock/validation";
@@ -34,7 +33,6 @@ export function StockMovementDialog({
   const [productId, setProductId] = useState(initialProductId ?? "");
   const [quantity, setQuantity] = useState("");
   const [reason, setReason] = useState("");
-  const [branch, setBranch] = useState<Branch>(defaultBranch);
   const [notes, setNotes] = useState("");
   const [errors, setErrors] = useState<Record<string, string | undefined>>({});
 
@@ -91,7 +89,7 @@ export function StockMovementDialog({
       movement: movementType,
       quantity: parsedQuantity!,
       reason,
-      branch,
+      branch: defaultBranch,
       notes,
     });
 
@@ -100,7 +98,7 @@ export function StockMovementDialog({
       return;
     }
 
-    onBranchChange?.(branch);
+    onBranchChange?.(defaultBranch);
     onSuccess?.();
     onClose();
   }
@@ -189,15 +187,6 @@ export function StockMovementDialog({
               />
               <StockFieldError message={errors.reason} />
             </div>
-
-            <BranchPicker
-              value={branch}
-              onChange={(nextBranch) => {
-                setBranch(nextBranch);
-                onBranchChange?.(nextBranch);
-              }}
-            />
-            <StockFieldError message={errors.branch} />
 
             <Textarea
               label="Notes (optional)"

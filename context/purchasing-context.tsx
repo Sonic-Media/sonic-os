@@ -10,7 +10,6 @@ import {
   useState,
 } from "react";
 import { useStock } from "@/context/stock-context";
-import { useStaff } from "@/context/staff-context";
 import { getTodayISO } from "@/lib/dates";
 import {
   getPurchases,
@@ -34,6 +33,17 @@ import {
   validatePurchaseInput,
   validateSupplierInput,
 } from "@/lib/purchasing/validation";
+import { AUDIT_ACTIONS } from "@/lib/audit-log/constants";
+import { pickAuditFields } from "@/lib/audit-log/snapshots";
+import { recordStaffAction } from "@/lib/staff/audit";
+import {
+  legacyStaffFields,
+  resolveCurrentStaffAction,
+} from "@/lib/staff/session";
+import {
+  DAY_CLOSED_EDIT_MESSAGE,
+  isBranchDayClosed,
+} from "@/lib/day-closing/storage";
 import type {
   Purchase,
   PurchaseInput,
@@ -78,7 +88,6 @@ export function PurchasingProvider({
 }) {
   const { getProductById, recordMovement, updateProduct, getStockSnapshot, restoreStockSnapshot } =
     useStock();
-  const { getStaffById } = useStaff();
 
   const [purchases, setPurchases] = useState<Purchase[]>(() => getPurchases());
   const [suppliers, setSuppliers] = useState<Supplier[]>(() => getSuppliers());
@@ -165,6 +174,12 @@ export function PurchasingProvider({
       };
 
       persistSuppliers([...suppliersRef.current, supplier]);
+      recordStaffAction({
+        action: AUDIT_ACTIONS.CREATE,
+        module: "purchasing",
+        recordId: supplier.id,
+        newValues: pickAuditFields(supplier, ["id", "name", "phone", "email"]),
+      });
       return createValidationResult({});
     },
     [persistSuppliers]
@@ -211,6 +226,21 @@ export function PurchasingProvider({
         persistPurchases(nextPurchases);
       }
 
+      recordStaffAction({
+        action: AUDIT_ACTIONS.EDIT,
+        module: "purchasing",
+        recordId: existing.id,
+        oldValues: pickAuditFields(existing, ["name", "phone", "email"]),
+        newValues: pickAuditFields(
+          {
+            name: input.name.trim(),
+            phone: input.phone?.trim(),
+            email: input.email?.trim(),
+          },
+          ["name", "phone", "email"]
+        ),
+      });
+
       return createValidationResult({});
     },
     [persistSuppliers, persistPurchases]
@@ -224,6 +254,16 @@ export function PurchasingProvider({
       if (inUse) {
         return createValidationResult({
           form: "Cannot delete a supplier that has purchase records.",
+        });
+      }
+
+      const existing = suppliersRef.current.find((supplier) => supplier.id === id);
+      if (existing) {
+        recordStaffAction({
+          action: AUDIT_ACTIONS.DELETE,
+          module: "purchasing",
+          recordId: existing.id,
+          oldValues: pickAuditFields(existing, ["id", "name"]),
         });
       }
 
@@ -250,6 +290,10 @@ export function PurchasingProvider({
       }
 
       const dateISO = input.date ?? getTodayISO();
+      if (isBranchDayClosed(input.branch, dateISO)) {
+        return createValidationResult({ form: DAY_CLOSED_EDIT_MESSAGE });
+      }
+
       const invoiceNumber = generatePurchaseInvoiceNumber(
         purchasesRef.current,
         dateISO
@@ -323,7 +367,8 @@ export function PurchasingProvider({
         }
       }
 
-      const staff = input.staffId ? getStaffById(input.staffId) : undefined;
+      const actor = resolveCurrentStaffAction(input.branch);
+      const legacy = legacyStaffFields(actor);
       const totalCost = resolvedItems.reduce(
         (sum, entry) => sum + entry.lineTotal,
         0
@@ -344,13 +389,30 @@ export function PurchasingProvider({
         })),
         totalCost,
         branch: input.branch,
-        staffId: staff?.id,
-        staffName: staff?.name,
+        staffId: legacy.staffId,
+        staffName: legacy.staffName,
+        createdBy: actor,
         notes: input.notes?.trim() || undefined,
         createdAt: new Date().toISOString(),
       };
 
       persistPurchases([purchase, ...purchasesRef.current]);
+      recordStaffAction({
+        staffId: actor?.staffId,
+        staffName: actor?.staffName,
+        role: actor?.role,
+        branch: input.branch,
+        action: AUDIT_ACTIONS.COMPLETE_PURCHASE,
+        module: "purchasing",
+        recordId: purchase.id,
+        newValues: pickAuditFields(purchase, [
+          "id",
+          "invoiceNumber",
+          "totalCost",
+          "branch",
+          "supplierName",
+        ]),
+      });
       return createValidationResult({});
     },
     [
@@ -360,7 +422,6 @@ export function PurchasingProvider({
       updateProduct,
       getStockSnapshot,
       restoreStockSnapshot,
-      getStaffById,
       persistPurchases,
     ]
   );

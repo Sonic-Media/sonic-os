@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { BranchPicker } from "@/components/entry/branch-picker";
 import { StockDialog, StockFieldError } from "@/components/stock/stock-dialog";
 import { Button } from "@/components/shared/ui/button";
 import { Input } from "@/components/shared/ui/input";
@@ -25,7 +24,6 @@ export function OpeningStockDialog({
 }: OpeningStockDialogProps) {
   const { recordMovement } = useStock();
   const [quantity, setQuantity] = useState("0");
-  const [branch, setBranch] = useState<Branch>(defaultBranch);
   const [errors, setErrors] = useState<Record<string, string | undefined>>({});
 
   function handleSkip() {
@@ -52,7 +50,7 @@ export function OpeningStockDialog({
       movement: "in",
       quantity: parsedQuantity,
       reason: "Opening Balance",
-      branch,
+      branch: defaultBranch,
       notes: "Initial stock on item creation",
     });
 
@@ -99,14 +97,6 @@ export function OpeningStockDialog({
           <StockFieldError message={errors.quantity} />
         </div>
 
-        <BranchPicker
-          value={branch}
-          onChange={(nextBranch) => {
-            setBranch(nextBranch);
-            setErrors((current) => ({ ...current, branch: undefined }));
-          }}
-        />
-        <StockFieldError message={errors.branch} />
       </form>
     </StockDialog>
   );

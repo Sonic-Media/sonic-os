@@ -1,13 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { StockDialog, StockFieldError } from "@/components/stock/stock-dialog";
 import { BranchPicker } from "@/components/entry/branch-picker";
 import { Button } from "@/components/shared/ui/button";
 import { Input } from "@/components/shared/ui/input";
 import { Select } from "@/components/shared/ui/select";
 import { useAuth } from "@/context/auth-context";
+import { useStaff } from "@/context/staff-context";
 import { USER_ROLE_OPTIONS } from "@/lib/auth/permissions";
+import { getStaffRoleName } from "@/lib/staff/roles";
 import type { AppUser, UserRole } from "@/types/auth";
 import type { Branch } from "@/types";
 
@@ -19,12 +21,29 @@ interface UserDialogProps {
 
 export function UserDialog({ mode, user, onClose }: UserDialogProps) {
   const { addUser, updateUser } = useAuth();
+  const { staff, linkStaffAccount } = useStaff();
   const [username, setUsername] = useState(user?.username ?? "");
   const [displayName, setDisplayName] = useState(user?.displayName ?? "");
-  const [role, setRole] = useState<UserRole>(user?.role ?? "store-attendant");
+  const [role, setRole] = useState<UserRole>(user?.role ?? "sales-attendant");
   const [branch, setBranch] = useState<Branch>(user?.branch ?? "kansanga");
+  const [staffId, setStaffId] = useState(user?.staffId ?? "");
   const [password, setPassword] = useState("");
   const [errors, setErrors] = useState<Record<string, string | undefined>>({});
+
+  const staffOptions = useMemo(
+    () =>
+      staff
+        .filter(
+          (member) =>
+            member.status === "active" &&
+            (!member.userId || member.userId === user?.id)
+        )
+        .map((member) => ({
+          value: member.id,
+          label: `${member.name} (${getStaffRoleName(member.role)})`,
+        })),
+    [staff, user?.id]
+  );
 
   function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
@@ -37,6 +56,7 @@ export function UserDialog({ mode, user, onClose }: UserDialogProps) {
             role,
             branch,
             password,
+            staffId,
           })
         : updateUser(user!.id, {
             displayName,
@@ -49,13 +69,21 @@ export function UserDialog({ mode, user, onClose }: UserDialogProps) {
       return;
     }
 
+    if (mode === "add" && result.user?.staffId) {
+      linkStaffAccount(
+        result.user.staffId,
+        result.user.id,
+        result.user.username
+      );
+    }
+
     onClose();
   }
 
   return (
     <StockDialog
       title={mode === "add" ? "Create User" : "Edit User"}
-      description="Manage local Sonic OS user access."
+      description="Every login account must be linked to a staff profile."
       onClose={onClose}
       className="max-w-lg"
       footer={
@@ -97,6 +125,22 @@ export function UserDialog({ mode, user, onClose }: UserDialogProps) {
           />
           <StockFieldError message={errors.displayName} />
         </div>
+
+        {mode === "add" && (
+          <div>
+            <Select
+              label="Staff Profile"
+              value={staffId}
+              placeholder="Select staff member"
+              options={staffOptions}
+              onChange={(event) => {
+                setStaffId(event.target.value);
+                setErrors((current) => ({ ...current, staffId: undefined }));
+              }}
+            />
+            <StockFieldError message={errors.staffId} />
+          </div>
+        )}
 
         <Select
           label="Role"

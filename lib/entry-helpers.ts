@@ -6,6 +6,11 @@ import {
 } from "@/lib/dates";
 import { parseAmount } from "@/lib/amounts";
 import { prepareExpensesForSave } from "@/lib/expenses";
+import {
+  legacyStaffFields,
+  resolveCurrentStaffAction,
+} from "@/lib/staff/session";
+import type { StaffActionRecord } from "@/types/staff-session";
 import type {
   Branch,
   BranchConfig,
@@ -27,7 +32,7 @@ export function entryToForm(entry: Entry): EntryFormData {
     branch: entry.branch,
     sales: String(entry.sales),
     expenses: entry.expenses.map((expense) => ({ ...expense })),
-    staffId: entry.staffId,
+    staffId: entry.staffId ?? entry.createdBy?.staffId ?? "",
     notes: entry.notes,
     savingsAllocation: String(allocation),
   };
@@ -40,12 +45,21 @@ export function formToEntry(
     status?: EntryStatus;
     existing?: Entry;
     staffName?: string;
+    createdBy?: StaffActionRecord;
   }
 ): Entry {
   const now = new Date();
   const existing = options?.existing;
+  const createdBy =
+    options?.createdBy ??
+    existing?.createdBy ??
+    resolveCurrentStaffAction(form.branch);
+  const legacy = legacyStaffFields(createdBy);
+  const staffId =
+    legacy.staffId ?? existing?.staffId ?? (form.staffId || undefined);
   const staffName =
     options?.staffName?.trim() ??
+    legacy.staffName ??
     existing?.staffName ??
     "";
 
@@ -57,8 +71,9 @@ export function formToEntry(
     branch: form.branch,
     sales: parseAmount(form.sales),
     expenses: prepareExpensesForSave(form.expenses),
-    staffId: form.staffId,
-    staffName,
+    staffId,
+    staffName: staffName || undefined,
+    createdBy,
     notes: form.notes.trim(),
     savingsAllocation: parseAmount(form.savingsAllocation),
     createdAt: existing?.createdAt ?? now.toISOString(),
@@ -113,14 +128,8 @@ export function findMostRecentEntryForDate(
     .sort((a, b) => b.timestamp - a.timestamp)[0];
 }
 
-export function getBranchEntryHref(item: BranchProgress): string {
-  if (item.status === "completed" && item.entryId) {
-    return `/operations/today?branch=${item.branch}`;
-  }
-  if (item.status === "draft" && item.entryId) {
-    return `/operations/today?branch=${item.branch}`;
-  }
-  return `/operations/today?branch=${item.branch}`;
+export function getBranchEntryHref(_item: BranchProgress): string {
+  return "/operations/today";
 }
 
 export function getTodayBranchProgress(

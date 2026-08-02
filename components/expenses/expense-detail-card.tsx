@@ -3,8 +3,13 @@
 import { Card } from "@/components/shared/ui/card";
 import { TotalsField } from "@/components/shared/totals-grid";
 import { formatCurrency } from "@/lib/format";
-import { getExpensePaymentMethodLabel } from "@/lib/expenses-module/constants";
+import {
+  getExpensePaymentMethodLabel,
+  getStaffPaymentTypeLabel,
+} from "@/lib/expenses-module/constants";
 import { EXPENSES_PLACEHOLDER } from "@/lib/expenses-module/format";
+import { isStaffPaymentExpense } from "@/lib/staff-payments/calculations";
+import { useStaffPaymentsModule } from "@/context/staff-payments-context";
 import { useSettings } from "@/context/settings-context";
 import type { ExpenseRecord } from "@/types/expenses-module";
 
@@ -25,6 +30,12 @@ function formatExpenseDate(date: string): string {
 
 export function ExpenseDetailCard({ expense }: ExpenseDetailCardProps) {
   const { getBranchName } = useSettings();
+  const { getPaymentByExpenseId, getPaymentById } = useStaffPaymentsModule();
+  const linkedPayment =
+    (expense.staffPaymentId
+      ? getPaymentById(expense.staffPaymentId)
+      : undefined) ?? getPaymentByExpenseId(expense.id);
+  const isStaffExpense = isStaffPaymentExpense(expense);
 
   return (
     <Card>
@@ -48,18 +59,42 @@ export function ExpenseDetailCard({ expense }: ExpenseDetailCardProps) {
           label="Branch"
           value={getBranchName(expense.branch)}
         />
-        <TotalsField
-          label="Staff"
-          value={expense.staffName || EXPENSES_PLACEHOLDER}
-          valueClassName={
-            expense.staffName ? undefined : "text-zinc-500 font-medium"
-          }
-        />
+        {isStaffExpense && linkedPayment ? (
+          <>
+            <TotalsField
+              label="Paid To"
+              value={linkedPayment.staffName}
+            />
+            <TotalsField
+              label="Payment Type"
+              value={getStaffPaymentTypeLabel(linkedPayment.paymentType)}
+            />
+            <TotalsField
+              label="Recorded By"
+              value={linkedPayment.paidBy?.staffName ?? EXPENSES_PLACEHOLDER}
+              valueClassName={
+                linkedPayment.paidBy?.staffName
+                  ? undefined
+                  : "text-zinc-500 font-medium"
+              }
+            />
+          </>
+        ) : (
+          <TotalsField
+            label="Staff"
+            value={expense.staffName || EXPENSES_PLACEHOLDER}
+            valueClassName={
+              expense.staffName ? undefined : "text-zinc-500 font-medium"
+            }
+          />
+        )}
         <TotalsField
           label="Notes"
-          value={expense.notes || EXPENSES_PLACEHOLDER}
+          value={linkedPayment?.notes ?? expense.notes ?? EXPENSES_PLACEHOLDER}
           valueClassName={
-            expense.notes ? undefined : "text-zinc-500 font-medium"
+            linkedPayment?.notes || expense.notes
+              ? undefined
+              : "text-zinc-500 font-medium"
           }
         />
       </div>

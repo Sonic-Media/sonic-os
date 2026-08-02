@@ -59,11 +59,8 @@ export function ActiveBranchProvider({
     hasInitialized.current = true;
 
     async function initialize() {
-      let nextBranch = readStoredBranch();
-
-      if (session?.branch) {
-        nextBranch = session.branch;
-      }
+      const stored = readStoredBranch();
+      let nextBranch = stored;
 
       if (shouldUseApiDataSource() && (await isApiAvailable()) && session) {
         try {
@@ -77,12 +74,15 @@ export function ActiveBranchProvider({
             };
             nextBranch =
               payload.data?.activeBranchCode ??
+              stored ??
               payload.data?.session?.branch ??
               nextBranch;
           }
         } catch {
           // Keep stored branch when preference API is unavailable.
         }
+      } else if (!localStorage.getItem(ACTIVE_BRANCH_STORAGE_KEY) && session?.branch) {
+        nextBranch = session.branch;
       }
 
       if (!getBranchByCode(nextBranch) && activeBranches[0]) {

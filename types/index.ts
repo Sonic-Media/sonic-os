@@ -98,8 +98,9 @@ export interface Entry {
   branch: Branch;
   sales: number;
   expenses: Expense[];
-  staffId: string;
-  staffName: string;
+  staffId?: string;
+  staffName?: string;
+  createdBy?: import("@/types/staff-session").StaffActionRecord;
   notes: string;
   savingsAllocation?: number;
   createdAt: string;
@@ -212,10 +213,18 @@ export interface AppSettings {
 export interface Staff {
   id: string;
   name: string;
+  username?: string;
   branch: Branch;
   role: StaffRoleId;
   loginEnabled: boolean;
   status: StaffStatus;
   userId?: string;
   active: boolean;
+  phone?: string;
+  email?: string;
+  dailyWage?: number;
+  monthlySalary?: number;
+  dateJoined: string;
+  emergencyContact?: string;
+  notes?: string;
 }

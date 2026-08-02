@@ -11,6 +11,9 @@ import { StockProvider } from "@/context/stock-context";
 import { SalesProvider } from "@/context/sales-context";
 import { PurchasingProvider } from "@/context/purchasing-context";
 import { ExpensesModuleProvider } from "@/context/expenses-module-context";
+import { StaffPaymentsProvider } from "@/context/staff-payments-context";
+import { DayClosingProvider } from "@/context/day-closing-context";
+import { AuditLogProvider } from "@/context/audit-log-context";
 import { SettingsProvider } from "@/context/settings-context";
 import { StaffProvider } from "@/context/staff-context";
 import "./globals.css";
@@ -40,6 +43,7 @@ export default function RootLayout({
       <body className="min-h-full bg-black text-white font-sans antialiased">
         <AuthProvider>
         <SettingsProvider>
+          <AuditLogProvider>
           <BranchesProvider>
           <ActiveBranchProvider>
           <ExpenseTemplatesProvider>
@@ -49,9 +53,13 @@ export default function RootLayout({
                   <SalesProvider>
                     <PurchasingProvider>
                       <ExpensesModuleProvider>
+                        <StaffPaymentsProvider>
+                        <DayClosingProvider>
                         <CommandPaletteProvider>
                           <AppShell>{children}</AppShell>
                         </CommandPaletteProvider>
+                        </DayClosingProvider>
+                        </StaffPaymentsProvider>
                       </ExpensesModuleProvider>
                     </PurchasingProvider>
                   </SalesProvider>
@@ -61,6 +69,7 @@ export default function RootLayout({
           </ExpenseTemplatesProvider>
           </ActiveBranchProvider>
           </BranchesProvider>
+          </AuditLogProvider>
         </SettingsProvider>
         </AuthProvider>
       </body>

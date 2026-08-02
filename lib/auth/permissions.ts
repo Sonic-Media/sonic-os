@@ -1,16 +1,13 @@
+import { canAccessCloseDay } from "@/lib/day-closing/permissions";
 import type { UserRole } from "@/types/auth";
 import { getDefaultRouteForStaffRole, getModuleForPath, roleHasModuleAccess } from "@/lib/staff/permissions";
-import { STAFF_ROLE_OPTIONS } from "@/lib/staff/roles";
+import { DEFAULT_STAFF_ROLES, getStaffRoleName, STAFF_ROLE_OPTIONS } from "@/lib/staff/roles";
 
 export const USER_ROLE_LABELS: Record<UserRole, string> = {
   owner: "Owner",
-  ceo: "CEO",
-  manager: "Manager",
-  cashier: "Cashier",
-  salesperson: "Salesperson",
-  technician: "Technician",
-  "store-attendant": "Store Attendant",
-  accountant: "Accountant",
+  ...Object.fromEntries(
+    DEFAULT_STAFF_ROLES.map((role) => [role.id, role.name])
+  ) as Record<Exclude<UserRole, "owner">, string>,
 };
 
 export const USER_ROLE_OPTIONS = STAFF_ROLE_OPTIONS;
@@ -20,9 +17,14 @@ export function canAccessRoute(role: UserRole, pathname: string): boolean {
 
   if (pathname === "/login" || pathname === "/lock") return true;
 
+  if (pathname.startsWith("/operations/close-day")) {
+    return canAccessCloseDay(role);
+  }
+
   if (pathname.startsWith("/settings/users")) return false;
   if (pathname.startsWith("/settings/import")) return false;
   if (pathname.startsWith("/settings/roles")) return false;
+  if (pathname.startsWith("/settings/audit-log")) return false;
 
   const module = getModuleForPath(pathname);
   if (!module) return false;
@@ -46,6 +48,11 @@ export function canManageRoles(role: UserRole): boolean {
   return role === "owner";
 }
 
+export function canViewAuditLog(role: UserRole): boolean {
+  return role === "owner";
+}
+
 export function getRoleLabel(role: UserRole): string {
-  return USER_ROLE_LABELS[role];
+  if (role === "owner") return "Owner";
+  return getStaffRoleName(role);
 }

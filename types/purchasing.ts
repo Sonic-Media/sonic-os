@@ -1,4 +1,5 @@
 import type { Branch } from "@/types";
+import type { StaffActionRecord } from "@/types/staff-session";
 
 export interface PurchaseLineItem {
   productId: string;
@@ -19,6 +20,7 @@ export interface Purchase {
   branch: Branch;
   staffId?: string;
   staffName?: string;
+  createdBy?: StaffActionRecord;
   notes?: string;
   createdAt: string;
 }
@@ -57,7 +59,6 @@ export interface PurchaseInput {
   supplierId: string;
   items: PurchaseLineItemInput[];
   branch: Branch;
-  staffId?: string;
   notes?: string;
   date?: string;
 }

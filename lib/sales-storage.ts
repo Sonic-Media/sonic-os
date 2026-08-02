@@ -3,6 +3,7 @@ import {
   SALES_STORAGE_KEY,
 } from "@/lib/constants";
 import { normalizeBranchCode } from "@/lib/branch-storage";
+import { normalizeStaffActionRecord } from "@/lib/staff/session";
 import type {
   Customer,
   Sale,
@@ -128,6 +129,8 @@ function normalizeSale(value: unknown): Sale | null {
     branch: normalizeBranchCode(raw.branch),
     staffId: normalizeOptionalString(raw.staffId),
     staffName: normalizeOptionalString(raw.staffName),
+    createdBy: normalizeStaffActionRecord(raw.createdBy),
+    completedBy: normalizeStaffActionRecord(raw.completedBy),
     notes: normalizeOptionalString(raw.notes),
     status: normalizeSaleStatus(raw.status),
     createdAt: normalizeTimestamp(raw.createdAt, now),

@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 interface CashSummaryProps {
   sales: number;
   totalExpenses: number;
+  staffPayouts?: number;
   netCash: number;
   savingsAllocation: string;
   onSavingsAllocationChange?: (value: string) => void;
@@ -34,6 +35,7 @@ function SummaryRow({
 export function CashSummary({
   sales,
   totalExpenses,
+  staffPayouts = 0,
   netCash,
   savingsAllocation,
   onSavingsAllocationChange,
@@ -50,6 +52,12 @@ export function CashSummary({
 
       <SummaryRow label="Sales" value={formatCurrency(sales)} />
       <SummaryRow label="Total Expenses" value={formatCurrency(totalExpenses)} />
+      {staffPayouts > 0 && (
+        <SummaryRow
+          label="Staff Payouts"
+          value={formatCurrency(staffPayouts)}
+        />
+      )}
       <div className="h-px bg-zinc-800" />
       <SummaryRow
         label="Net Cash"

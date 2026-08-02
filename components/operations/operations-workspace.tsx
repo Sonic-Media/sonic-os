@@ -29,6 +29,7 @@ export function OperationsWorkspace({
     status,
     sales,
     totalExpenses,
+    staffPayouts,
     balance,
     duplicateEntry,
     showCloseDayDialog,
@@ -56,6 +57,7 @@ export function OperationsWorkspace({
         isSaving={isSaving}
         sales={sales}
         totalExpenses={totalExpenses}
+        staffPayouts={staffPayouts}
         netCash={balance}
         status={status}
         lockDate={lockDate}

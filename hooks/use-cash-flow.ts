@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { useEntriesContext } from "@/context/entries-context";
 import { useExpensesModule } from "@/context/expenses-module-context";
+import { useStaffPaymentsModule } from "@/context/staff-payments-context";
 import { usePurchasing } from "@/context/purchasing-context";
 import { useSales } from "@/context/sales-context";
 import { useSettings } from "@/context/settings-context";
@@ -13,13 +14,19 @@ import {
   computeMonthlySummary,
   getDateRangeForPeriod,
 } from "@/lib/expenses-module/calculations";
-import { STAFF_PAYMENT_CATEGORY_NAME } from "@/lib/expenses-module/constants";
-import { computeStaffPaymentReportSummary } from "@/lib/staff-payments/calculations";
+import {
+  STAFF_PAYMENT_CATEGORY_NAME,
+} from "@/lib/expenses-module/constants";
+import {
+  computeStaffPaymentReportSummary,
+  filterStaffPaymentsByRange,
+} from "@/lib/staff-payments/calculations";
 import type { Branch } from "@/types";
 import type { CashFlowDateRange, CashFlowPeriod } from "@/types/expenses-module";
 
 export function useCashFlow(initialPeriod: CashFlowPeriod = "month") {
   const { expenses } = useExpensesModule();
+  const { payments } = useStaffPaymentsModule();
   const { sales } = useSales();
   const { purchases } = usePurchasing();
   const { entries } = useEntriesContext();
@@ -46,23 +53,30 @@ export function useCashFlow(initialPeriod: CashFlowPeriod = "month") {
   );
 
   const topCategories = useMemo(
-    () =>
-      computeCategoryExpenseTotals(expenses, range)
-        .filter((item) => item.category !== STAFF_PAYMENT_CATEGORY_NAME)
-        .slice(0, 5),
+    () => computeCategoryExpenseTotals(expenses, range).slice(0, 5),
     [expenses, range]
   );
 
   const staffPaymentReport = useMemo(() => {
-    const summary = computeStaffPaymentReportSummary(expenses, range);
+    const reportSummary = computeStaffPaymentReportSummary(payments, range);
     return {
-      ...summary,
-      byBranch: summary.byBranch.map(({ branch, total }) => ({
+      ...reportSummary,
+      byBranch: reportSummary.byBranch.map(({ branch, total }) => ({
         branch: getBranchName(branch as Branch),
         total,
       })),
     };
-  }, [expenses, range, getBranchName]);
+  }, [payments, range, getBranchName]);
+
+  const staffExpenseDetails = useMemo(
+    () =>
+      filterStaffPaymentsByRange(payments, range).sort((left, right) => {
+        const dateCompare = right.date.localeCompare(left.date);
+        if (dateCompare !== 0) return dateCompare;
+        return right.createdAt.localeCompare(left.createdAt);
+      }),
+    [payments, range]
+  );
 
   const branchComparison = useMemo(
     () =>
@@ -84,5 +98,7 @@ export function useCashFlow(initialPeriod: CashFlowPeriod = "month") {
     topCategories,
     branchComparison,
     staffPaymentReport,
+    staffExpenseDetails,
+    staffExpenseCategoryName: STAFF_PAYMENT_CATEGORY_NAME,
   };
 }

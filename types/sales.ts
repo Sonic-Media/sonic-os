@@ -1,4 +1,5 @@
 import type { Branch } from "@/types";
+import type { StaffActionRecord } from "@/types/staff-session";
 
 export type SalePaymentMethod =
   | "cash"
@@ -34,6 +35,8 @@ export interface Sale {
   branch: Branch;
   staffId?: string;
   staffName?: string;
+  createdBy?: StaffActionRecord;
+  completedBy?: StaffActionRecord;
   notes?: string;
   status: SaleStatus;
   createdAt: string;
@@ -72,7 +75,6 @@ export interface SaleInput {
   customerId?: string;
   paymentMethod: SalePaymentMethod;
   branch: Branch;
-  staffId?: string;
   notes?: string;
 }
 

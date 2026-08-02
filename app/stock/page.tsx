@@ -29,6 +29,7 @@ export default function StockDashboardPage() {
       <PageHeader
         title="Stock"
         subtitle="Physical product inventory"
+        showBranchBadge
       />
 
       <StockSubnav />

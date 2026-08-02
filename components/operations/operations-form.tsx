@@ -3,10 +3,8 @@
 import { Button } from "@/components/shared/ui/button";
 import { Input } from "@/components/shared/ui/input";
 import { Textarea } from "@/components/shared/ui/textarea";
-import { BranchPicker } from "@/components/entry/branch-picker";
 import { EntryStatusBadge } from "@/components/entry/entry-status-badge";
 import { ExpenseList } from "@/components/entry/expense-list";
-import { StaffPicker } from "@/components/entry/staff-picker";
 import { CashSummary } from "@/components/operations/cash-summary";
 import type { EntryFormData, EntryStatus } from "@/types";
 
@@ -18,9 +16,9 @@ interface OperationsFormProps {
   isSaving: boolean;
   sales: number;
   totalExpenses: number;
+  staffPayouts?: number;
   netCash: number;
   status?: EntryStatus;
-  lockBranch?: boolean;
   lockDate?: boolean;
   seedCommonExpenses?: boolean;
   updateField: <K extends keyof EntryFormData>(
@@ -36,9 +34,9 @@ export function OperationsForm({
   isSaving,
   sales,
   totalExpenses,
+  staffPayouts = 0,
   netCash,
   status,
-  lockBranch = false,
   lockDate = false,
   seedCommonExpenses = false,
   updateField,
@@ -69,12 +67,6 @@ export function OperationsForm({
         hint={lockDate ? "Locked to today" : "Select a historical date"}
       />
 
-      <BranchPicker
-        value={form.branch}
-        onChange={(branch) => updateField("branch", branch)}
-        disabled={lockBranch}
-      />
-
       <Input
         label="Sales"
         type="number"
@@ -93,6 +85,7 @@ export function OperationsForm({
       <CashSummary
         sales={sales}
         totalExpenses={totalExpenses}
+        staffPayouts={staffPayouts}
         netCash={netCash}
         savingsAllocation={form.savingsAllocation}
         onSavingsAllocationChange={(value) =>
@@ -105,12 +98,6 @@ export function OperationsForm({
         placeholder="Optional notes for this day"
         value={form.notes}
         onChange={(event) => updateField("notes", event.target.value)}
-      />
-
-      <StaffPicker
-        branch={form.branch}
-        value={form.staffId}
-        onChange={(staffId) => updateField("staffId", staffId)}
       />
 
       <Button type="submit" size="lg" className="w-full" disabled={isSaving}>

@@ -23,12 +23,15 @@ export const SALES_STORAGE_KEY = "sonic-os-sales";
 export const SALES_CUSTOMERS_STORAGE_KEY = "sonic-os-sales-customers";
 export const PURCHASING_PURCHASES_STORAGE_KEY = "sonic-os-purchasing-purchases";
 export const PURCHASING_SUPPLIERS_STORAGE_KEY = "sonic-os-purchasing-suppliers";
+export const STAFF_PAYMENTS_STORAGE_KEY = "sonic-os-staff-payments";
 export const EXPENSES_RECORDS_STORAGE_KEY = "sonic-os-expenses-records";
 export const EXPENSES_CATEGORIES_STORAGE_KEY = "sonic-os-expenses-categories";
 export const BRANCHES_STORAGE_KEY = "sonic-os-branches";
 export const USERS_STORAGE_KEY = "sonic-os-users";
 export const SESSION_STORAGE_KEY = "sonic-os-session";
 export const AUTH_AUDIT_STORAGE_KEY = "sonic-os-auth-audit";
+export const STAFF_AUDIT_STORAGE_KEY = "sonic-os-staff-audit";
+export const DAY_CLOSINGS_STORAGE_KEY = "sonic-os-day-closings";
 export const IMPORT_UNDO_STORAGE_KEY = "sonic-os-import-undo";
 export const STOCK_ACTIVE_BRANCH_STORAGE_KEY = "sonic-os-stock-active-branch";
 export const STOCK_LAST_MOVEMENT_BRANCH_STORAGE_KEY =
@@ -176,6 +179,7 @@ export const DEFAULT_STAFF: Staff[] = [
     loginEnabled: false,
     status: "active",
     active: true,
+    dateJoined: "2024-01-01",
   },
   {
     id: "staff-f",
@@ -185,6 +189,7 @@ export const DEFAULT_STAFF: Staff[] = [
     loginEnabled: false,
     status: "active",
     active: true,
+    dateJoined: "2024-01-01",
   },
   {
     id: "staff-k",
@@ -194,10 +199,11 @@ export const DEFAULT_STAFF: Staff[] = [
     loginEnabled: false,
     status: "active",
     active: true,
+    dateJoined: "2024-01-01",
   },
 ];
 
-export const APP_VERSION = "Sonic OS V2.0";
+export const APP_VERSION = "Sonic OS V3.1";
 
 export const AUTOSAVE_DEBOUNCE_MS = 400;
 

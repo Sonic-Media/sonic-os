@@ -1,3 +1,5 @@
+"use client";
+
 import { Card } from "@/components/shared/ui/card";
 import { formatCurrency } from "@/lib/format";
 import {
@@ -5,11 +7,12 @@ import {
   getStaffPaymentTypeLabel,
 } from "@/lib/expenses-module/constants";
 import { getStaffRoleName } from "@/lib/staff/roles";
-import { getEffectiveStaffPaymentAmount } from "@/lib/staff-payments/calculations";
-import type { ExpenseRecord } from "@/types/expenses-module";
+import { getEffectivePaymentAmount } from "@/lib/staff-payments/calculations";
+import { useSettings } from "@/context/settings-context";
+import type { StaffPaymentRecord } from "@/types/staff-payment";
 
 interface StaffPaymentHistoryProps {
-  payments: ExpenseRecord[];
+  payments: StaffPaymentRecord[];
   emptyMessage?: string;
 }
 
@@ -28,6 +31,8 @@ export function StaffPaymentHistory({
   payments,
   emptyMessage = "No staff payments recorded yet.",
 }: StaffPaymentHistoryProps) {
+  const { getBranchName } = useSettings();
+
   if (payments.length === 0) {
     return (
       <Card>
@@ -45,23 +50,23 @@ export function StaffPaymentHistory({
         >
           <div>
             <p className="text-sm font-medium text-white">
-              {payment.staffPaymentType
-                ? getStaffPaymentTypeLabel(payment.staffPaymentType)
-                : payment.description}
+              {payment.staffName} · {getStaffPaymentTypeLabel(payment.paymentType)}
             </p>
             <p className="mt-0.5 text-xs text-zinc-500">
               {formatPaymentDate(payment.date)} ·{" "}
+              {getBranchName(payment.branch)} ·{" "}
               {getExpensePaymentMethodLabel(payment.paymentMethod)}
             </p>
             <p className="mt-1 text-xs text-zinc-400">
-              {payment.staffRole
-                ? getStaffRoleName(payment.staffRole)
-                : "Staff Payment"}
+              {getStaffRoleName(payment.staffRole)}
+              {payment.paidBy?.staffName
+                ? ` · Recorded by ${payment.paidBy.staffName}`
+                : ""}
               {payment.notes ? ` · ${payment.notes}` : ""}
             </p>
           </div>
           <p className="text-sm font-semibold text-white tabular-nums">
-            {formatCurrency(getEffectiveStaffPaymentAmount(payment))}
+            {formatCurrency(getEffectivePaymentAmount(payment))}
           </p>
         </Card>
       ))}

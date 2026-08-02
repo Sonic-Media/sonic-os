@@ -8,18 +8,15 @@ import { Input } from "@/components/shared/ui/input";
 import { Select } from "@/components/shared/ui/select";
 import { Textarea } from "@/components/shared/ui/textarea";
 import { TotalsField } from "@/components/shared/totals-grid";
-import { BranchPicker } from "@/components/entry/branch-picker";
+import { useActiveBranch } from "@/context/active-branch-context";
 import { usePurchasing } from "@/context/purchasing-context";
-import { useStaff } from "@/context/staff-context";
 import { useStock } from "@/context/stock-context";
-import { DEFAULT_BRANCH_CODE } from "@/lib/constants";
 import { formatCurrency } from "@/lib/format";
 import { computePurchaseTotals } from "@/lib/purchasing/calculations";
 import {
   parsePositiveInteger,
   parsePositivePrice,
 } from "@/lib/purchasing/validation";
-import type { Branch } from "@/types";
 import type { PurchaseDraftLineItem } from "@/types/purchasing";
 
 function createDraftLineItem(productId = "", buyingPrice = ""): PurchaseDraftLineItem {
@@ -33,16 +30,14 @@ function createDraftLineItem(productId = "", buyingPrice = ""): PurchaseDraftLin
 
 export function NewPurchaseForm() {
   const router = useRouter();
+  const { activeBranch } = useActiveBranch();
   const { products } = useStock();
   const { suppliers, completePurchase } = usePurchasing();
-  const { staff } = useStaff();
 
   const [supplierId, setSupplierId] = useState("");
   const [lineItems, setLineItems] = useState<PurchaseDraftLineItem[]>([
     createDraftLineItem(),
   ]);
-  const [staffId, setStaffId] = useState("");
-  const [branch, setBranch] = useState<Branch>(DEFAULT_BRANCH_CODE);
   const [notes, setNotes] = useState("");
   const [errors, setErrors] = useState<Record<string, string | undefined>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -63,17 +58,6 @@ export function NewPurchaseForm() {
         label: product.name,
       })),
     [products]
-  );
-
-  const staffOptions = useMemo(
-    () =>
-      staff
-        .filter((member) => member.active)
-        .map((member) => ({
-          value: member.id,
-          label: member.name,
-        })),
-    [staff]
   );
 
   const parsedItems = useMemo(
@@ -146,8 +130,7 @@ export function NewPurchaseForm() {
     const result = completePurchase({
       supplierId,
       items: parsedItems,
-      branch,
-      staffId: staffId || undefined,
+      branch: activeBranch,
       notes,
     });
 
@@ -214,25 +197,6 @@ export function NewPurchaseForm() {
                 <p className="mt-1 text-xs text-red-400">{errors.supplierId}</p>
               )}
             </div>
-
-            <BranchPicker
-              value={branch}
-              onChange={(nextBranch) => {
-                setBranch(nextBranch);
-                setErrors((current) => ({ ...current, branch: undefined }));
-              }}
-            />
-            {errors.branch && (
-              <p className="text-xs text-red-400">{errors.branch}</p>
-            )}
-
-            <Select
-              label="Staff (optional)"
-              value={staffId}
-              placeholder="Select staff"
-              options={staffOptions}
-              onChange={(event) => setStaffId(event.target.value)}
-            />
 
             <Textarea
               label="Notes (optional)"

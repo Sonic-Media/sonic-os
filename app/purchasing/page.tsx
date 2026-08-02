@@ -22,6 +22,7 @@ export default function PurchasingDashboardPage() {
       <PageHeader
         title="Purchasing"
         subtitle="Supplier purchases and inventory intake"
+        showBranchBadge
       />
 
       <PurchasingSubnav />

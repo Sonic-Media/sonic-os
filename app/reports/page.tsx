@@ -25,7 +25,7 @@ export default function ReportsPage() {
 
   return (
     <PageContainer>
-      <PageHeader title="Reports" subtitle={periodLabel} />
+      <PageHeader title="Reports" subtitle={periodLabel} showBranchBadge />
 
       <ReportsPeriodTabs period={period} onPeriodChange={setPeriod} />
 

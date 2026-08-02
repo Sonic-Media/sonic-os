@@ -2,6 +2,7 @@ import { LEGACY_EXPENSE_FIELDS, STORAGE_KEY } from "@/lib/constants";
 import { parseAmount } from "@/lib/amounts";
 import { formatEntryTime, getTodayISO } from "@/lib/dates";
 import { parseBranch } from "@/lib/entry-helpers";
+import { normalizeStaffActionRecord } from "@/lib/staff/session";
 import type { Entry, Expense } from "@/types";
 
 function migrateExpense(raw: unknown): Expense | null {
@@ -79,8 +80,9 @@ function migrateEntry(raw: Record<string, unknown>): Entry {
     ),
     sales: parseAmount(raw.sales),
     expenses: migrateLegacyExpenses(raw),
-    staffId: typeof raw.staffId === "string" ? raw.staffId : "",
-    staffName: typeof raw.staffName === "string" ? raw.staffName : "",
+    staffId: typeof raw.staffId === "string" ? raw.staffId : undefined,
+    staffName: typeof raw.staffName === "string" ? raw.staffName : undefined,
+    createdBy: normalizeStaffActionRecord(raw.createdBy),
     notes: typeof raw.notes === "string" ? raw.notes : "",
     savingsAllocation:
       typeof raw.savingsAllocation === "number"

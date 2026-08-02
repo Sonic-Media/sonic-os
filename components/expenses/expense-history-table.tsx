@@ -6,6 +6,8 @@ import { Card } from "@/components/shared/ui/card";
 import { Button } from "@/components/shared/ui/button";
 import { formatCurrency } from "@/lib/format";
 import { getExpensePaymentMethodLabel } from "@/lib/expenses-module/constants";
+import { isStaffPaymentExpense } from "@/lib/staff-payments/calculations";
+import { useStaffPaymentsModule } from "@/context/staff-payments-context";
 import { useSettings } from "@/context/settings-context";
 import type { ExpenseRecord } from "@/types/expenses-module";
 
@@ -32,10 +34,32 @@ export function ExpenseHistoryTable({
   onDelete,
 }: ExpenseHistoryTableProps) {
   const { getBranchName } = useSettings();
+  const { getPaymentByExpenseId, getPaymentById } = useStaffPaymentsModule();
   const showActions = Boolean(onEdit || onDelete);
 
   if (expenses.length === 0) {
     return <ExpensesEmptyState message="No expenses match your filters." />;
+  }
+
+  function resolveStaffLabel(expense: ExpenseRecord): string {
+    if (!isStaffPaymentExpense(expense)) {
+      return expense.staffName || "—";
+    }
+
+    const linkedPayment =
+      (expense.staffPaymentId
+        ? getPaymentById(expense.staffPaymentId)
+        : undefined) ?? getPaymentByExpenseId(expense.id);
+
+    if (linkedPayment) {
+      return linkedPayment.staffName;
+    }
+
+    return expense.staffName || "—";
+  }
+
+  function canModify(expense: ExpenseRecord): boolean {
+    return !isStaffPaymentExpense(expense);
   }
 
   return (
@@ -102,12 +126,12 @@ export function ExpenseHistoryTable({
                   {getExpensePaymentMethodLabel(expense.paymentMethod)}
                 </td>
                 <td className="px-5 py-4 text-zinc-400">
-                  {expense.staffName || "—"}
+                  {resolveStaffLabel(expense)}
                 </td>
                 {showActions && (
                   <td className="px-5 py-4">
                     <div className="flex items-center justify-end gap-2">
-                      {onEdit && (
+                      {onEdit && canModify(expense) && (
                         <Button
                           type="button"
                           variant="ghost"
@@ -117,7 +141,7 @@ export function ExpenseHistoryTable({
                           Edit
                         </Button>
                       )}
-                      {onDelete && (
+                      {onDelete && canModify(expense) && (
                         <Button
                           type="button"
                           variant="ghost"

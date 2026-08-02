@@ -203,3 +203,28 @@ export function computeDashboardMetrics(
       .reduce((sum, movement) => sum + movement.quantity, 0),
   };
 }
+
+export function computeBranchDashboardMetrics(
+  products: StockProduct[],
+  movements: StockMovement[],
+  branchCode: string,
+  todayISO: string
+): StockDashboardMetrics {
+  const branchMovements = movements.filter(
+    (movement) => movement.branch === branchCode
+  );
+  const branchProducts = products.map((product) => {
+    const currentStock = computeBranchNetQuantity(
+      branchCode,
+      product.id,
+      movements
+    );
+
+    return withProductStatus({
+      ...product,
+      currentStock,
+    });
+  });
+
+  return computeDashboardMetrics(branchProducts, branchMovements, todayISO);
+}

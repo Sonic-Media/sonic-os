@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { isNavItemActive, navItems } from "@/components/shared/layout/nav-items";
 import { BranchSwitcher } from "@/components/shared/layout/branch-switcher";
+import { AppNotificationCenter } from "@/components/shared/layout/app-notification-center";
 import { useAuth } from "@/context/auth-context";
 import { canAccessRoute } from "@/lib/auth/permissions";
 import { cn } from "@/lib/utils";
@@ -25,14 +26,17 @@ export function Sidebar() {
   return (
     <aside className="hidden lg:flex lg:w-64 lg:shrink-0 lg:flex-col lg:border-r lg:border-zinc-800/80 lg:bg-black">
       <div className="flex h-full flex-col px-5 py-8">
-        <div className="mb-10">
-          <p className="text-lg font-semibold tracking-tight text-white">Sonic OS</p>
-          <p className="mt-1 text-xs text-zinc-500">Business operating system</p>
-          {session && (
-            <p className="mt-3 text-xs text-zinc-400">
-              {session.displayName}
-            </p>
-          )}
+        <div className="mb-10 flex items-start justify-between gap-3">
+          <div>
+            <p className="text-lg font-semibold tracking-tight text-white">Sonic OS</p>
+            <p className="mt-1 text-xs text-zinc-500">Business operating system</p>
+            {session && (
+              <p className="mt-3 text-xs text-zinc-400">
+                {session.displayName}
+              </p>
+            )}
+          </div>
+          <AppNotificationCenter />
         </div>
 
         <BranchSwitcher className="mb-6" />

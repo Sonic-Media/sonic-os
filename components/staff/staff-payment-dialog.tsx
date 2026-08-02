@@ -7,7 +7,7 @@ import { Input } from "@/components/shared/ui/input";
 import { Select } from "@/components/shared/ui/select";
 import { Textarea } from "@/components/shared/ui/textarea";
 import { useBranches } from "@/context/branches-context";
-import { useExpensesModule } from "@/context/expenses-module-context";
+import { useStaffPaymentsModule } from "@/context/staff-payments-context";
 import { useStaff } from "@/context/staff-context";
 import { getTodayISO } from "@/lib/dates";
 import {
@@ -30,7 +30,7 @@ export function StaffPaymentDialog({
   onClose,
   onSuccess,
 }: StaffPaymentDialogProps) {
-  const { addStaffPayment } = useExpensesModule();
+  const { recordStaffPayment } = useStaffPaymentsModule();
   const { activeStaff } = useStaff();
   const { getBranchName } = useBranches();
 
@@ -61,7 +61,7 @@ export function StaffPaymentDialog({
     event.preventDefault();
 
     const parsedAmount = Number.parseFloat(amount);
-    const result = addStaffPayment({
+    const result = recordStaffPayment({
       staffId,
       date,
       paymentType: paymentType as StaffPaymentType,
@@ -81,7 +81,7 @@ export function StaffPaymentDialog({
 
   return (
     <StockDialog
-      title="Record Staff Payment"
+      title="Pay Staff"
       description="Creates a linked expense record for cash flow and reports."
       onClose={onClose}
       className="max-w-lg"
@@ -91,7 +91,7 @@ export function StaffPaymentDialog({
             Cancel
           </Button>
           <Button type="submit" form="staff-payment-form">
-            Save Payment
+            Pay Staff
           </Button>
         </div>
       }

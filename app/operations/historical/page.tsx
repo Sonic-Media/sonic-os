@@ -2,6 +2,7 @@
 
 import { Suspense, useMemo } from "react";
 import { useSearchParams } from "next/navigation";
+import { OperationsSubnav } from "@/components/operations/operations-subnav";
 import { OperationsWorkspace } from "@/components/operations/operations-workspace";
 import { PageContainer } from "@/components/shared/layout/page-container";
 import { PageHeader } from "@/components/shared/layout/page-header";
@@ -9,25 +10,25 @@ import { PageSkeleton } from "@/components/shared/page-skeleton";
 import {
   findCompletedEntryForBranchDate,
   findDraftForBranchDate,
-  parseBranch,
 } from "@/lib/entry-helpers";
+import { useActiveBranch } from "@/context/active-branch-context";
 import { useEntriesContext } from "@/context/entries-context";
 
 function HistoricalOperationsContent() {
   const searchParams = useSearchParams();
-  const branch = parseBranch(searchParams.get("branch"));
+  const { activeBranch, isLoaded: branchLoaded } = useActiveBranch();
   const date = searchParams.get("date") ?? new Date().toISOString().slice(0, 10);
   const { entries, isLoaded } = useEntriesContext();
 
   const activeEntry = useMemo(() => {
     if (!isLoaded) return undefined;
     return (
-      findDraftForBranchDate(entries, branch, date) ??
-      findCompletedEntryForBranchDate(entries, branch, date)
+      findDraftForBranchDate(entries, activeBranch, date) ??
+      findCompletedEntryForBranchDate(entries, activeBranch, date)
     );
-  }, [entries, branch, date, isLoaded]);
+  }, [entries, activeBranch, date, isLoaded]);
 
-  if (!isLoaded) {
+  if (!isLoaded || !branchLoaded) {
     return <PageSkeleton />;
   }
 
@@ -36,10 +37,12 @@ function HistoricalOperationsContent() {
       <PageHeader
         title="Historical Operations"
         subtitle="Record or update past daily operations"
+        showBranchBadge
       />
+      <OperationsSubnav />
       <OperationsWorkspace
         mode="historical"
-        branch={branch}
+        branch={activeBranch}
         entry={activeEntry}
         initialDate={date}
         lockDate={false}

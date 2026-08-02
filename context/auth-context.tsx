@@ -18,8 +18,12 @@ import {
 } from "@/lib/api/auth";
 import { isApiAvailable } from "@/lib/data-source";
 import { shouldUseApiDataSource } from "@/lib/env";
+import { DEFAULT_BRANCH_CODE } from "@/lib/constants";
 import { DEFAULT_OWNER_PASSWORD } from "@/lib/auth/password";
-import { canImportHistoricalData, canManageRoles, canManageUsers } from "@/lib/auth/permissions";
+import { canImportHistoricalData, canManageRoles, canManageUsers, canViewAuditLog } from "@/lib/auth/permissions";
+import { AUDIT_ACTIONS } from "@/lib/audit-log/constants";
+import { recordAuditEntry } from "@/lib/audit-log/record";
+import { pickAuditFields } from "@/lib/audit-log/snapshots";
 import {
   hasValidationErrors,
   validateAppUserInput,
@@ -27,6 +31,7 @@ import {
   validateLoginInput,
   validatePasswordReset,
 } from "@/lib/auth/validation";
+import { recordStaffAction, resolveStaffByUserId } from "@/lib/staff/audit";
 import {
   clearSession,
   createSessionFromUser,
@@ -58,6 +63,7 @@ interface AuthContextValue {
   canManageUsers: boolean;
   canImportHistoricalData: boolean;
   canManageRoles: boolean;
+  canViewAuditLog: boolean;
   login: (input: LoginInput) => Promise<AuthValidationResult>;
   logout: () => void;
   lock: () => void;
@@ -179,6 +185,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       );
 
       if (!user || !verifyPassword(input.password, user.passwordHash)) {
+        recordUserAction(
+          "login-failed",
+          `Failed login attempt for ${username}`,
+          {
+            userId: user?.id ?? "unknown",
+            username,
+            branch: user?.branch ?? DEFAULT_BRANCH_CODE,
+          }
+        );
         return createValidationResult({
           form: "Invalid username or password.",
         });
@@ -187,6 +202,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const nextSession = createSessionFromUser(user);
       persistSession(nextSession);
       recordUserAction("login", `${user.displayName} signed in`, nextSession);
+      const linkedStaff = resolveStaffByUserId(user.id);
+      if (linkedStaff) {
+        recordStaffAction({
+          staffId: linkedStaff.id,
+          staffName: linkedStaff.name,
+          role: linkedStaff.role,
+          branch: linkedStaff.branch,
+          action: AUDIT_ACTIONS.LOGIN,
+          module: "auth",
+        });
+      }
 
       return createValidationResult({});
     },
@@ -208,6 +234,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (current) {
         recordUserAction("logout", `${current.displayName} signed out`, current);
+        const linkedStaff = resolveStaffByUserId(current.userId);
+        if (linkedStaff) {
+          recordStaffAction({
+            staffId: linkedStaff.id,
+            staffName: linkedStaff.name,
+            role: linkedStaff.role,
+            branch: linkedStaff.branch,
+            action: AUDIT_ACTIONS.LOGOUT,
+            module: "auth",
+          });
+        }
       }
       persistSession(null);
     })();
@@ -286,6 +323,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         "user-created",
         `Created ${user.displayName} (${user.role})`
       );
+      recordAuditEntry({
+        action: AUDIT_ACTIONS.CREATE,
+        module: "settings",
+        branch: user.branch,
+        recordId: user.id,
+        newValues: pickAuditFields(user, [
+          "id",
+          "username",
+          "displayName",
+          "role",
+          "branch",
+          "active",
+        ]),
+      });
 
       return createValidationResult({}, user);
     },
@@ -322,6 +373,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         "user-updated",
         `Updated ${input.displayName.trim()} role to ${input.role}`
       );
+
+      const roleChanged = existing.role !== input.role;
+      recordAuditEntry({
+        action: roleChanged ? AUDIT_ACTIONS.ROLE_CHANGED : AUDIT_ACTIONS.EDIT,
+        module: "settings",
+        branch: input.branch,
+        recordId: existing.id,
+        oldValues: pickAuditFields(existing, [
+          "displayName",
+          "role",
+          "branch",
+          "active",
+        ]),
+        newValues: pickAuditFields(
+          {
+            displayName: input.displayName.trim(),
+            role: input.role,
+            branch: input.branch,
+            active: existing.active,
+          },
+          ["displayName", "role", "branch", "active"]
+        ),
+      });
 
       return createValidationResult({});
     },
@@ -384,6 +458,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       );
 
       recordAction("user-disabled", `Disabled ${existing.displayName}`);
+      recordAuditEntry({
+        action: AUDIT_ACTIONS.DEACTIVATE,
+        module: "settings",
+        branch: existing.branch,
+        recordId: existing.id,
+        oldValues: pickAuditFields(existing, ["displayName", "active"]),
+        newValues: { active: false },
+      });
 
       return createValidationResult({});
     },
@@ -404,6 +486,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       );
 
       recordAction("user-enabled", `Re-enabled ${existing.displayName}`);
+      recordAuditEntry({
+        action: AUDIT_ACTIONS.ACTIVATE,
+        module: "settings",
+        branch: existing.branch,
+        recordId: existing.id,
+        oldValues: pickAuditFields(existing, ["displayName", "active"]),
+        newValues: { active: true },
+      });
     },
     [persistUsers, recordAction]
   );
@@ -420,6 +510,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         ? canImportHistoricalData(session.role)
         : false,
       canManageRoles: session ? canManageRoles(session.role) : false,
+      canViewAuditLog: session ? canViewAuditLog(session.role) : false,
       login,
       logout,
       lock,

@@ -31,13 +31,13 @@ export default function StaffPaymentsPage() {
   return (
     <PageContainer>
       <PageHeader
-        title="Staff Payments"
-        subtitle="Record wages, salaries, bonuses, and deductions"
+        title="Pay Staff"
+        subtitle="Record daily wages, weekly wages, salaries, bonuses, and deductions"
       />
 
       <div className="mb-6 flex justify-end">
         <Button type="button" onClick={() => setShowPaymentDialog(true)}>
-          Record Payment
+          Pay Staff
         </Button>
       </div>
 

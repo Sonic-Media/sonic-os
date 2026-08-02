@@ -5,4 +5,5 @@ export const STAFF_NAV_ITEMS: {
 }[] = [
   { href: "/staff", label: "Team", exact: true },
   { href: "/staff/payments", label: "Payments" },
+  { href: "/staff/reports", label: "Reports" },
 ];

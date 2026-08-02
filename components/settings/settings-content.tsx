@@ -16,7 +16,7 @@ import type { Branch } from "@/types";
 export function SettingsContent() {
   const { settings, updateSettings, version } = useSettings();
   const { updateTemplate } = useExpenseTemplates();
-  const { canManageUsers, canImportHistoricalData, canManageRoles } = useAuth();
+  const { canManageUsers, canImportHistoricalData, canManageRoles, canViewAuditLog } = useAuth();
 
   function updateBranchName(branch: Branch, name: string) {
     updateSettings({
@@ -99,6 +99,20 @@ export function SettingsContent() {
           </p>
           <Button href="/settings/import" variant="secondary">
             Import Historical Data
+          </Button>
+        </Card>
+      )}
+
+      {canViewAuditLog && (
+        <Card>
+          <h3 className="text-sm font-medium text-zinc-500 uppercase tracking-wide mb-3">
+            Audit Log
+          </h3>
+          <p className="text-sm text-zinc-400 mb-4">
+            Review immutable records of important actions across the system.
+          </p>
+          <Button href="/settings/audit-log" variant="secondary">
+            View Audit Log
           </Button>
         </Card>
       )}

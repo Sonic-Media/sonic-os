@@ -9,6 +9,7 @@ import { PageContainer } from "@/components/shared/layout/page-container";
 import { PageHeader } from "@/components/shared/layout/page-header";
 import { PageSkeleton } from "@/components/shared/page-skeleton";
 import { useExpensesModule } from "@/context/expenses-module-context";
+import { isStaffPaymentExpense } from "@/lib/staff-payments/calculations";
 import { useExpensesDialogs } from "@/hooks/use-expenses-dialogs";
 
 export default function ExpenseDetailPage() {
@@ -34,9 +35,11 @@ export default function ExpenseDetailPage() {
       />
 
       <div className="mb-6 flex justify-end">
-        <Button type="button" onClick={() => openEditExpense(expense)}>
-          Edit Expense
-        </Button>
+        {!isStaffPaymentExpense(expense) && (
+          <Button type="button" onClick={() => openEditExpense(expense)}>
+            Edit Expense
+          </Button>
+        )}
       </div>
 
       <ExpensesSubnav />

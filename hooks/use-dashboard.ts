@@ -11,6 +11,8 @@ import { formatDisplayDate, getTodayISO } from "@/lib/dates";
 import { getGreeting } from "@/lib/format";
 import { getDashboardChartData } from "@/lib/chart-data";
 import { getDashboardAnalytics } from "@/lib/report-insights";
+import { filterByBranchField } from "@/lib/active-branch/filters";
+import { useActiveBranch } from "@/context/active-branch-context";
 import { useEntriesContext } from "@/context/entries-context";
 import { useSettings } from "@/context/settings-context";
 import { useStaff } from "@/context/staff-context";
@@ -20,23 +22,37 @@ export function useDashboard() {
   const { entries, isLoaded } = useEntriesContext();
   const { settings, branches, isLoaded: settingsLoaded } = useSettings();
   const { staff, isLoaded: staffLoaded } = useStaff();
+  const { activeBranch, isLoaded: branchLoaded } = useActiveBranch();
   const [period, setPeriod] = useState<DashboardPeriod>("daily");
   const today = getTodayISO();
 
   const data = useMemo(() => {
-    const todayEntries = filterEntriesByDate(entries, today);
+    const branchEntries = filterByBranchField(entries, activeBranch);
+    const activeBranchConfig = branches.find((branch) => branch.id === activeBranch);
+    const scopedBranches = activeBranchConfig ? [activeBranchConfig] : branches;
+    const todayEntries = filterEntriesByDate(branchEntries, today);
     const summary = aggregateEntries(todayEntries);
-    const progress = getTodayBranchProgress(entries, today, branches);
-    const draftEntry = findMostRecentEntryForDate(entries, today, "draft");
-    const completedEntry = findMostRecentEntryForDate(entries, today, "completed");
+    const progress = getTodayBranchProgress(branchEntries, today, scopedBranches);
+    const draftEntry = findMostRecentEntryForDate(
+      branchEntries,
+      today,
+      "draft",
+      activeBranch
+    );
+    const completedEntry = findMostRecentEntryForDate(
+      branchEntries,
+      today,
+      "completed",
+      activeBranch
+    );
     const allEntriesCompleted =
       progress.length > 0 && progress.every((item) => item.completed);
-    const analytics = getDashboardAnalytics(entries, period, {
+    const analytics = getDashboardAnalytics(branchEntries, period, {
       branchNames: settings.branchNames,
-      staff,
+      staff: staff.filter((member) => member.branch === activeBranch),
     });
     const chartData = getDashboardChartData(
-      entries,
+      branchEntries,
       period,
       settings.branchNames
     );
@@ -54,12 +70,22 @@ export function useDashboard() {
       date: formatDisplayDate(),
       analytics,
       chartData,
+      activeBranch,
       ...dashboard,
     };
-  }, [entries, today, branches, settings.ownerName, settings.branchNames, staff, period]);
+  }, [
+    entries,
+    today,
+    branches,
+    activeBranch,
+    settings.ownerName,
+    settings.branchNames,
+    staff,
+    period,
+  ]);
 
   return {
-    isLoaded: isLoaded && settingsLoaded && staffLoaded,
+    isLoaded: isLoaded && settingsLoaded && staffLoaded && branchLoaded,
     period,
     setPeriod,
     ...data,

@@ -10,7 +10,6 @@ import {
   useState,
 } from "react";
 import { useStock } from "@/context/stock-context";
-import { useStaff } from "@/context/staff-context";
 import { formatEntryTime, getTodayISO } from "@/lib/dates";
 import {
   getCustomers,
@@ -32,6 +31,17 @@ import {
   validateCustomerInput,
   validateSaleInput,
 } from "@/lib/sales/validation";
+import { AUDIT_ACTIONS } from "@/lib/audit-log/constants";
+import { pickAuditFields } from "@/lib/audit-log/snapshots";
+import { recordStaffAction } from "@/lib/staff/audit";
+import {
+  legacyStaffFields,
+  resolveCurrentStaffAction,
+} from "@/lib/staff/session";
+import {
+  DAY_CLOSED_EDIT_MESSAGE,
+  isBranchDayClosed,
+} from "@/lib/day-closing/storage";
 import type {
   Customer,
   CustomerInput,
@@ -70,7 +80,6 @@ function createValidationResult(
 
 export function SalesProvider({ children }: { children: React.ReactNode }) {
   const { getProductById, recordMovement } = useStock();
-  const { getStaffById } = useStaff();
 
   const [sales, setSales] = useState<Sale[]>(() => getSales());
   const [customers, setCustomers] = useState<Customer[]>(() => getCustomers());
@@ -146,6 +155,12 @@ export function SalesProvider({ children }: { children: React.ReactNode }) {
       };
 
       persistCustomers([...customersRef.current, customer]);
+      recordStaffAction({
+        action: AUDIT_ACTIONS.CREATE,
+        module: "sales",
+        recordId: customer.id,
+        newValues: pickAuditFields(customer, ["id", "name", "phone", "email"]),
+      });
       return createValidationResult({});
     },
     [persistCustomers]
@@ -191,6 +206,21 @@ export function SalesProvider({ children }: { children: React.ReactNode }) {
         persistSales(nextSales);
       }
 
+      recordStaffAction({
+        action: AUDIT_ACTIONS.EDIT,
+        module: "sales",
+        recordId: existing.id,
+        oldValues: pickAuditFields(existing, ["name", "phone", "email"]),
+        newValues: pickAuditFields(
+          {
+            name: input.name.trim(),
+            phone: input.phone?.trim(),
+            email: input.email?.trim(),
+          },
+          ["name", "phone", "email"]
+        ),
+      });
+
       return createValidationResult({});
     },
     [persistCustomers, persistSales]
@@ -202,6 +232,16 @@ export function SalesProvider({ children }: { children: React.ReactNode }) {
       if (inUse) {
         return createValidationResult({
           form: "Cannot delete a customer that has sales records.",
+        });
+      }
+
+      const existing = customersRef.current.find((customer) => customer.id === id);
+      if (existing) {
+        recordStaffAction({
+          action: AUDIT_ACTIONS.DELETE,
+          module: "sales",
+          recordId: existing.id,
+          oldValues: pickAuditFields(existing, ["id", "name"]),
         });
       }
 
@@ -225,6 +265,11 @@ export function SalesProvider({ children }: { children: React.ReactNode }) {
         return createValidationResult(errors);
       }
 
+      const dateISO = getTodayISO();
+      if (isBranchDayClosed(input.branch, dateISO)) {
+        return createValidationResult({ form: DAY_CLOSED_EDIT_MESSAGE });
+      }
+
       const discount = input.discount ?? 0;
       const preview = computeSalePreview(
         input.quantity,
@@ -234,7 +279,6 @@ export function SalesProvider({ children }: { children: React.ReactNode }) {
       );
 
       const now = new Date();
-      const dateISO = getTodayISO();
       const invoiceNumber = generateInvoiceNumber(salesRef.current, dateISO);
 
       const movementResult = recordMovement({
@@ -253,7 +297,8 @@ export function SalesProvider({ children }: { children: React.ReactNode }) {
       const customer = input.customerId
         ? getCustomerById(input.customerId)
         : undefined;
-      const staff = input.staffId ? getStaffById(input.staffId) : undefined;
+      const actor = resolveCurrentStaffAction(input.branch);
+      const legacy = legacyStaffFields(actor);
 
       const lineItem = {
         productId: product.id,
@@ -278,17 +323,36 @@ export function SalesProvider({ children }: { children: React.ReactNode }) {
         profit: preview.profit,
         paymentMethod: input.paymentMethod,
         branch: input.branch,
-        staffId: staff?.id,
-        staffName: staff?.name,
+        staffId: legacy.staffId,
+        staffName: legacy.staffName,
+        createdBy: actor,
+        completedBy: actor,
         notes: input.notes?.trim() || undefined,
         status: "completed",
         createdAt: now.toISOString(),
       };
 
       persistSales([sale, ...salesRef.current]);
+      recordStaffAction({
+        staffId: actor?.staffId,
+        staffName: actor?.staffName,
+        role: actor?.role,
+        branch: input.branch,
+        action: AUDIT_ACTIONS.COMPLETE_SALE,
+        module: "sales",
+        recordId: sale.id,
+        newValues: pickAuditFields(sale, [
+          "id",
+          "invoiceNumber",
+          "total",
+          "profit",
+          "branch",
+          "paymentMethod",
+        ]),
+      });
       return createValidationResult({});
     },
-    [getProductById, recordMovement, getCustomerById, getStaffById, persistSales]
+    [getProductById, recordMovement, getCustomerById, persistSales]
   );
 
   const value = useMemo(

@@ -22,6 +22,19 @@ function StaffRow({ member }: { member: Staff }) {
   const [name, setName] = useState(member.name);
   const [branch, setBranch] = useState<Branch>(member.branch);
   const [role, setRole] = useState<StaffRoleId>(member.role);
+  const [phone, setPhone] = useState(member.phone ?? "");
+  const [email, setEmail] = useState(member.email ?? "");
+  const [dailyWage, setDailyWage] = useState(
+    member.dailyWage != null ? String(member.dailyWage) : ""
+  );
+  const [monthlySalary, setMonthlySalary] = useState(
+    member.monthlySalary != null ? String(member.monthlySalary) : ""
+  );
+  const [dateJoined, setDateJoined] = useState(member.dateJoined);
+  const [emergencyContact, setEmergencyContact] = useState(
+    member.emergencyContact ?? ""
+  );
+  const [notes, setNotes] = useState(member.notes ?? "");
 
   const branchOptions = useMemo(
     () =>
@@ -34,7 +47,18 @@ function StaffRow({ member }: { member: Staff }) {
 
   function handleSave() {
     if (!name.trim()) return;
-    updateStaff(member.id, { name: name.trim(), branch, role });
+    updateStaff(member.id, {
+      name: name.trim(),
+      branch,
+      role,
+      phone: phone.trim() || undefined,
+      email: email.trim() || undefined,
+      dailyWage: dailyWage ? Number.parseFloat(dailyWage) : undefined,
+      monthlySalary: monthlySalary ? Number.parseFloat(monthlySalary) : undefined,
+      dateJoined: dateJoined.trim() || member.dateJoined,
+      emergencyContact: emergencyContact.trim() || undefined,
+      notes: notes.trim() || undefined,
+    });
     setIsEditing(false);
   }
 
@@ -42,6 +66,15 @@ function StaffRow({ member }: { member: Staff }) {
     setName(member.name);
     setBranch(member.branch);
     setRole(member.role);
+    setPhone(member.phone ?? "");
+    setEmail(member.email ?? "");
+    setDailyWage(member.dailyWage != null ? String(member.dailyWage) : "");
+    setMonthlySalary(
+      member.monthlySalary != null ? String(member.monthlySalary) : ""
+    );
+    setDateJoined(member.dateJoined);
+    setEmergencyContact(member.emergencyContact ?? "");
+    setNotes(member.notes ?? "");
     setIsEditing(false);
   }
 
@@ -77,6 +110,44 @@ function StaffRow({ member }: { member: Staff }) {
           options={STAFF_ROLE_OPTIONS}
           onChange={(e) => setRole(e.target.value as StaffRoleId)}
         />
+        <Input
+          label="Phone"
+          value={phone}
+          onChange={(e) => setPhone(e.target.value)}
+        />
+        <Input
+          label="Email (optional)"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+        />
+        <Input
+          label="Daily Wage"
+          type="number"
+          value={dailyWage}
+          onChange={(e) => setDailyWage(e.target.value)}
+        />
+        <Input
+          label="Monthly Salary (optional)"
+          type="number"
+          value={monthlySalary}
+          onChange={(e) => setMonthlySalary(e.target.value)}
+        />
+        <Input
+          label="Date Joined"
+          type="date"
+          value={dateJoined}
+          onChange={(e) => setDateJoined(e.target.value)}
+        />
+        <Input
+          label="Emergency Contact (optional)"
+          value={emergencyContact}
+          onChange={(e) => setEmergencyContact(e.target.value)}
+        />
+        <Input
+          label="Notes"
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+        />
         <div className="grid grid-cols-2 gap-3">
           <Button type="button" onClick={handleSave}>
             Save
@@ -95,6 +166,7 @@ function StaffRow({ member }: { member: Staff }) {
         <p className="font-medium text-white">{member.name}</p>
         <p className="text-sm text-zinc-500 mt-0.5">
           {getBranchName(member.branch)} · {getStaffRoleName(member.role)}
+          {member.phone ? ` · ${member.phone}` : ""}
         </p>
         <div className="mt-2 flex flex-wrap gap-2 text-xs">
           <span
@@ -155,7 +227,7 @@ export function StaffSection() {
   const [branch, setBranch] = useState<Branch>(
     activeBranches[0]?.code ?? "kansanga"
   );
-  const [role, setRole] = useState<StaffRoleId>("store-attendant");
+  const [role, setRole] = useState<StaffRoleId>("sales-attendant");
   const [loginEnabled, setLoginEnabled] = useState(false);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -230,7 +302,11 @@ export function StaffSection() {
         return;
       }
 
-      linkStaffAccount(staffResult.staff.id, userResult.user.id);
+      linkStaffAccount(
+        staffResult.staff.id,
+        userResult.user.id,
+        username.trim().toLowerCase()
+      );
     }
 
     setName("");

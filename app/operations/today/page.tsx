@@ -1,8 +1,8 @@
 "use client";
 
 import { Suspense, useMemo } from "react";
-import { useSearchParams } from "next/navigation";
 import { OperationsReadOnlyView } from "@/components/operations/operations-read-only-view";
+import { OperationsSubnav } from "@/components/operations/operations-subnav";
 import { OperationsWorkspace } from "@/components/operations/operations-workspace";
 import { PageContainer } from "@/components/shared/layout/page-container";
 import { PageHeader } from "@/components/shared/layout/page-header";
@@ -10,16 +10,18 @@ import { PageSkeleton } from "@/components/shared/page-skeleton";
 import {
   findCompletedEntryForBranchDate,
   findDraftForBranchDate,
-  parseBranch,
 } from "@/lib/entry-helpers";
 import { getTodayISO } from "@/lib/dates";
+import { useActiveBranch } from "@/context/active-branch-context";
+import { useDayClosing } from "@/context/day-closing-context";
 import { useEntriesContext } from "@/context/entries-context";
 
 function TodayOperationsContent() {
-  const searchParams = useSearchParams();
-  const branch = parseBranch(searchParams.get("branch"));
+  const { activeBranch, isLoaded: branchLoaded } = useActiveBranch();
   const today = getTodayISO();
   const { entries, isLoaded } = useEntriesContext();
+  const { isBranchDayClosed, getClosedRecord, isLoaded: closingLoaded } =
+    useDayClosing();
 
   const { completedEntry, draftEntry } = useMemo(() => {
     if (!isLoaded) {
@@ -27,31 +29,51 @@ function TodayOperationsContent() {
     }
 
     return {
-      completedEntry: findCompletedEntryForBranchDate(entries, branch, today),
-      draftEntry: findDraftForBranchDate(entries, branch, today),
+      completedEntry: findCompletedEntryForBranchDate(entries, activeBranch, today),
+      draftEntry: findDraftForBranchDate(entries, activeBranch, today),
     };
-  }, [entries, branch, today, isLoaded]);
+  }, [entries, activeBranch, today, isLoaded]);
 
-  if (!isLoaded) {
+  if (!isLoaded || !closingLoaded || !branchLoaded) {
     return <PageSkeleton />;
   }
 
   const activeEntry = completedEntry ?? draftEntry;
-  const isReadOnly = completedEntry?.status === "completed";
+  const closedRecord = getClosedRecord(activeBranch, today);
+  const isReadOnly =
+    completedEntry?.status === "completed" ||
+    isBranchDayClosed(activeBranch, today);
 
   return (
     <PageContainer>
       <PageHeader
         title="Today's Operations"
         subtitle="Record and close today's branch operations"
+        showBranchBadge
       />
 
-      {isReadOnly && completedEntry ? (
-        <OperationsReadOnlyView entry={completedEntry} />
+      <OperationsSubnav />
+
+      {isReadOnly && (completedEntry || closedRecord) ? (
+        <OperationsReadOnlyView entry={completedEntry ?? {
+          id: closedRecord?.id ?? "closed-day",
+          date: today,
+          time: "",
+          timestamp: 0,
+          branch: activeBranch,
+          sales: closedRecord?.summary.sales ?? 0,
+          expenses: [],
+          staffId: "",
+          staffName: closedRecord?.closedByName ?? "",
+          notes: closedRecord?.closingNotes ?? "Day closed",
+          savingsAllocation: closedRecord?.summary.operatingFund,
+          createdAt: closedRecord?.closedAt ?? today,
+          status: "completed",
+        }} />
       ) : (
         <OperationsWorkspace
           mode="today"
-          branch={branch}
+          branch={activeBranch}
           entry={activeEntry}
           lockDate
         />

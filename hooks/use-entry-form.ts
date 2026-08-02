@@ -1,11 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AUTOSAVE_DEBOUNCE_MS } from "@/lib/constants";
 import {
   calculateExpenses,
-  calculateFormSavings,
   parseAmount,
 } from "@/lib/amounts";
 import {
@@ -17,9 +16,12 @@ import {
 import { createDefaultExpenses } from "@/lib/expenses";
 import { getTodayISO } from "@/lib/dates";
 import { upsertEntryInList } from "@/lib/storage";
+import { useActiveBranch } from "@/context/active-branch-context";
 import { useEntriesContext } from "@/context/entries-context";
 import { useExpenseTemplates } from "@/context/expense-templates-context";
 import { useStaff } from "@/context/staff-context";
+import { useStaffPaymentsModule } from "@/context/staff-payments-context";
+import { computeStaffPayoutTotalForBranchDate } from "@/lib/staff-payments/calculations";
 import type { Branch, Entry, EntryFormData, Expense } from "@/types";
 
 function createBlankForm(
@@ -55,6 +57,8 @@ export function useEntryForm(options: UseEntryFormOptions = {}) {
   const { entries, upsertEntry } = useEntriesContext();
   const { activeTemplateExpenses } = useExpenseTemplates();
   const { getStaffById } = useStaff();
+  const { payments } = useStaffPaymentsModule();
+  const { activeBranch, isLoaded: activeBranchLoaded } = useActiveBranch();
   const isEdit = !!options.entry;
   const isDraftEdit = isEdit && options.entry?.status === "draft";
   const lockBranch =
@@ -63,7 +67,7 @@ export function useEntryForm(options: UseEntryFormOptions = {}) {
     options.entry
       ? entryToForm(options.entry)
       : createBlankForm(
-          options.initialBranch ?? "salaama",
+          options.initialBranch ?? activeBranch,
           activeTemplateExpenses,
           options.initialDate ?? getTodayISO()
         )
@@ -86,7 +90,16 @@ export function useEntryForm(options: UseEntryFormOptions = {}) {
 
   const sales = parseAmount(form.sales);
   const totalExpenses = calculateExpenses(form);
-  const balance = calculateFormSavings(form);
+  const staffPayouts = useMemo(
+    () =>
+      computeStaffPayoutTotalForBranchDate(
+        payments,
+        form.branch,
+        form.date
+      ),
+    [payments, form.branch, form.date]
+  );
+  const balance = sales - totalExpenses - staffPayouts;
   const mode = options.mode ?? "today";
   const status = isEdit ? options.entry!.status : "draft";
   const showStatus = isEdit || hasStarted;
@@ -187,6 +200,13 @@ export function useEntryForm(options: UseEntryFormOptions = {}) {
     hasInteracted.current = true;
     setHasStarted(true);
   }
+
+  useEffect(() => {
+    if (!activeBranchLoaded) return;
+    if (isEdit && options.entry?.status === "completed") return;
+    if (form.branch === activeBranch) return;
+    switchBranch(activeBranch);
+  }, [activeBranch, activeBranchLoaded, form.branch, isEdit, options.entry?.status]);
 
   useEffect(() => {
     if (!hasInteracted.current) return;
@@ -335,7 +355,7 @@ export function useEntryForm(options: UseEntryFormOptions = {}) {
         (mode === "today" ? "/operations/today" : "/history");
       router.push(
         mode === "today"
-          ? `/operations/today?branch=${formWithAllocation.branch}`
+          ? "/operations/today"
           : redirect
       );
     } finally {
@@ -383,6 +403,7 @@ export function useEntryForm(options: UseEntryFormOptions = {}) {
     status: showStatus ? status : undefined,
     sales,
     totalExpenses,
+    staffPayouts,
     balance,
     duplicateEntry,
     showCloseDayDialog,

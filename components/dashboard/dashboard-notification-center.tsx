@@ -13,11 +13,11 @@ export function DashboardNotificationCenter() {
     close,
     activeTab,
     setActiveTab,
-    filteredNotifications,
+    filteredAlerts,
     unreadCount,
     markRead,
     markAllRead,
-    clearAll,
+    dismissVisible,
   } = useNotificationCenter();
 
   return (
@@ -26,12 +26,12 @@ export function DashboardNotificationCenter() {
       <NotificationCenterDrawer
         isOpen={isOpen}
         onClose={close}
-        notifications={filteredNotifications}
+        alerts={filteredAlerts}
         activeTab={activeTab}
         onTabChange={setActiveTab}
         onMarkRead={markRead}
         onMarkAllRead={markAllRead}
-        onClearAll={clearAll}
+        onDismissVisible={dismissVisible}
       />
     </>
   );

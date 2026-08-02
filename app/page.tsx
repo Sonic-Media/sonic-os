@@ -7,16 +7,18 @@ import {
 } from "@/components/dashboard/branch-card";
 import { CompactBusinessPulseCard } from "@/components/dashboard/analytics/compact-business-pulse-card";
 import { DashboardAnalyticsSection } from "@/components/dashboard/dashboard-analytics";
-import { DashboardNotificationCenter } from "@/components/dashboard/dashboard-notification-center";
 import { QuickActions } from "@/components/dashboard/quick-actions";
+import { DayClosingStatusCardContainer } from "@/components/dashboard/day-closing-status";
 import { TodayAtAGlance } from "@/components/dashboard/today-at-a-glance";
 import { CashFlowGlanceCard } from "@/components/dashboard/cash-flow-glance-card";
 import { TodayProgress } from "@/components/dashboard/today-progress";
 import { PageContainer } from "@/components/shared/layout/page-container";
+import { BranchBadge } from "@/components/shared/layout/branch-badge";
 import { PageSkeleton } from "@/components/shared/page-skeleton";
 import { useDashboard } from "@/hooks/use-dashboard";
 import { useEntriesContext } from "@/context/entries-context";
 import { useSettings } from "@/context/settings-context";
+import { filterByBranchField } from "@/lib/active-branch/filters";
 import { getTodayISO } from "@/lib/dates";
 import { filterEntriesByDate } from "@/lib/entry-helpers";
 
@@ -30,13 +32,18 @@ export default function DashboardPage() {
     draftEntry,
     completedEntry,
     allEntriesCompleted,
+    activeBranch,
   } = useDashboard();
   const { entries } = useEntriesContext();
   const { branches } = useSettings();
   const today = getTodayISO();
+  const activeBranchConfig = branches.find((branch) => branch.id === activeBranch);
 
   const lastUpdatedAt = useMemo(() => {
-    const todayEntries = filterEntriesByDate(entries, today);
+    const todayEntries = filterEntriesByDate(
+      filterByBranchField(entries, activeBranch),
+      today
+    );
     if (todayEntries.length === 0) return null;
 
     return todayEntries.reduce((latest, entry) => {
@@ -45,7 +52,7 @@ export default function DashboardPage() {
         ? entry.createdAt
         : latest;
     }, todayEntries[0]?.createdAt ?? null);
-  }, [entries, today]);
+  }, [entries, today, activeBranch]);
 
   if (!isLoaded) {
     return <PageSkeleton variant="dashboard" />;
@@ -54,13 +61,12 @@ export default function DashboardPage() {
   return (
     <PageContainer>
       <div className="relative mb-8">
-        <div className="absolute right-0 top-0 z-10">
-          <DashboardNotificationCenter />
-        </div>
-
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_minmax(280px,340px)] lg:items-start lg:pr-14">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_minmax(280px,340px)] lg:items-start">
           <div className="space-y-4">
-            <DashboardGreeting greeting={greeting} date={date} className="mb-0" />
+            <div className="flex flex-wrap items-center gap-3">
+              <DashboardGreeting greeting={greeting} date={date} className="mb-0" />
+              <BranchBadge />
+            </div>
             <CompactBusinessPulseCard />
           </div>
           <div className="space-y-4">
@@ -69,6 +75,7 @@ export default function DashboardPage() {
               progress={progress}
               lastUpdatedAt={lastUpdatedAt}
             />
+            <DayClosingStatusCardContainer />
             <CashFlowGlanceCard />
           </div>
         </div>
@@ -81,16 +88,16 @@ export default function DashboardPage() {
 
         <section className="mb-0">
           <h2 className="text-sm font-medium text-zinc-500 mb-3 tracking-wide uppercase">
-            Branches
+            Branch
           </h2>
           <div className="grid grid-cols-1 gap-3">
-            {branches.map((branch) => (
+            {activeBranchConfig ? (
               <BranchCard
-                key={branch.id}
-                name={branch.name}
-                totals={summary.byBranch[branch.id]}
+                key={activeBranchConfig.id}
+                name={activeBranchConfig.name}
+                totals={summary.byBranch[activeBranchConfig.id]}
               />
-            ))}
+            ) : null}
           </div>
         </section>
       </div>

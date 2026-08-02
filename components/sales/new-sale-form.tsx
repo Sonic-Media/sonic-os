@@ -8,23 +8,20 @@ import { Input } from "@/components/shared/ui/input";
 import { Select } from "@/components/shared/ui/select";
 import { Textarea } from "@/components/shared/ui/textarea";
 import { TotalsField } from "@/components/shared/totals-grid";
-import { BranchPicker } from "@/components/entry/branch-picker";
+import { useActiveBranch } from "@/context/active-branch-context";
 import { useSales } from "@/context/sales-context";
-import { useStaff } from "@/context/staff-context";
 import { useStock } from "@/context/stock-context";
-import { DEFAULT_BRANCH_CODE } from "@/lib/constants";
 import { formatCurrency } from "@/lib/format";
 import { computeSalePreview } from "@/lib/sales/calculations";
 import { SALE_PAYMENT_METHODS } from "@/lib/sales/constants";
 import { cn } from "@/lib/utils";
-import type { Branch } from "@/types";
 import type { SalePaymentMethod } from "@/types/sales";
 
 export function NewSaleForm() {
   const router = useRouter();
+  const { activeBranch } = useActiveBranch();
   const { products } = useStock();
   const { customers, completeSale } = useSales();
-  const { staff } = useStaff();
 
   const [productId, setProductId] = useState("");
   const [quantity, setQuantity] = useState("1");
@@ -32,8 +29,6 @@ export function NewSaleForm() {
   const [discount, setDiscount] = useState("");
   const [customerId, setCustomerId] = useState("");
   const [paymentMethod, setPaymentMethod] = useState<SalePaymentMethod | "">("");
-  const [branch, setBranch] = useState<Branch>(DEFAULT_BRANCH_CODE);
-  const [staffId, setStaffId] = useState("");
   const [notes, setNotes] = useState("");
   const [errors, setErrors] = useState<Record<string, string | undefined>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -56,17 +51,6 @@ export function NewSaleForm() {
         label: customer.name,
       })),
     [customers]
-  );
-
-  const staffOptions = useMemo(
-    () =>
-      staff
-        .filter((member) => member.active)
-        .map((member) => ({
-          value: member.id,
-          label: member.name,
-        })),
-    [staff]
   );
 
   const paymentOptions = SALE_PAYMENT_METHODS.map((method) => ({
@@ -124,8 +108,7 @@ export function NewSaleForm() {
       discount: Number.isFinite(parsedDiscount) ? parsedDiscount : 0,
       customerId: customerId || undefined,
       paymentMethod: paymentMethod as SalePaymentMethod,
-      branch,
-      staffId: staffId || undefined,
+      branch: activeBranch,
       notes,
     });
 
@@ -234,17 +217,6 @@ export function NewSaleForm() {
             )}
           </div>
 
-          <BranchPicker
-            value={branch}
-            onChange={(nextBranch) => {
-              setBranch(nextBranch);
-              setErrors((current) => ({ ...current, branch: undefined }));
-            }}
-          />
-          {errors.branch && (
-            <p className="text-xs text-red-400">{errors.branch}</p>
-          )}
-
           <Select
             label="Customer (optional)"
             value={customerId}
@@ -271,14 +243,6 @@ export function NewSaleForm() {
               <p className="mt-1 text-xs text-red-400">{errors.paymentMethod}</p>
             )}
           </div>
-
-          <Select
-            label="Staff Member (optional)"
-            value={staffId}
-            placeholder="Select staff"
-            options={staffOptions}
-            onChange={(event) => setStaffId(event.target.value)}
-          />
 
           <Textarea
             label="Notes (optional)"

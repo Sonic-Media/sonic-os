@@ -28,6 +28,9 @@ import {
   hasValidationErrors,
   validateBranchInput,
 } from "@/lib/branch/validation";
+import { AUDIT_ACTIONS } from "@/lib/audit-log/constants";
+import { pickAuditFields } from "@/lib/audit-log/snapshots";
+import { recordStaffAction } from "@/lib/staff/audit";
 import type {
   BranchEntity,
   BranchInput,
@@ -157,6 +160,13 @@ export function BranchesProvider({ children }: { children: React.ReactNode }) {
         };
 
         persistBranches([...branchesRef.current, branch]);
+        recordStaffAction({
+          action: AUDIT_ACTIONS.CREATE,
+          module: "settings",
+          branch: branch.code,
+          recordId: branch.id,
+          newValues: pickAuditFields(branch, ["id", "name", "code", "active"]),
+        });
       })();
 
       return createValidationResult({});
@@ -187,20 +197,42 @@ export function BranchesProvider({ children }: { children: React.ReactNode }) {
           }
         }
 
+        const updated = {
+          ...existing,
+          name: input.name.trim(),
+          code: input.code.trim().toLowerCase(),
+          address: input.address?.trim() || undefined,
+          phone: input.phone?.trim() || undefined,
+          manager: input.manager?.trim() || undefined,
+        };
+
         const nextBranches = branchesRef.current.map((branch) =>
-          branch.id === id
-            ? {
-                ...branch,
-                name: input.name.trim(),
-                code: input.code.trim().toLowerCase(),
-                address: input.address?.trim() || undefined,
-                phone: input.phone?.trim() || undefined,
-                manager: input.manager?.trim() || undefined,
-              }
-            : branch
+          branch.id === id ? updated : branch
         );
 
         persistBranches(nextBranches);
+        recordStaffAction({
+          action: AUDIT_ACTIONS.BRANCH_CHANGED,
+          module: "settings",
+          branch: updated.code,
+          recordId: existing.id,
+          oldValues: pickAuditFields(existing, [
+            "name",
+            "code",
+            "address",
+            "phone",
+            "manager",
+            "active",
+          ]),
+          newValues: pickAuditFields(updated, [
+            "name",
+            "code",
+            "address",
+            "phone",
+            "manager",
+            "active",
+          ]),
+        });
       })();
 
       return createValidationResult({});
@@ -221,11 +253,22 @@ export function BranchesProvider({ children }: { children: React.ReactNode }) {
           }
         }
 
+        const existing = branchesRef.current.find((branch) => branch.id === id);
+        if (!existing) return;
+
         persistBranches(
           branchesRef.current.map((branch) =>
             branch.id === id ? { ...branch, active: false } : branch
           )
         );
+        recordStaffAction({
+          action: AUDIT_ACTIONS.DEACTIVATE,
+          module: "settings",
+          branch: existing.code,
+          recordId: existing.id,
+          oldValues: pickAuditFields(existing, ["name", "active"]),
+          newValues: { active: false },
+        });
       })();
     },
     [persistBranches, refreshBranchesFromApi]
@@ -244,11 +287,22 @@ export function BranchesProvider({ children }: { children: React.ReactNode }) {
           }
         }
 
+        const existing = branchesRef.current.find((branch) => branch.id === id);
+        if (!existing) return;
+
         persistBranches(
           branchesRef.current.map((branch) =>
             branch.id === id ? { ...branch, active: true } : branch
           )
         );
+        recordStaffAction({
+          action: AUDIT_ACTIONS.ACTIVATE,
+          module: "settings",
+          branch: existing.code,
+          recordId: existing.id,
+          oldValues: pickAuditFields(existing, ["name", "active"]),
+          newValues: { active: true },
+        });
       })();
     },
     [persistBranches, refreshBranchesFromApi]

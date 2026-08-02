@@ -1,6 +1,7 @@
 import type { Branch } from "@/types";
 import type { StaffRoleId } from "@/types/staff-role";
 import type { StaffPaymentType } from "@/types/staff-payment";
+import type { StaffActionRecord } from "@/types/staff-session";
 
 export type ExpensePaymentMethod =
   | "cash"
@@ -30,6 +31,9 @@ export interface ExpenseRecord {
   staffName?: string;
   staffRole?: StaffRoleId;
   staffPaymentType?: StaffPaymentType;
+  staffPaymentId?: string;
+  createdBy?: StaffActionRecord;
+  paidBy?: StaffActionRecord;
   notes?: string;
   createdAt: string;
   updatedAt: string;
@@ -71,7 +75,6 @@ export interface ExpenseRecordInput {
   amount: number;
   paymentMethod: ExpensePaymentMethod;
   branch: Branch;
-  staffId?: string;
   notes?: string;
 }
 

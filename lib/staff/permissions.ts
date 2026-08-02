@@ -27,11 +27,18 @@ export function roleHasModuleAccess(role: UserRole, module: StaffModule): boolea
 }
 
 export function getDefaultRouteForStaffRole(role: UserRole): string {
-  if (role === "owner" || role === "ceo") return "/";
-  if (role === "manager" || role === "cashier" || role === "salesperson") {
+  if (role === "owner" || role === "ceo" || role === "branch-manager" || role === "administrator") {
+    return "/";
+  }
+  if (
+    role === "manager" ||
+    role === "cashier" ||
+    role === "salesperson" ||
+    role === "sales-attendant"
+  ) {
     return "/sales";
   }
-  if (role === "technician") return "/stock";
+  if (role === "inventory-officer" || role === "technician") return "/stock";
   if (role === "accountant") return "/expenses";
   if (role === "store-attendant") return "/operations/today";
   return "/operations/today";

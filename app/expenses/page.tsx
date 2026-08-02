@@ -24,6 +24,7 @@ export default function ExpensesDashboardPage() {
       <PageHeader
         title="Expenses"
         subtitle="Operating expenses and cash flow visibility"
+        showBranchBadge
       />
 
       <ExpensesSubnav />

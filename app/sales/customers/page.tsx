@@ -50,6 +50,7 @@ export default function SalesCustomersPage() {
       <PageHeader
         title="Customers"
         subtitle="Customer database and purchase history"
+        showBranchBadge
       />
 
       <div className="mb-6 flex justify-end">

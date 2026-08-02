@@ -31,6 +31,14 @@ import {
   validateStockProductInput,
   validateStockProductUpdateInput,
 } from "@/lib/stock/validation";
+import { AUDIT_ACTIONS } from "@/lib/audit-log/constants";
+import { pickAuditFields } from "@/lib/audit-log/snapshots";
+import { recordStaffAction } from "@/lib/staff/audit";
+import { resolveCurrentStaffAction } from "@/lib/staff/session";
+import {
+  DAY_CLOSED_EDIT_MESSAGE,
+  isBranchDayClosed,
+} from "@/lib/day-closing/storage";
 import type {
   StockDashboardMetrics,
   StockMovement,
@@ -186,6 +194,19 @@ export function StockProvider({ children }: { children: React.ReactNode }) {
       ]);
       persistProducts(nextProducts);
 
+      recordStaffAction({
+        action: AUDIT_ACTIONS.CREATE,
+        module: "stock",
+        recordId: product.id,
+        newValues: pickAuditFields(product, [
+          "id",
+          "name",
+          "category",
+          "buyingPrice",
+          "sellingPrice",
+        ]),
+      });
+
       return createValidationResult({}, product);
     },
     [persistProducts, persistMovements]
@@ -248,6 +269,29 @@ export function StockProvider({ children }: { children: React.ReactNode }) {
         persistMovements(nextMovements);
       }
 
+      recordStaffAction({
+        action: AUDIT_ACTIONS.EDIT,
+        module: "stock",
+        recordId: id,
+        oldValues: pickAuditFields(existing, [
+          "name",
+          "category",
+          "buyingPrice",
+          "sellingPrice",
+          "currentStock",
+        ]),
+        newValues: pickAuditFields(
+          {
+            name: input.name.trim(),
+            category: input.category,
+            buyingPrice: input.buyingPrice,
+            sellingPrice: input.sellingPrice,
+            currentStock: existing.currentStock,
+          },
+          ["name", "category", "buyingPrice", "sellingPrice", "currentStock"]
+        ),
+      });
+
       return createValidationResult({});
     },
     [persistProducts, persistMovements, persistPriceChanges]
@@ -255,6 +299,16 @@ export function StockProvider({ children }: { children: React.ReactNode }) {
 
   const deleteProduct = useCallback(
     (id: string) => {
+      const existing = productsRef.current.find((product) => product.id === id);
+      if (existing) {
+        recordStaffAction({
+          action: AUDIT_ACTIONS.DELETE,
+          module: "stock",
+          recordId: existing.id,
+          oldValues: pickAuditFields(existing, ["id", "name", "currentStock"]),
+        });
+      }
+
       persistProducts(
         productsRef.current.filter((product) => product.id !== id)
       );
@@ -283,7 +337,13 @@ export function StockProvider({ children }: { children: React.ReactNode }) {
         return createValidationResult(errors);
       }
 
+      const movementDate = input.date ?? getTodayISO();
+      if (isBranchDayClosed(input.branch, movementDate)) {
+        return createValidationResult({ form: DAY_CLOSED_EDIT_MESSAGE });
+      }
+
       const now = new Date().toISOString();
+      const actor = resolveCurrentStaffAction(input.branch);
       const nextStock =
         input.movement === "in"
           ? product.currentStock + input.quantity
@@ -305,6 +365,7 @@ export function StockProvider({ children }: { children: React.ReactNode }) {
         reason: input.reason.trim(),
         branch: input.branch,
         notes: input.notes?.trim() || undefined,
+        createdBy: actor,
         createdAt: now,
       };
 
@@ -320,6 +381,27 @@ export function StockProvider({ children }: { children: React.ReactNode }) {
 
       persistProducts(nextProducts);
       persistMovements([movement, ...movementsRef.current]);
+
+      recordStaffAction({
+        staffId: actor?.staffId,
+        staffName: actor?.staffName,
+        role: actor?.role,
+        action:
+          input.movement === "in"
+            ? AUDIT_ACTIONS.STOCK_IN
+            : AUDIT_ACTIONS.STOCK_OUT,
+        module: "stock",
+        recordId: movement.id,
+        branch: input.branch,
+        newValues: pickAuditFields(movement, [
+          "id",
+          "productName",
+          "movement",
+          "quantity",
+          "reason",
+          "branch",
+        ]),
+      });
 
       return createValidationResult({});
     },

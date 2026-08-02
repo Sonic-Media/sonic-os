@@ -21,11 +21,13 @@ import {
   unlinkStaffUser,
 } from "@/lib/staff-storage";
 import { isStaffRoleId } from "@/lib/staff/roles";
-import { recordActivity } from "@/lib/activity-log";
+import { AUDIT_ACTIONS } from "@/lib/audit-log/constants";
+import { pickAuditFields } from "@/lib/audit-log/snapshots";
+import { recordStaffAction } from "@/lib/staff/audit";
+import { getTodayISO } from "@/lib/dates";
 import { getExpenseRecords } from "@/lib/expenses-module-storage";
 import { getPurchases } from "@/lib/purchasing-storage";
 import { getSales } from "@/lib/sales-storage";
-import { getSettings } from "@/lib/settings-storage";
 import { getEntries } from "@/lib/storage";
 import type { Branch, Staff } from "@/types";
 import type { StaffInput, StaffRoleId, StaffStatus } from "@/types/staff-role";
@@ -66,10 +68,26 @@ interface StaffContextValue {
   updateStaff: (
     id: string,
     patch: Partial<
-      Pick<Staff, "name" | "branch" | "role" | "loginEnabled" | "status" | "active">
+      Pick<
+        Staff,
+        | "name"
+        | "username"
+        | "branch"
+        | "role"
+        | "loginEnabled"
+        | "status"
+        | "active"
+        | "phone"
+        | "email"
+        | "dailyWage"
+        | "monthlySalary"
+        | "dateJoined"
+        | "emergencyContact"
+        | "notes"
+      >
     >
   ) => void;
-  linkStaffAccount: (staffId: string, userId: string) => void;
+  linkStaffAccount: (staffId: string, userId: string, username?: string) => void;
   unlinkStaffAccount: (staffId: string) => void;
   deactivateStaff: (id: string) => void;
   deleteStaff: (id: string) => StaffValidationResult;
@@ -77,11 +95,55 @@ interface StaffContextValue {
 
 const StaffContext = createContext<StaffContextValue | null>(null);
 
-function normalizeStaffPatch(patch: Partial<Pick<Staff, "name" | "branch" | "role" | "loginEnabled" | "status" | "active">>) {
+function normalizeStaffPatch(
+  patch: Partial<
+    Pick<
+      Staff,
+      | "name"
+      | "username"
+      | "branch"
+      | "role"
+      | "loginEnabled"
+      | "status"
+      | "active"
+      | "phone"
+      | "email"
+      | "dailyWage"
+      | "monthlySalary"
+      | "dateJoined"
+      | "emergencyContact"
+      | "notes"
+    >
+  >
+) {
   const next: Partial<Staff> = { ...patch };
 
   if (typeof patch.name === "string") {
     next.name = patch.name.trim() || undefined;
+  }
+
+  if (typeof patch.username === "string") {
+    next.username = patch.username.trim() || undefined;
+  }
+
+  if (typeof patch.phone === "string") {
+    next.phone = patch.phone.trim() || undefined;
+  }
+
+  if (typeof patch.email === "string") {
+    next.email = patch.email.trim() || undefined;
+  }
+
+  if (typeof patch.emergencyContact === "string") {
+    next.emergencyContact = patch.emergencyContact.trim() || undefined;
+  }
+
+  if (typeof patch.notes === "string") {
+    next.notes = patch.notes.trim() || undefined;
+  }
+
+  if (typeof patch.dateJoined === "string") {
+    next.dateJoined = patch.dateJoined.trim() || undefined;
   }
 
   if (patch.status) {
@@ -169,18 +231,43 @@ export function StaffProvider({ children }: { children: React.ReactNode }) {
       const member: Staff = {
         id: crypto.randomUUID(),
         name,
+        username: input.username?.trim() || undefined,
         branch: input.branch,
         role: input.role as StaffRoleId,
         loginEnabled: input.loginEnabled === true,
         status,
         active: status === "active",
+        phone: input.phone?.trim() || undefined,
+        email: input.email?.trim() || undefined,
+        dailyWage:
+          typeof input.dailyWage === "number" && input.dailyWage >= 0
+            ? input.dailyWage
+            : undefined,
+        monthlySalary:
+          typeof input.monthlySalary === "number" && input.monthlySalary >= 0
+            ? input.monthlySalary
+            : undefined,
+        dateJoined: input.dateJoined?.trim() || getTodayISO(),
+        emergencyContact: input.emergencyContact?.trim() || undefined,
+        notes: input.notes?.trim() || undefined,
       };
 
       persistStaff(sortStaffByName([...staffRef.current, member]));
-      recordActivity({
-        type: "staff-added",
-        title: "Staff added",
-        description: `${member.name} was added to the ${getSettings().branchNames[input.branch as Branch]} team.`,
+      recordStaffAction({
+        staffId: member.id,
+        staffName: member.name,
+        role: member.role,
+        branch: member.branch,
+        action: AUDIT_ACTIONS.CREATE,
+        module: "staff",
+        recordId: member.id,
+        newValues: pickAuditFields(member, [
+          "id",
+          "name",
+          "branch",
+          "role",
+          "status",
+        ]),
       });
 
       return createStaffValidationResult({}, member);
@@ -192,9 +279,26 @@ export function StaffProvider({ children }: { children: React.ReactNode }) {
     (
       id: string,
       patch: Partial<
-        Pick<Staff, "name" | "branch" | "role" | "loginEnabled" | "status" | "active">
+        Pick<
+          Staff,
+          | "name"
+          | "username"
+          | "branch"
+          | "role"
+          | "loginEnabled"
+          | "status"
+          | "active"
+          | "phone"
+          | "email"
+          | "dailyWage"
+          | "monthlySalary"
+          | "dateJoined"
+          | "emergencyContact"
+          | "notes"
+        >
       >
     ) => {
+      const existing = staffRef.current.find((member) => member.id === id);
       const normalizedPatch = normalizeStaffPatch(patch);
 
       persistStaff(
@@ -213,15 +317,80 @@ export function StaffProvider({ children }: { children: React.ReactNode }) {
           )
         )
       );
+
+      if (existing) {
+        const updated = {
+          ...existing,
+          ...normalizedPatch,
+          name:
+            typeof normalizedPatch.name === "string"
+              ? normalizedPatch.name.trim() || existing.name
+              : existing.name,
+        };
+
+        let action: string = AUDIT_ACTIONS.EDIT;
+        if (
+          normalizedPatch.role &&
+          normalizedPatch.role !== existing.role
+        ) {
+          action = AUDIT_ACTIONS.ROLE_CHANGED;
+        } else if (
+          normalizedPatch.status === "inactive" &&
+          existing.status !== "inactive"
+        ) {
+          action = AUDIT_ACTIONS.DEACTIVATE;
+        } else if (
+          normalizedPatch.status === "active" &&
+          existing.status !== "active"
+        ) {
+          action = AUDIT_ACTIONS.ACTIVATE;
+        }
+
+        recordStaffAction({
+          staffId: existing.id,
+          staffName: existing.name,
+          role: existing.role,
+          branch: existing.branch,
+          action,
+          module: "staff",
+          recordId: existing.id,
+          oldValues: pickAuditFields(existing, [
+            "name",
+            "branch",
+            "role",
+            "status",
+            "dailyWage",
+          ]),
+          newValues: pickAuditFields(updated, [
+            "name",
+            "branch",
+            "role",
+            "status",
+            "dailyWage",
+          ]),
+        });
+      }
     },
     [persistStaff]
   );
 
   const linkStaffAccount = useCallback(
-    (staffId: string, userId: string) => {
-      const next = linkStaffToUser(staffId, userId);
+    (staffId: string, userId: string, username?: string) => {
+      const next = linkStaffToUser(staffId, userId, username);
       staffRef.current = next;
       setStaff(next);
+      const member = next.find((item) => item.id === staffId);
+      if (member) {
+        recordStaffAction({
+          staffId: member.id,
+          staffName: member.name,
+          role: member.role,
+          branch: member.branch,
+          action: "Login Linked",
+          module: "staff",
+          detail: username,
+        });
+      }
     },
     []
   );
@@ -244,6 +413,20 @@ export function StaffProvider({ children }: { children: React.ReactNode }) {
       if (isStaffReferenced(id)) {
         return createStaffValidationResult({
           form: "Cannot delete a staff member linked to sales, purchases, expenses, or entries.",
+        });
+      }
+
+      const existing = staffRef.current.find((member) => member.id === id);
+      if (existing) {
+        recordStaffAction({
+          staffId: existing.id,
+          staffName: existing.name,
+          role: existing.role,
+          branch: existing.branch,
+          action: AUDIT_ACTIONS.DELETE,
+          module: "staff",
+          recordId: existing.id,
+          oldValues: pickAuditFields(existing, ["id", "name", "branch", "role"]),
         });
       }
 
