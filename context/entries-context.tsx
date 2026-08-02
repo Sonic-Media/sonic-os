@@ -9,6 +9,17 @@ import {
   useRef,
   useState,
 } from "react";
+import {
+  bulkDeleteDailyOperationsApi,
+  deleteDailyOperationApi,
+  fetchDailyOperations,
+  importDailyOperationsApi,
+  upsertDailyOperationApi,
+} from "@/lib/api/daily-operations";
+import {
+  loadRemoteOrLocal,
+  runRemoteOrLocal,
+} from "@/lib/data-source/context-api";
 import { getEntries, saveEntries, upsertEntryInList } from "@/lib/storage";
 import type { Entry } from "@/types";
 
@@ -33,45 +44,88 @@ export function EntriesProvider({ children }: { children: React.ReactNode }) {
     entriesRef.current = entries;
   }, [entries]);
 
-  const upsertEntry = useCallback((entry: Entry): Entry => {
-    const next = upsertEntryInList(entriesRef.current, entry);
-    saveEntries(next);
-    entriesRef.current = next;
-    setEntries(next);
-    return entry;
-  }, []);
-
   useEffect(() => {
     if (hasLoaded.current) return;
     hasLoaded.current = true;
 
     queueMicrotask(() => {
-      const loaded = getEntries();
-      entriesRef.current = loaded;
-      setEntries(loaded);
-      setIsLoaded(true);
+      void (async () => {
+        const loaded = await loadRemoteOrLocal({
+          remote: () => fetchDailyOperations(),
+          local: () => getEntries(),
+        });
+
+        entriesRef.current = loaded;
+        setEntries(loaded);
+        setIsLoaded(true);
+      })();
     });
+  }, []);
+
+  const upsertEntry = useCallback((entry: Entry): Entry => {
+    void (async () => {
+      await runRemoteOrLocal({
+        remote: async () => {
+          const saved = await upsertDailyOperationApi(entry);
+          const next = upsertEntryInList(entriesRef.current, saved);
+          entriesRef.current = next;
+          setEntries(next);
+        },
+        local: () => {
+          const next = upsertEntryInList(entriesRef.current, entry);
+          saveEntries(next);
+          entriesRef.current = next;
+          setEntries(next);
+        },
+      });
+    })();
+
+    return entry;
   }, []);
 
   const deleteEntry = useCallback((id: string) => {
-    setEntries((prev) => {
-      const next = prev.filter((entry) => entry.id !== id);
-      saveEntries(next);
-      entriesRef.current = next;
-      return next;
-    });
+    void (async () => {
+      await runRemoteOrLocal({
+        remote: async () => {
+          await deleteDailyOperationApi(id);
+          const next = entriesRef.current.filter((entry) => entry.id !== id);
+          entriesRef.current = next;
+          setEntries(next);
+        },
+        local: () => {
+          const next = entriesRef.current.filter((entry) => entry.id !== id);
+          saveEntries(next);
+          entriesRef.current = next;
+          setEntries(next);
+        },
+      });
+    })();
   }, []);
 
   const importEntries = useCallback((imported: Entry[]): Entry[] => {
-    let next = entriesRef.current;
+    void (async () => {
+      await runRemoteOrLocal({
+        remote: async () => {
+          const saved = await importDailyOperationsApi(imported);
+          let next = entriesRef.current;
+          for (const entry of saved) {
+            next = upsertEntryInList(next, entry);
+          }
+          entriesRef.current = next;
+          setEntries(next);
+        },
+        local: () => {
+          let next = entriesRef.current;
+          for (const entry of imported) {
+            next = upsertEntryInList(next, entry);
+          }
+          saveEntries(next);
+          entriesRef.current = next;
+          setEntries(next);
+        },
+      });
+    })();
 
-    for (const entry of imported) {
-      next = upsertEntryInList(next, entry);
-    }
-
-    saveEntries(next);
-    entriesRef.current = next;
-    setEntries(next);
     return imported;
   }, []);
 
@@ -85,9 +139,21 @@ export function EntriesProvider({ children }: { children: React.ReactNode }) {
 
     if (removedCount === 0) return 0;
 
-    saveEntries(next);
-    entriesRef.current = next;
-    setEntries(next);
+    void (async () => {
+      await runRemoteOrLocal({
+        remote: async () => {
+          await bulkDeleteDailyOperationsApi(ids);
+          entriesRef.current = next;
+          setEntries(next);
+        },
+        local: () => {
+          saveEntries(next);
+          entriesRef.current = next;
+          setEntries(next);
+        },
+      });
+    })();
+
     return removedCount;
   }, []);
 

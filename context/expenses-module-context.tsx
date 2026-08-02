@@ -9,7 +9,17 @@ import {
   useRef,
   useState,
 } from "react";
-import { EXPENSES_CATEGORIES_STORAGE_KEY } from "@/lib/constants";
+import {
+  createExpenseApi,
+  createExpenseCategoryApi,
+  deleteExpenseApi,
+  deleteExpenseCategoryApi,
+  fetchExpenseCategories,
+  fetchExpenses,
+  updateExpenseApi,
+  updateExpenseCategoryApi,
+} from "@/lib/api/expenses";
+import { loadRemoteOrLocal, runRemoteOrLocal, shouldUseRemoteDataSource } from "@/lib/data-source/context-api";
 import { getTodayISO } from "@/lib/dates";
 import {
   getExpenseCategories,
@@ -75,6 +85,7 @@ interface ExpensesModuleContextValue {
   upsertStaffPaymentExpense: (expense: ExpenseRecord) => ExpenseValidationResult;
   linkLegacyStaffPaymentExpenses: (payments: StaffPaymentRecord[]) => void;
   addStaffPayment: (input: StaffPaymentInput) => ExpenseValidationResult;
+  refreshFromApi: () => Promise<void>;
 }
 
 const ExpensesModuleContext = createContext<ExpensesModuleContextValue | null>(
@@ -119,16 +130,31 @@ export function ExpensesModuleProvider({
     hasLoaded.current = true;
 
     queueMicrotask(() => {
-      const loadedCategories = getExpenseCategories();
-      setExpenses(getExpenseRecords());
-      setCategories(loadedCategories);
-      if (
-        typeof window !== "undefined" &&
-        !localStorage.getItem(EXPENSES_CATEGORIES_STORAGE_KEY)
-      ) {
-        saveExpenseCategories(loadedCategories);
-      }
-      setIsLoaded(true);
+      void (async () => {
+        const [loadedCategories, loadedExpenses] = await Promise.all([
+          loadRemoteOrLocal({
+            remote: fetchExpenseCategories,
+            local: getExpenseCategories,
+          }),
+          loadRemoteOrLocal({
+            remote: fetchExpenses,
+            local: getExpenseRecords,
+          }),
+        ]);
+
+        const normalizedCategories = sortExpenseCategoriesByName(
+          normalizeExpenseCategoryList(loadedCategories)
+        );
+        const normalizedExpenses = sortExpenseRecordsByDate(
+          normalizeExpenseRecordList(loadedExpenses)
+        );
+
+        categoriesRef.current = normalizedCategories;
+        expensesRef.current = normalizedExpenses;
+        setCategories(normalizedCategories);
+        setExpenses(normalizedExpenses);
+        setIsLoaded(true);
+      })();
     });
   }, []);
 
@@ -148,6 +174,29 @@ export function ExpensesModuleProvider({
     saveExpenseCategories(normalized);
     categoriesRef.current = normalized;
     setCategories(normalized);
+  }, []);
+
+  const refreshFromApi = useCallback(async () => {
+    if (!(await shouldUseRemoteDataSource())) {
+      return;
+    }
+
+    const [remoteCategories, remoteExpenses] = await Promise.all([
+      fetchExpenseCategories(),
+      fetchExpenses(),
+    ]);
+
+    const normalizedCategories = sortExpenseCategoriesByName(
+      normalizeExpenseCategoryList(remoteCategories)
+    );
+    const normalizedExpenses = sortExpenseRecordsByDate(
+      normalizeExpenseRecordList(remoteExpenses)
+    );
+
+    categoriesRef.current = normalizedCategories;
+    expensesRef.current = normalizedExpenses;
+    setCategories(normalizedCategories);
+    setExpenses(normalizedExpenses);
   }, []);
 
   const expenseLookup = useMemo(
@@ -193,46 +242,57 @@ export function ExpensesModuleProvider({
         return createValidationResult({ categoryId: "Category not found." });
       }
 
-      const actor = resolveCurrentStaffAction(input.branch);
-      const now = new Date().toISOString();
+      void (async () => {
+        await runRemoteOrLocal({
+          remote: async () => {
+            await createExpenseApi(input);
+            await refreshFromApi();
+          },
+          local: () => {
+            const actor = resolveCurrentStaffAction(input.branch);
+            const now = new Date().toISOString();
 
-      const record: ExpenseRecord = {
-        id: crypto.randomUUID(),
-        date: input.date,
-        categoryId: category.id,
-        categoryName: category.name,
-        description: input.description.trim(),
-        amount: input.amount,
-        paymentMethod: input.paymentMethod,
-        branch: input.branch,
-        createdBy: actor,
-        notes: input.notes?.trim() || undefined,
-        createdAt: now,
-        updatedAt: now,
-      };
+            const record: ExpenseRecord = {
+              id: crypto.randomUUID(),
+              date: input.date,
+              categoryId: category.id,
+              categoryName: category.name,
+              description: input.description.trim(),
+              amount: input.amount,
+              paymentMethod: input.paymentMethod,
+              branch: input.branch,
+              createdBy: actor,
+              notes: input.notes?.trim() || undefined,
+              createdAt: now,
+              updatedAt: now,
+            };
 
-      persistExpenses([record, ...expensesRef.current]);
-      recordStaffAction({
-        staffId: actor?.staffId,
-        staffName: actor?.staffName,
-        role: actor?.role,
-        branch: record.branch,
-        action: AUDIT_ACTIONS.EXPENSE_ADDED,
-        module: "expenses",
-        recordId: record.id,
-        newValues: pickAuditFields(record, [
-          "id",
-          "date",
-          "categoryName",
-          "description",
-          "amount",
-          "branch",
-          "paymentMethod",
-        ]),
-      });
+            persistExpenses([record, ...expensesRef.current]);
+            recordStaffAction({
+              staffId: actor?.staffId,
+              staffName: actor?.staffName,
+              role: actor?.role,
+              branch: record.branch,
+              action: AUDIT_ACTIONS.EXPENSE_ADDED,
+              module: "expenses",
+              recordId: record.id,
+              newValues: pickAuditFields(record, [
+                "id",
+                "date",
+                "categoryName",
+                "description",
+                "amount",
+                "branch",
+                "paymentMethod",
+              ]),
+            });
+          },
+        });
+      })();
+
       return createValidationResult({});
     },
-    [persistExpenses]
+    [persistExpenses, refreshFromApi]
   );
 
   const updateExpense = useCallback(
@@ -263,56 +323,67 @@ export function ExpensesModuleProvider({
         return createValidationResult({ categoryId: "Category not found." });
       }
 
-      const actor = resolveCurrentStaffAction(input.branch);
-      const now = new Date().toISOString();
+      void (async () => {
+        await runRemoteOrLocal({
+          remote: async () => {
+            await updateExpenseApi(id, input);
+            await refreshFromApi();
+          },
+          local: () => {
+            const actor = resolveCurrentStaffAction(input.branch);
+            const now = new Date().toISOString();
 
-      const updated = {
-        ...existing,
-        date: input.date,
-        categoryId: category.id,
-        categoryName: category.name,
-        description: input.description.trim(),
-        amount: input.amount,
-        paymentMethod: input.paymentMethod,
-        branch: input.branch,
-        createdBy: actor ?? existing.createdBy,
-        notes: input.notes?.trim() || undefined,
-        updatedAt: now,
-      };
+            const updated = {
+              ...existing,
+              date: input.date,
+              categoryId: category.id,
+              categoryName: category.name,
+              description: input.description.trim(),
+              amount: input.amount,
+              paymentMethod: input.paymentMethod,
+              branch: input.branch,
+              createdBy: actor ?? existing.createdBy,
+              notes: input.notes?.trim() || undefined,
+              updatedAt: now,
+            };
 
-      const nextExpenses = expensesRef.current.map((expense) =>
-        expense.id === id ? updated : expense
-      );
+            const nextExpenses = expensesRef.current.map((expense) =>
+              expense.id === id ? updated : expense
+            );
 
-      persistExpenses(nextExpenses);
-      recordStaffAction({
-        staffId: actor?.staffId,
-        staffName: actor?.staffName,
-        role: actor?.role,
-        branch: updated.branch,
-        action: AUDIT_ACTIONS.EXPENSE_EDITED,
-        module: "expenses",
-        recordId: updated.id,
-        oldValues: pickAuditFields(existing, [
-          "date",
-          "categoryName",
-          "description",
-          "amount",
-          "branch",
-          "paymentMethod",
-        ]),
-        newValues: pickAuditFields(updated, [
-          "date",
-          "categoryName",
-          "description",
-          "amount",
-          "branch",
-          "paymentMethod",
-        ]),
-      });
+            persistExpenses(nextExpenses);
+            recordStaffAction({
+              staffId: actor?.staffId,
+              staffName: actor?.staffName,
+              role: actor?.role,
+              branch: updated.branch,
+              action: AUDIT_ACTIONS.EXPENSE_EDITED,
+              module: "expenses",
+              recordId: updated.id,
+              oldValues: pickAuditFields(existing, [
+                "date",
+                "categoryName",
+                "description",
+                "amount",
+                "branch",
+                "paymentMethod",
+              ]),
+              newValues: pickAuditFields(updated, [
+                "date",
+                "categoryName",
+                "description",
+                "amount",
+                "branch",
+                "paymentMethod",
+              ]),
+            });
+          },
+        });
+      })();
+
       return createValidationResult({});
     },
-    [persistExpenses]
+    [persistExpenses, refreshFromApi]
   );
 
   const deleteExpense = useCallback(
@@ -322,27 +393,37 @@ export function ExpensesModuleProvider({
         return;
       }
 
-      if (existing) {
-        recordStaffAction({
-          branch: existing.branch,
-          action: AUDIT_ACTIONS.DELETE,
-          module: "expenses",
-          recordId: existing.id,
-          oldValues: pickAuditFields(existing, [
-            "date",
-            "categoryName",
-            "description",
-            "amount",
-            "branch",
-          ]),
-        });
-      }
+      void (async () => {
+        await runRemoteOrLocal({
+          remote: async () => {
+            await deleteExpenseApi(id);
+            await refreshFromApi();
+          },
+          local: () => {
+            if (existing) {
+              recordStaffAction({
+                branch: existing.branch,
+                action: AUDIT_ACTIONS.DELETE,
+                module: "expenses",
+                recordId: existing.id,
+                oldValues: pickAuditFields(existing, [
+                  "date",
+                  "categoryName",
+                  "description",
+                  "amount",
+                  "branch",
+                ]),
+              });
+            }
 
-      persistExpenses(
-        expensesRef.current.filter((expense) => expense.id !== id)
-      );
+            persistExpenses(
+              expensesRef.current.filter((expense) => expense.id !== id)
+            );
+          },
+        });
+      })();
     },
-    [persistExpenses]
+    [persistExpenses, refreshFromApi]
   );
 
   const ensureStaffPaymentCategory = useCallback(() => {
@@ -435,25 +516,36 @@ export function ExpensesModuleProvider({
         });
       }
 
-      const now = new Date().toISOString();
-      const category: ExpenseCategory = {
-        id: crypto.randomUUID(),
-        name: normalizedName,
-        isDefault: false,
-        createdAt: now,
-        updatedAt: now,
-      };
+      void (async () => {
+        await runRemoteOrLocal({
+          remote: async () => {
+            await createExpenseCategoryApi(input);
+            await refreshFromApi();
+          },
+          local: () => {
+            const now = new Date().toISOString();
+            const category: ExpenseCategory = {
+              id: crypto.randomUUID(),
+              name: normalizedName,
+              isDefault: false,
+              createdAt: now,
+              updatedAt: now,
+            };
 
-      persistCategories([...categoriesRef.current, category]);
-      recordStaffAction({
-        action: AUDIT_ACTIONS.CREATE,
-        module: "expenses",
-        recordId: category.id,
-        newValues: pickAuditFields(category, ["id", "name"]),
-      });
+            persistCategories([...categoriesRef.current, category]);
+            recordStaffAction({
+              action: AUDIT_ACTIONS.CREATE,
+              module: "expenses",
+              recordId: category.id,
+              newValues: pickAuditFields(category, ["id", "name"]),
+            });
+          },
+        });
+      })();
+
       return createValidationResult({});
     },
-    [persistCategories]
+    [persistCategories, refreshFromApi]
   );
 
   const updateCategory = useCallback(
@@ -491,35 +583,45 @@ export function ExpensesModuleProvider({
         });
       }
 
-      const now = new Date().toISOString();
-      const nextCategories = categoriesRef.current.map((category) =>
-        category.id === id
-          ? { ...category, name: normalizedName, updatedAt: now }
-          : category
-      );
+      void (async () => {
+        await runRemoteOrLocal({
+          remote: async () => {
+            await updateExpenseCategoryApi(id, input);
+            await refreshFromApi();
+          },
+          local: () => {
+            const now = new Date().toISOString();
+            const nextCategories = categoriesRef.current.map((category) =>
+              category.id === id
+                ? { ...category, name: normalizedName, updatedAt: now }
+                : category
+            );
 
-      persistCategories(nextCategories);
+            persistCategories(nextCategories);
 
-      if (existing.name !== normalizedName) {
-        const nextExpenses = expensesRef.current.map((expense) =>
-          expense.categoryId === id
-            ? { ...expense, categoryName: normalizedName }
-            : expense
-        );
-        persistExpenses(nextExpenses);
-      }
+            if (existing.name !== normalizedName) {
+              const nextExpenses = expensesRef.current.map((expense) =>
+                expense.categoryId === id
+                  ? { ...expense, categoryName: normalizedName }
+                  : expense
+              );
+              persistExpenses(nextExpenses);
+            }
 
-      recordStaffAction({
-        action: AUDIT_ACTIONS.EDIT,
-        module: "expenses",
-        recordId: existing.id,
-        oldValues: pickAuditFields(existing, ["name"]),
-        newValues: { name: normalizedName },
-      });
+            recordStaffAction({
+              action: AUDIT_ACTIONS.EDIT,
+              module: "expenses",
+              recordId: existing.id,
+              oldValues: pickAuditFields(existing, ["name"]),
+              newValues: { name: normalizedName },
+            });
+          },
+        });
+      })();
 
       return createValidationResult({});
     },
-    [persistCategories, persistExpenses]
+    [persistCategories, persistExpenses, refreshFromApi]
   );
 
   const deleteCategory = useCallback(
@@ -544,18 +646,29 @@ export function ExpensesModuleProvider({
         return createValidationResult({ form: "Category not found." });
       }
 
-      persistCategories(
-        categoriesRef.current.filter((category) => category.id !== id)
-      );
-      recordStaffAction({
-        action: AUDIT_ACTIONS.DELETE,
-        module: "expenses",
-        recordId: existing.id,
-        oldValues: pickAuditFields(existing, ["id", "name"]),
-      });
+      void (async () => {
+        await runRemoteOrLocal({
+          remote: async () => {
+            await deleteExpenseCategoryApi(id);
+            await refreshFromApi();
+          },
+          local: () => {
+            persistCategories(
+              categoriesRef.current.filter((category) => category.id !== id)
+            );
+            recordStaffAction({
+              action: AUDIT_ACTIONS.DELETE,
+              module: "expenses",
+              recordId: existing.id,
+              oldValues: pickAuditFields(existing, ["id", "name"]),
+            });
+          },
+        });
+      })();
+
       return createValidationResult({});
     },
-    [persistCategories]
+    [persistCategories, refreshFromApi]
   );
 
   const value = useMemo(
@@ -575,6 +688,7 @@ export function ExpensesModuleProvider({
       upsertStaffPaymentExpense,
       linkLegacyStaffPaymentExpenses,
       addStaffPayment,
+      refreshFromApi,
     }),
     [
       expenses,
@@ -592,6 +706,7 @@ export function ExpensesModuleProvider({
       upsertStaffPaymentExpense,
       linkLegacyStaffPaymentExpenses,
       addStaffPayment,
+      refreshFromApi,
     ]
   );
 

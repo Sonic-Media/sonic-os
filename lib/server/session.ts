@@ -1,16 +1,16 @@
-import { cookies } from "next/headers";
+import { cache } from "react";
+import { headers, cookies } from "next/headers";
 import { ApiError } from "@/lib/api/errors";
 import { prisma } from "@/lib/db";
+import { isValidSignedSessionToken } from "@/lib/server/security/session-token";
 import type { AuthSession, UserRole } from "@/types/auth";
 import type { Branch } from "@/types";
 
 export const SESSION_COOKIE_NAME = "sonic-os-session-token";
 
-export async function getSessionFromRequest(): Promise<AuthSession | null> {
-  const cookieStore = await cookies();
-  const token = cookieStore.get(SESSION_COOKIE_NAME)?.value;
-  if (!token) return null;
-
+async function readSessionFromDatabase(
+  token: string
+): Promise<AuthSession | null> {
   const session = await prisma.session.findUnique({
     where: { token },
     include: {
@@ -27,6 +27,16 @@ export async function getSessionFromRequest(): Promise<AuthSession | null> {
     return null;
   }
 
+  if (!session.user.active) {
+    await prisma.session.delete({ where: { token } }).catch(() => undefined);
+    return null;
+  }
+
+  if (!isValidSignedSessionToken(token)) {
+    await prisma.session.delete({ where: { token } }).catch(() => undefined);
+    return null;
+  }
+
   const roleSlug = session.user.role.slug as UserRole;
 
   return {
@@ -39,6 +49,14 @@ export async function getSessionFromRequest(): Promise<AuthSession | null> {
     loggedInAt: session.createdAt.toISOString(),
   };
 }
+
+export const getSessionFromRequest = cache(async (): Promise<AuthSession | null> => {
+  const cookieStore = await cookies();
+  const token = cookieStore.get(SESSION_COOKIE_NAME)?.value;
+  if (!token) return null;
+
+  return readSessionFromDatabase(token);
+});
 
 export async function requireSession(): Promise<AuthSession> {
   const session = await getSessionFromRequest();

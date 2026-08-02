@@ -2,6 +2,7 @@ import { DEFAULT_APP_SETTINGS, DEFAULT_EXPENSE_TEMPLATES } from "../lib/constant
 import { DEFAULT_STAFF_ROLES } from "../lib/staff/roles";
 import { getPrismaClient } from "../lib/db";
 import { hashPassword } from "../lib/server/password";
+import { PRODUCT_CATEGORY_DEFINITIONS } from "../lib/server/product-category-lookup";
 
 const prisma = getPrismaClient();
 
@@ -114,6 +115,21 @@ async function main() {
         category: template.category,
         defaultAmount: template.defaultAmount,
         active: template.active,
+      },
+    });
+  }
+
+  for (const category of PRODUCT_CATEGORY_DEFINITIONS) {
+    await prisma.productCategory.upsert({
+      where: { slug: category.slug },
+      update: {
+        name: category.name,
+        active: true,
+      },
+      create: {
+        slug: category.slug,
+        name: category.name,
+        active: true,
       },
     });
   }

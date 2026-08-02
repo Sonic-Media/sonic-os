@@ -1,8 +1,18 @@
-import { randomBytes } from "crypto";
 import { cookies } from "next/headers";
 import { ApiError } from "@/lib/api/errors";
 import { prisma } from "@/lib/db";
 import { hashPassword, verifyPassword } from "@/lib/server/password";
+import { recordSecurityAuditInTransaction } from "@/lib/server/security/audit";
+import {
+  getClearSessionCookieOptions,
+  getSessionCookieOptions,
+} from "@/lib/server/security/cookies";
+import {
+  checkRateLimit,
+  getClientRateLimitKey,
+} from "@/lib/server/security/rate-limit";
+import { logSecurityEvent } from "@/lib/server/security/logging";
+import { createSignedSessionToken } from "@/lib/server/security/session-token";
 import {
   SESSION_COOKIE_NAME,
   getSessionFromRequest,
@@ -12,10 +22,7 @@ import type { AuthSession, UserRole } from "@/types/auth";
 import type { Branch } from "@/types";
 
 const SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 14;
-
-function createSessionToken(): string {
-  return randomBytes(32).toString("hex");
-}
+const LOGIN_RATE_LIMIT = { limit: 10, windowMs: 15 * 60 * 1000 };
 
 function mapSession(
   session: {
@@ -43,21 +50,58 @@ function mapSession(
 
 async function setSessionCookie(token: string, expiresAt: Date) {
   const cookieStore = await cookies();
-  cookieStore.set(SESSION_COOKIE_NAME, token, {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
-    path: "/",
-    expires: expiresAt,
-  });
+  cookieStore.set(SESSION_COOKIE_NAME, token, getSessionCookieOptions(expiresAt));
 }
 
 async function clearSessionCookie() {
   const cookieStore = await cookies();
-  cookieStore.delete(SESSION_COOKIE_NAME);
+  cookieStore.set(SESSION_COOKIE_NAME, "", getClearSessionCookieOptions());
 }
 
-export async function login(input: unknown): Promise<AuthSession> {
+async function recordFailedLogin(
+  username: string,
+  reason: string,
+  context?: { userId: string; branchCode: string }
+): Promise<void> {
+  if (!context) {
+    logSecurityEvent("security.login_failed", { username, reason });
+    return;
+  }
+
+  await prisma.authAuditLog.create({
+    data: {
+      userId: context.userId,
+      username,
+      branchCode: context.branchCode,
+      action: "login-failed",
+      detail: reason,
+    },
+  });
+}
+
+export async function login(
+  input: unknown,
+  request?: Request
+): Promise<AuthSession> {
+  if (request) {
+    const rateLimit = checkRateLimit(
+      getClientRateLimitKey(request, "auth:login"),
+      LOGIN_RATE_LIMIT
+    );
+
+    if (!rateLimit.allowed) {
+      logSecurityEvent("security.rate_limit", {
+        scope: "auth:login",
+        retryAfterSeconds: rateLimit.retryAfterSeconds,
+      });
+
+      throw new ApiError("Too many login attempts. Try again later.", {
+        status: 429,
+        code: "rate_limited",
+      });
+    }
+  }
+
   const parsed = loginSchema.parse(input);
   const username = parsed.username.trim().toLowerCase();
 
@@ -70,6 +114,7 @@ export async function login(input: unknown): Promise<AuthSession> {
   });
 
   if (!user) {
+    await recordFailedLogin(username, "Invalid username or password.");
     throw new ApiError("Invalid username or password.", {
       status: 401,
       code: "invalid_credentials",
@@ -78,39 +123,53 @@ export async function login(input: unknown): Promise<AuthSession> {
 
   const valid = await verifyPassword(parsed.password, user.passwordHash);
   if (!valid) {
+    await recordFailedLogin(username, "Invalid username or password.", {
+      userId: user.id,
+      branchCode: user.branch.code,
+    });
     throw new ApiError("Invalid username or password.", {
       status: 401,
       code: "invalid_credentials",
     });
   }
 
-  const token = createSessionToken();
+  const token = createSignedSessionToken();
   const expiresAt = new Date(Date.now() + SESSION_TTL_MS);
 
-  const session = await prisma.session.create({
-    data: {
-      token,
-      userId: user.id,
-      expiresAt,
-    },
-    include: {
-      user: {
-        include: {
-          role: true,
-          branch: true,
+  const session = await prisma.$transaction(async (tx) => {
+    await tx.session.deleteMany({
+      where: { userId: user.id },
+    });
+
+    const created = await tx.session.create({
+      data: {
+        token,
+        userId: user.id,
+        expiresAt,
+      },
+      include: {
+        user: {
+          include: {
+            role: true,
+            branch: true,
+          },
         },
       },
-    },
-  });
+    });
 
-  await prisma.authAuditLog.create({
-    data: {
-      userId: user.id,
-      username: user.username,
-      branchCode: user.branch.code,
-      action: "login",
-      detail: `${user.displayName} signed in`,
-    },
+    await recordSecurityAuditInTransaction(
+      tx,
+      null,
+      "login",
+      `${user.displayName} signed in`,
+      {
+        userId: user.id,
+        username: user.username,
+        branchCode: user.branch.code,
+      }
+    );
+
+    return created;
   });
 
   await setSessionCookie(token, expiresAt);
@@ -133,16 +192,20 @@ export async function logout(): Promise<void> {
     });
 
     if (session) {
-      await prisma.authAuditLog.create({
-        data: {
-          userId: session.userId,
-          username: session.user.username,
-          branchCode: session.user.branch.code,
-          action: "logout",
-          detail: `${session.user.displayName} signed out`,
-        },
+      await prisma.$transaction(async (tx) => {
+        await recordSecurityAuditInTransaction(
+          tx,
+          null,
+          "logout",
+          `${session.user.displayName} signed out`,
+          {
+            userId: session.userId,
+            username: session.user.username,
+            branchCode: session.user.branch.code,
+          }
+        );
+        await tx.session.delete({ where: { token } });
       });
-      await prisma.session.delete({ where: { token } });
     }
   }
 
@@ -176,7 +239,24 @@ export async function lockSession(): Promise<AuthSession> {
   return mapSession(session);
 }
 
-export async function unlockSession(password: string): Promise<AuthSession> {
+export async function unlockSession(
+  password: string,
+  request?: Request
+): Promise<AuthSession> {
+  if (request) {
+    const rateLimit = checkRateLimit(
+      getClientRateLimitKey(request, "auth:unlock"),
+      LOGIN_RATE_LIMIT
+    );
+
+    if (!rateLimit.allowed) {
+      throw new ApiError("Too many unlock attempts. Try again later.", {
+        status: 429,
+        code: "rate_limited",
+      });
+    }
+  }
+
   const cookieStore = await cookies();
   const token = cookieStore.get(SESSION_COOKIE_NAME)?.value;
   if (!token) {
@@ -201,6 +281,14 @@ export async function unlockSession(password: string): Promise<AuthSession> {
 
   const valid = await verifyPassword(password, session.user.passwordHash);
   if (!valid) {
+    await recordFailedLogin(
+      session.user.username,
+      "Incorrect unlock password.",
+      {
+        userId: session.userId,
+        branchCode: session.user.branch.code,
+      }
+    );
     throw new ApiError("Incorrect password.", {
       status: 401,
       code: "invalid_password",

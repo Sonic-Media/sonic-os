@@ -10,6 +10,18 @@ import {
   useState,
 } from "react";
 import { useStock } from "@/context/stock-context";
+import {
+  createCustomerApi,
+  deleteCustomerApi,
+  fetchCustomers,
+  updateCustomerApi,
+} from "@/lib/api/customers";
+import { createSaleApi, fetchSales } from "@/lib/api/sales";
+import {
+  loadRemoteOrLocal,
+  runRemoteOrLocal,
+  shouldUseRemoteDataSource,
+} from "@/lib/data-source/context-api";
 import { formatEntryTime, getTodayISO } from "@/lib/dates";
 import {
   getCustomers,
@@ -51,6 +63,7 @@ import type {
   SalesDashboardMetrics,
   SaleValidationResult,
 } from "@/types/sales";
+import type { StockMovementInput } from "@/types/stock";
 
 interface SalesContextValue {
   sales: Sale[];
@@ -79,7 +92,7 @@ function createValidationResult(
 }
 
 export function SalesProvider({ children }: { children: React.ReactNode }) {
-  const { getProductById, recordMovement } = useStock();
+  const { getProductById, recordMovement, refreshStockFromApi } = useStock();
 
   const [sales, setSales] = useState<Sale[]>(() => getSales());
   const [customers, setCustomers] = useState<Customer[]>(() => getCustomers());
@@ -101,9 +114,31 @@ export function SalesProvider({ children }: { children: React.ReactNode }) {
     hasLoaded.current = true;
 
     queueMicrotask(() => {
-      setSales(getSales());
-      setCustomers(getCustomers());
-      setIsLoaded(true);
+      void (async () => {
+        const loaded = await loadRemoteOrLocal({
+          remote: async () => {
+            const [remoteSales, remoteCustomers] = await Promise.all([
+              fetchSales(),
+              fetchCustomers(),
+            ]);
+
+            return {
+              sales: sortSalesByDate(remoteSales),
+              customers: sortCustomersByName(remoteCustomers),
+            };
+          },
+          local: () => ({
+            sales: getSales(),
+            customers: getCustomers(),
+          }),
+        });
+
+        salesRef.current = normalizeSaleList(loaded.sales);
+        customersRef.current = normalizeCustomerList(loaded.customers);
+        setSales(salesRef.current);
+        setCustomers(customersRef.current);
+        setIsLoaded(true);
+      })();
     });
   }, []);
 
@@ -119,6 +154,22 @@ export function SalesProvider({ children }: { children: React.ReactNode }) {
     saveCustomers(normalized);
     customersRef.current = normalized;
     setCustomers(normalized);
+  }, []);
+
+  const refreshSalesFromApi = useCallback(async () => {
+    if (!(await shouldUseRemoteDataSource())) {
+      return;
+    }
+
+    const [remoteSales, remoteCustomers] = await Promise.all([
+      fetchSales(),
+      fetchCustomers(),
+    ]);
+
+    salesRef.current = sortSalesByDate(remoteSales);
+    customersRef.current = sortCustomersByName(remoteCustomers);
+    setSales(salesRef.current);
+    setCustomers(customersRef.current);
   }, []);
 
   const customerLookup = useMemo(
@@ -143,27 +194,38 @@ export function SalesProvider({ children }: { children: React.ReactNode }) {
         return createValidationResult(errors);
       }
 
-      const now = new Date().toISOString();
-      const customer: Customer = {
-        id: crypto.randomUUID(),
-        name: input.name.trim(),
-        phone: input.phone?.trim() || undefined,
-        email: input.email?.trim() || undefined,
-        notes: input.notes?.trim() || undefined,
-        createdAt: now,
-        updatedAt: now,
-      };
+      void (async () => {
+        await runRemoteOrLocal({
+          remote: async () => {
+            await createCustomerApi(input);
+            await refreshSalesFromApi();
+          },
+          local: () => {
+            const now = new Date().toISOString();
+            const customer: Customer = {
+              id: crypto.randomUUID(),
+              name: input.name.trim(),
+              phone: input.phone?.trim() || undefined,
+              email: input.email?.trim() || undefined,
+              notes: input.notes?.trim() || undefined,
+              createdAt: now,
+              updatedAt: now,
+            };
 
-      persistCustomers([...customersRef.current, customer]);
-      recordStaffAction({
-        action: AUDIT_ACTIONS.CREATE,
-        module: "sales",
-        recordId: customer.id,
-        newValues: pickAuditFields(customer, ["id", "name", "phone", "email"]),
-      });
+            persistCustomers([...customersRef.current, customer]);
+            recordStaffAction({
+              action: AUDIT_ACTIONS.CREATE,
+              module: "sales",
+              recordId: customer.id,
+              newValues: pickAuditFields(customer, ["id", "name", "phone", "email"]),
+            });
+          },
+        });
+      })();
+
       return createValidationResult({});
     },
-    [persistCustomers]
+    [persistCustomers, refreshSalesFromApi]
   );
 
   const updateCustomer = useCallback(
@@ -180,50 +242,60 @@ export function SalesProvider({ children }: { children: React.ReactNode }) {
         return createValidationResult(errors);
       }
 
-      const now = new Date().toISOString();
-      const nextCustomers = customersRef.current.map((customer) =>
-        customer.id === id
-          ? {
-              ...customer,
-              name: input.name.trim(),
-              phone: input.phone?.trim() || undefined,
-              email: input.email?.trim() || undefined,
-              notes: input.notes?.trim() || undefined,
-              updatedAt: now,
-            }
-          : customer
-      );
-
-      persistCustomers(nextCustomers);
-
-      const renamed = existing.name !== input.name.trim();
-      if (renamed) {
-        const nextSales = salesRef.current.map((sale) =>
-          sale.customerId === id
-            ? { ...sale, customerName: input.name.trim() }
-            : sale
-        );
-        persistSales(nextSales);
-      }
-
-      recordStaffAction({
-        action: AUDIT_ACTIONS.EDIT,
-        module: "sales",
-        recordId: existing.id,
-        oldValues: pickAuditFields(existing, ["name", "phone", "email"]),
-        newValues: pickAuditFields(
-          {
-            name: input.name.trim(),
-            phone: input.phone?.trim(),
-            email: input.email?.trim(),
+      void (async () => {
+        await runRemoteOrLocal({
+          remote: async () => {
+            await updateCustomerApi(id, input);
+            await refreshSalesFromApi();
           },
-          ["name", "phone", "email"]
-        ),
-      });
+          local: () => {
+            const now = new Date().toISOString();
+            const nextCustomers = customersRef.current.map((customer) =>
+              customer.id === id
+                ? {
+                    ...customer,
+                    name: input.name.trim(),
+                    phone: input.phone?.trim() || undefined,
+                    email: input.email?.trim() || undefined,
+                    notes: input.notes?.trim() || undefined,
+                    updatedAt: now,
+                  }
+                : customer
+            );
+
+            persistCustomers(nextCustomers);
+
+            const renamed = existing.name !== input.name.trim();
+            if (renamed) {
+              const nextSales = salesRef.current.map((sale) =>
+                sale.customerId === id
+                  ? { ...sale, customerName: input.name.trim() }
+                  : sale
+              );
+              persistSales(nextSales);
+            }
+
+            recordStaffAction({
+              action: AUDIT_ACTIONS.EDIT,
+              module: "sales",
+              recordId: existing.id,
+              oldValues: pickAuditFields(existing, ["name", "phone", "email"]),
+              newValues: pickAuditFields(
+                {
+                  name: input.name.trim(),
+                  phone: input.phone?.trim(),
+                  email: input.email?.trim(),
+                },
+                ["name", "phone", "email"]
+              ),
+            });
+          },
+        });
+      })();
 
       return createValidationResult({});
     },
-    [persistCustomers, persistSales]
+    [persistCustomers, persistSales, refreshSalesFromApi]
   );
 
   const deleteCustomer = useCallback(
@@ -235,22 +307,35 @@ export function SalesProvider({ children }: { children: React.ReactNode }) {
         });
       }
 
-      const existing = customersRef.current.find((customer) => customer.id === id);
-      if (existing) {
-        recordStaffAction({
-          action: AUDIT_ACTIONS.DELETE,
-          module: "sales",
-          recordId: existing.id,
-          oldValues: pickAuditFields(existing, ["id", "name"]),
-        });
-      }
+      void (async () => {
+        await runRemoteOrLocal({
+          remote: async () => {
+            await deleteCustomerApi(id);
+            await refreshSalesFromApi();
+          },
+          local: () => {
+            const existing = customersRef.current.find(
+              (customer) => customer.id === id
+            );
+            if (existing) {
+              recordStaffAction({
+                action: AUDIT_ACTIONS.DELETE,
+                module: "sales",
+                recordId: existing.id,
+                oldValues: pickAuditFields(existing, ["id", "name"]),
+              });
+            }
 
-      persistCustomers(
-        customersRef.current.filter((customer) => customer.id !== id)
-      );
+            persistCustomers(
+              customersRef.current.filter((customer) => customer.id !== id)
+            );
+          },
+        });
+      })();
+
       return createValidationResult({});
     },
-    [persistCustomers]
+    [persistCustomers, refreshSalesFromApi]
   );
 
   const completeSale = useCallback(
@@ -280,20 +365,6 @@ export function SalesProvider({ children }: { children: React.ReactNode }) {
 
       const now = new Date();
       const invoiceNumber = generateInvoiceNumber(salesRef.current, dateISO);
-
-      const movementResult = recordMovement({
-        productId: product.id,
-        movement: "out",
-        quantity: input.quantity,
-        reason: "Sale",
-        notes: `Sale ${invoiceNumber}`,
-        branch: input.branch,
-      });
-
-      if (!movementResult.success) {
-        return movementResult;
-      }
-
       const customer = input.customerId
         ? getCustomerById(input.customerId)
         : undefined;
@@ -332,27 +403,60 @@ export function SalesProvider({ children }: { children: React.ReactNode }) {
         createdAt: now.toISOString(),
       };
 
-      persistSales([sale, ...salesRef.current]);
-      recordStaffAction({
-        staffId: actor?.staffId,
-        staffName: actor?.staffName,
-        role: actor?.role,
+      const movementInput: StockMovementInput = {
+        productId: product.id,
+        movement: "out",
+        quantity: input.quantity,
+        reason: "Sale",
+        notes: `Sale ${invoiceNumber}`,
         branch: input.branch,
-        action: AUDIT_ACTIONS.COMPLETE_SALE,
-        module: "sales",
-        recordId: sale.id,
-        newValues: pickAuditFields(sale, [
-          "id",
-          "invoiceNumber",
-          "total",
-          "profit",
-          "branch",
-          "paymentMethod",
-        ]),
-      });
+      };
+
+      void (async () => {
+        await runRemoteOrLocal({
+          remote: async () => {
+            await createSaleApi(sale);
+            await refreshSalesFromApi();
+            await refreshStockFromApi();
+          },
+          local: () => {
+            const movementResult = recordMovement(movementInput);
+            if (!movementResult.success) {
+              return;
+            }
+
+            persistSales([sale, ...salesRef.current]);
+            recordStaffAction({
+              staffId: actor?.staffId,
+              staffName: actor?.staffName,
+              role: actor?.role,
+              branch: input.branch,
+              action: AUDIT_ACTIONS.COMPLETE_SALE,
+              module: "sales",
+              recordId: sale.id,
+              newValues: pickAuditFields(sale, [
+                "id",
+                "invoiceNumber",
+                "total",
+                "profit",
+                "branch",
+                "paymentMethod",
+              ]),
+            });
+          },
+        });
+      })();
+
       return createValidationResult({});
     },
-    [getProductById, recordMovement, getCustomerById, persistSales]
+    [
+      getProductById,
+      getCustomerById,
+      recordMovement,
+      persistSales,
+      refreshSalesFromApi,
+      refreshStockFromApi,
+    ]
   );
 
   const value = useMemo(

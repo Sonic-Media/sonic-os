@@ -10,6 +10,18 @@ import {
   useState,
 } from "react";
 import { useStock } from "@/context/stock-context";
+import { createPurchaseApi, fetchPurchases } from "@/lib/api/purchases";
+import {
+  createSupplierApi,
+  deleteSupplierApi,
+  fetchSuppliers,
+  updateSupplierApi,
+} from "@/lib/api/suppliers";
+import {
+  loadRemoteOrLocal,
+  runRemoteOrLocal,
+  shouldUseRemoteDataSource,
+} from "@/lib/data-source/context-api";
 import { getTodayISO } from "@/lib/dates";
 import {
   getPurchases,
@@ -86,8 +98,14 @@ export function PurchasingProvider({
 }: {
   children: React.ReactNode;
 }) {
-  const { getProductById, recordMovement, updateProduct, getStockSnapshot, restoreStockSnapshot } =
-    useStock();
+  const {
+    getProductById,
+    recordMovement,
+    updateProduct,
+    getStockSnapshot,
+    restoreStockSnapshot,
+    refreshStockFromApi,
+  } = useStock();
 
   const [purchases, setPurchases] = useState<Purchase[]>(() => getPurchases());
   const [suppliers, setSuppliers] = useState<Supplier[]>(() => getSuppliers());
@@ -109,9 +127,31 @@ export function PurchasingProvider({
     hasLoaded.current = true;
 
     queueMicrotask(() => {
-      setPurchases(getPurchases());
-      setSuppliers(getSuppliers());
-      setIsLoaded(true);
+      void (async () => {
+        const loaded = await loadRemoteOrLocal({
+          remote: async () => {
+            const [remotePurchases, remoteSuppliers] = await Promise.all([
+              fetchPurchases(),
+              fetchSuppliers(),
+            ]);
+
+            return {
+              purchases: sortPurchasesByDate(remotePurchases),
+              suppliers: sortSuppliersByName(remoteSuppliers),
+            };
+          },
+          local: () => ({
+            purchases: getPurchases(),
+            suppliers: getSuppliers(),
+          }),
+        });
+
+        purchasesRef.current = normalizePurchaseList(loaded.purchases);
+        suppliersRef.current = normalizeSupplierList(loaded.suppliers);
+        setPurchases(purchasesRef.current);
+        setSuppliers(suppliersRef.current);
+        setIsLoaded(true);
+      })();
     });
   }, []);
 
@@ -127,6 +167,22 @@ export function PurchasingProvider({
     saveSuppliers(normalized);
     suppliersRef.current = normalized;
     setSuppliers(normalized);
+  }, []);
+
+  const refreshPurchasesFromApi = useCallback(async () => {
+    if (!(await shouldUseRemoteDataSource())) {
+      return;
+    }
+
+    const [remotePurchases, remoteSuppliers] = await Promise.all([
+      fetchPurchases(),
+      fetchSuppliers(),
+    ]);
+
+    purchasesRef.current = sortPurchasesByDate(remotePurchases);
+    suppliersRef.current = sortSuppliersByName(remoteSuppliers);
+    setPurchases(purchasesRef.current);
+    setSuppliers(suppliersRef.current);
   }, []);
 
   const purchaseLookup = useMemo(
@@ -161,28 +217,39 @@ export function PurchasingProvider({
         return createValidationResult(errors);
       }
 
-      const now = new Date().toISOString();
-      const supplier: Supplier = {
-        id: crypto.randomUUID(),
-        name: input.name.trim(),
-        phone: input.phone?.trim() || undefined,
-        email: input.email?.trim() || undefined,
-        address: input.address?.trim() || undefined,
-        notes: input.notes?.trim() || undefined,
-        createdAt: now,
-        updatedAt: now,
-      };
+      void (async () => {
+        await runRemoteOrLocal({
+          remote: async () => {
+            await createSupplierApi(input);
+            await refreshPurchasesFromApi();
+          },
+          local: () => {
+            const now = new Date().toISOString();
+            const supplier: Supplier = {
+              id: crypto.randomUUID(),
+              name: input.name.trim(),
+              phone: input.phone?.trim() || undefined,
+              email: input.email?.trim() || undefined,
+              address: input.address?.trim() || undefined,
+              notes: input.notes?.trim() || undefined,
+              createdAt: now,
+              updatedAt: now,
+            };
 
-      persistSuppliers([...suppliersRef.current, supplier]);
-      recordStaffAction({
-        action: AUDIT_ACTIONS.CREATE,
-        module: "purchasing",
-        recordId: supplier.id,
-        newValues: pickAuditFields(supplier, ["id", "name", "phone", "email"]),
-      });
+            persistSuppliers([...suppliersRef.current, supplier]);
+            recordStaffAction({
+              action: AUDIT_ACTIONS.CREATE,
+              module: "purchasing",
+              recordId: supplier.id,
+              newValues: pickAuditFields(supplier, ["id", "name", "phone", "email"]),
+            });
+          },
+        });
+      })();
+
       return createValidationResult({});
     },
-    [persistSuppliers]
+    [persistSuppliers, refreshPurchasesFromApi]
   );
 
   const updateSupplier = useCallback(
@@ -199,51 +266,61 @@ export function PurchasingProvider({
         return createValidationResult(errors);
       }
 
-      const now = new Date().toISOString();
-      const nextSuppliers = suppliersRef.current.map((supplier) =>
-        supplier.id === id
-          ? {
-              ...supplier,
-              name: input.name.trim(),
-              phone: input.phone?.trim() || undefined,
-              email: input.email?.trim() || undefined,
-              address: input.address?.trim() || undefined,
-              notes: input.notes?.trim() || undefined,
-              updatedAt: now,
-            }
-          : supplier
-      );
-
-      persistSuppliers(nextSuppliers);
-
-      const renamed = existing.name !== input.name.trim();
-      if (renamed) {
-        const nextPurchases = purchasesRef.current.map((purchase) =>
-          purchase.supplierId === id
-            ? { ...purchase, supplierName: input.name.trim() }
-            : purchase
-        );
-        persistPurchases(nextPurchases);
-      }
-
-      recordStaffAction({
-        action: AUDIT_ACTIONS.EDIT,
-        module: "purchasing",
-        recordId: existing.id,
-        oldValues: pickAuditFields(existing, ["name", "phone", "email"]),
-        newValues: pickAuditFields(
-          {
-            name: input.name.trim(),
-            phone: input.phone?.trim(),
-            email: input.email?.trim(),
+      void (async () => {
+        await runRemoteOrLocal({
+          remote: async () => {
+            await updateSupplierApi(id, input);
+            await refreshPurchasesFromApi();
           },
-          ["name", "phone", "email"]
-        ),
-      });
+          local: () => {
+            const now = new Date().toISOString();
+            const nextSuppliers = suppliersRef.current.map((supplier) =>
+              supplier.id === id
+                ? {
+                    ...supplier,
+                    name: input.name.trim(),
+                    phone: input.phone?.trim() || undefined,
+                    email: input.email?.trim() || undefined,
+                    address: input.address?.trim() || undefined,
+                    notes: input.notes?.trim() || undefined,
+                    updatedAt: now,
+                  }
+                : supplier
+            );
+
+            persistSuppliers(nextSuppliers);
+
+            const renamed = existing.name !== input.name.trim();
+            if (renamed) {
+              const nextPurchases = purchasesRef.current.map((purchase) =>
+                purchase.supplierId === id
+                  ? { ...purchase, supplierName: input.name.trim() }
+                  : purchase
+              );
+              persistPurchases(nextPurchases);
+            }
+
+            recordStaffAction({
+              action: AUDIT_ACTIONS.EDIT,
+              module: "purchasing",
+              recordId: existing.id,
+              oldValues: pickAuditFields(existing, ["name", "phone", "email"]),
+              newValues: pickAuditFields(
+                {
+                  name: input.name.trim(),
+                  phone: input.phone?.trim(),
+                  email: input.email?.trim(),
+                },
+                ["name", "phone", "email"]
+              ),
+            });
+          },
+        });
+      })();
 
       return createValidationResult({});
     },
-    [persistSuppliers, persistPurchases]
+    [persistSuppliers, persistPurchases, refreshPurchasesFromApi]
   );
 
   const deleteSupplier = useCallback(
@@ -257,22 +334,35 @@ export function PurchasingProvider({
         });
       }
 
-      const existing = suppliersRef.current.find((supplier) => supplier.id === id);
-      if (existing) {
-        recordStaffAction({
-          action: AUDIT_ACTIONS.DELETE,
-          module: "purchasing",
-          recordId: existing.id,
-          oldValues: pickAuditFields(existing, ["id", "name"]),
-        });
-      }
+      void (async () => {
+        await runRemoteOrLocal({
+          remote: async () => {
+            await deleteSupplierApi(id);
+            await refreshPurchasesFromApi();
+          },
+          local: () => {
+            const existing = suppliersRef.current.find(
+              (supplier) => supplier.id === id
+            );
+            if (existing) {
+              recordStaffAction({
+                action: AUDIT_ACTIONS.DELETE,
+                module: "purchasing",
+                recordId: existing.id,
+                oldValues: pickAuditFields(existing, ["id", "name"]),
+              });
+            }
 
-      persistSuppliers(
-        suppliersRef.current.filter((supplier) => supplier.id !== id)
-      );
+            persistSuppliers(
+              suppliersRef.current.filter((supplier) => supplier.id !== id)
+            );
+          },
+        });
+      })();
+
       return createValidationResult({});
     },
-    [persistSuppliers]
+    [persistSuppliers, refreshPurchasesFromApi]
   );
 
   const completePurchase = useCallback(
@@ -293,11 +383,6 @@ export function PurchasingProvider({
       if (isBranchDayClosed(input.branch, dateISO)) {
         return createValidationResult({ form: DAY_CLOSED_EDIT_MESSAGE });
       }
-
-      const invoiceNumber = generatePurchaseInvoiceNumber(
-        purchasesRef.current,
-        dateISO
-      );
 
       const lineItems = mergedItems.map((item) => {
         const product = getProductById(item.productId);
@@ -326,93 +411,113 @@ export function PurchasingProvider({
         } => entry !== null
       );
 
-      const stockSnapshot = getStockSnapshot();
-
-      for (const { item, product } of resolvedItems) {
-        const movementResult = recordMovement({
-          productId: product.id,
-          movement: "in",
-          quantity: item.quantity,
-          reason: "Purchase",
-          notes: `Purchase ${invoiceNumber}`,
-          date: dateISO,
-          branch: input.branch,
-        });
-
-        if (!movementResult.success) {
-          restoreStockSnapshot(stockSnapshot);
-          return movementResult;
-        }
-
-        const newBuyingPrice = computeWeightedAverageBuyingPrice(
-          product.currentStock,
-          product.buyingPrice,
-          item.quantity,
-          item.buyingPrice
-        );
-
-        const updateResult = updateProduct(product.id, {
-          name: product.name,
-          category: product.category,
-          sku: product.sku,
-          buyingPrice: newBuyingPrice,
-          sellingPrice: product.sellingPrice,
-          minimumStockLevel: product.minimumStockLevel,
-          notes: product.notes,
-        });
-
-        if (!updateResult.success) {
-          restoreStockSnapshot(stockSnapshot);
-          return updateResult;
-        }
-      }
-
       const actor = resolveCurrentStaffAction(input.branch);
-      const legacy = legacyStaffFields(actor);
-      const totalCost = resolvedItems.reduce(
-        (sum, entry) => sum + entry.lineTotal,
-        0
-      );
 
-      const purchase: Purchase = {
-        id: crypto.randomUUID(),
-        invoiceNumber,
-        date: dateISO,
-        supplierId: supplier.id,
-        supplierName: supplier.name,
-        items: resolvedItems.map(({ item, product, lineTotal }) => ({
-          productId: product.id,
-          productName: product.name,
-          quantity: item.quantity,
-          buyingPrice: item.buyingPrice,
-          lineTotal,
-        })),
-        totalCost,
-        branch: input.branch,
-        staffId: legacy.staffId,
-        staffName: legacy.staffName,
-        createdBy: actor,
-        notes: input.notes?.trim() || undefined,
-        createdAt: new Date().toISOString(),
-      };
+      void (async () => {
+        await runRemoteOrLocal({
+          remote: async () => {
+            await createPurchaseApi({
+              ...normalizedInput,
+              createdBy: actor,
+            } as PurchaseInput);
+            await refreshPurchasesFromApi();
+            await refreshStockFromApi();
+          },
+          local: () => {
+            const invoiceNumber = generatePurchaseInvoiceNumber(
+              purchasesRef.current,
+              dateISO
+            );
+            const stockSnapshot = getStockSnapshot();
 
-      persistPurchases([purchase, ...purchasesRef.current]);
-      recordStaffAction({
-        staffId: actor?.staffId,
-        staffName: actor?.staffName,
-        role: actor?.role,
-        branch: input.branch,
-        action: AUDIT_ACTIONS.COMPLETE_PURCHASE,
-        module: "purchasing",
-        recordId: purchase.id,
-        newValues: pickAuditFields(purchase, [
-          "id",
-          "invoiceNumber",
-          "totalCost",
-          "branch",
-          "supplierName",
-        ]),
-      });
+            for (const { item, product } of resolvedItems) {
+              const movementResult = recordMovement({
+                productId: product.id,
+                movement: "in",
+                quantity: item.quantity,
+                reason: "Purchase",
+                notes: `Purchase ${invoiceNumber}`,
+                date: dateISO,
+                branch: input.branch,
+              });
+
+              if (!movementResult.success) {
+                restoreStockSnapshot(stockSnapshot);
+                return;
+              }
+
+              const newBuyingPrice = computeWeightedAverageBuyingPrice(
+                product.currentStock,
+                product.buyingPrice,
+                item.quantity,
+                item.buyingPrice
+              );
+
+              const updateResult = updateProduct(product.id, {
+                name: product.name,
+                category: product.category,
+                sku: product.sku,
+                buyingPrice: newBuyingPrice,
+                sellingPrice: product.sellingPrice,
+                minimumStockLevel: product.minimumStockLevel,
+                notes: product.notes,
+              });
+
+              if (!updateResult.success) {
+                restoreStockSnapshot(stockSnapshot);
+                return;
+              }
+            }
+
+            const legacy = legacyStaffFields(actor);
+            const totalCost = resolvedItems.reduce(
+              (sum, entry) => sum + entry.lineTotal,
+              0
+            );
+
+            const purchase: Purchase = {
+              id: crypto.randomUUID(),
+              invoiceNumber,
+              date: dateISO,
+              supplierId: supplier.id,
+              supplierName: supplier.name,
+              items: resolvedItems.map(({ item, product, lineTotal }) => ({
+                productId: product.id,
+                productName: product.name,
+                quantity: item.quantity,
+                buyingPrice: item.buyingPrice,
+                lineTotal,
+              })),
+              totalCost,
+              branch: input.branch,
+              staffId: legacy.staffId,
+              staffName: legacy.staffName,
+              createdBy: actor,
+              notes: input.notes?.trim() || undefined,
+              createdAt: new Date().toISOString(),
+            };
+
+            persistPurchases([purchase, ...purchasesRef.current]);
+            recordStaffAction({
+              staffId: actor?.staffId,
+              staffName: actor?.staffName,
+              role: actor?.role,
+              branch: input.branch,
+              action: AUDIT_ACTIONS.COMPLETE_PURCHASE,
+              module: "purchasing",
+              recordId: purchase.id,
+              newValues: pickAuditFields(purchase, [
+                "id",
+                "invoiceNumber",
+                "totalCost",
+                "branch",
+                "supplierName",
+              ]),
+            });
+          },
+        });
+      })();
+
       return createValidationResult({});
     },
     [
@@ -423,6 +528,8 @@ export function PurchasingProvider({
       getStockSnapshot,
       restoreStockSnapshot,
       persistPurchases,
+      refreshPurchasesFromApi,
+      refreshStockFromApi,
     ]
   );
 

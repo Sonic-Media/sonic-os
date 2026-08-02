@@ -14,10 +14,10 @@ export function LockScreen() {
   const [password, setPassword] = useState("");
   const [errors, setErrors] = useState<Record<string, string | undefined>>({});
 
-  function handleSubmit(event: React.FormEvent) {
+  async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
 
-    const result = unlock(password);
+    const result = await unlock(password);
     if (!result.success) {
       setErrors(result.errors);
       return;

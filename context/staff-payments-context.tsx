@@ -11,6 +11,12 @@ import {
 } from "react";
 import { useExpensesModule } from "@/context/expenses-module-context";
 import { useStaff } from "@/context/staff-context";
+import { createStaffPaymentApi, fetchStaffPayments } from "@/lib/api/staff-payments";
+import {
+  loadRemoteOrLocal,
+  runRemoteOrLocal,
+  shouldUseRemoteDataSource,
+} from "@/lib/data-source/context-api";
 import { isBranchDayClosed, DAY_CLOSED_EDIT_MESSAGE } from "@/lib/day-closing/storage";
 import { isStaffPaymentExpense } from "@/lib/staff-payments/calculations";
 import { buildLinkedStaffPaymentRecords } from "@/lib/staff-payments/record";
@@ -24,6 +30,7 @@ import { validateStaffPaymentInput } from "@/lib/staff-payments/validation";
 import { AUDIT_ACTIONS } from "@/lib/audit-log/constants";
 import { pickAuditFields } from "@/lib/audit-log/snapshots";
 import { recordStaffAction } from "@/lib/staff/audit";
+import { resolveCurrentStaffAction } from "@/lib/staff/session";
 import type { Branch, Staff } from "@/types";
 import type {
   StaffPaymentInput,
@@ -113,6 +120,7 @@ export function StaffPaymentsProvider({
     isLoaded: expensesLoaded,
     upsertStaffPaymentExpense,
     linkLegacyStaffPaymentExpenses,
+    refreshFromApi: refreshExpensesFromApi,
   } = useExpensesModule();
 
   const [payments, setPayments] = useState<StaffPaymentRecord[]>(() =>
@@ -131,30 +139,58 @@ export function StaffPaymentsProvider({
     hasLoaded.current = true;
 
     queueMicrotask(() => {
-      const stored = getStaffPayments();
-      const migrated = migrateLegacyStaffPaymentExpenses(
-        expenses,
-        stored,
-        getStaffById
-      );
-      const normalized = sortStaffPaymentsByDate(
-        normalizeStaffPaymentList(migrated)
-      );
+      void (async () => {
+        const usingRemote = await shouldUseRemoteDataSource();
+        const loaded = await loadRemoteOrLocal({
+          remote: fetchStaffPayments,
+          local: () => {
+            const stored = getStaffPayments();
+            return migrateLegacyStaffPaymentExpenses(
+              expenses,
+              stored,
+              getStaffById
+            );
+          },
+        });
 
-      if (normalized.length !== stored.length) {
-        saveStaffPayments(normalized);
-      }
+        const normalized = sortStaffPaymentsByDate(
+          normalizeStaffPaymentList(loaded)
+        );
 
-      linkLegacyStaffPaymentExpenses(normalized);
-      paymentsRef.current = normalized;
-      setPayments(normalized);
-      setIsLoaded(true);
+        if (!usingRemote) {
+          const stored = getStaffPayments();
+          if (normalized.length !== stored.length) {
+            saveStaffPayments(normalized);
+          }
+          linkLegacyStaffPaymentExpenses(normalized);
+        }
+
+        paymentsRef.current = normalized;
+        setPayments(normalized);
+        setIsLoaded(true);
+      })();
     });
-  }, [expenses, expensesLoaded, getStaffById, linkLegacyStaffPaymentExpenses]);
+  }, [
+    expenses,
+    expensesLoaded,
+    getStaffById,
+    linkLegacyStaffPaymentExpenses,
+  ]);
 
   const persistPayments = useCallback((next: StaffPaymentRecord[]) => {
     const normalized = sortStaffPaymentsByDate(normalizeStaffPaymentList(next));
     saveStaffPayments(normalized);
+    paymentsRef.current = normalized;
+    setPayments(normalized);
+  }, []);
+
+  const refreshPaymentsFromApi = useCallback(async () => {
+    if (!(await shouldUseRemoteDataSource())) {
+      return;
+    }
+
+    const remote = await fetchStaffPayments();
+    const normalized = sortStaffPaymentsByDate(normalizeStaffPaymentList(remote));
     paymentsRef.current = normalized;
     setPayments(normalized);
   }, []);
@@ -208,35 +244,74 @@ export function StaffPaymentsProvider({
         paymentInput: input,
       });
 
-      const expenseResult = upsertStaffPaymentExpense(expense);
-      if (!expenseResult.success) {
-        return createValidationResult(expenseResult.errors);
-      }
+      void (async () => {
+        await runRemoteOrLocal({
+          remote: async () => {
+            const payer = resolveCurrentStaffAction(staff.branch);
+            const created = await createStaffPaymentApi({
+              ...input,
+              paidBy: payer,
+            });
+            await refreshPaymentsFromApi();
+            await refreshExpensesFromApi();
 
-      persistPayments([payment, ...paymentsRef.current]);
+            recordStaffAction({
+              staffId: payer?.staffId ?? staff.id,
+              staffName: payer?.staffName ?? staff.name,
+              role: payer?.role ?? staff.role,
+              branch: staff.branch,
+              action: AUDIT_ACTIONS.STAFF_PAYMENT,
+              module: "staff",
+              recordId: created.id,
+              newValues: pickAuditFields(created, [
+                "id",
+                "staffName",
+                "amount",
+                "paymentType",
+                "branch",
+                "date",
+              ]),
+            });
+          },
+          local: () => {
+            const expenseResult = upsertStaffPaymentExpense(expense);
+            if (!expenseResult.success) {
+              return;
+            }
 
-      const payer = payment.paidBy;
-      recordStaffAction({
-        staffId: payer?.staffId ?? staff.id,
-        staffName: payer?.staffName ?? staff.name,
-        role: payer?.role ?? staff.role,
-        branch: staff.branch,
-        action: AUDIT_ACTIONS.STAFF_PAYMENT,
-        module: "staff",
-        recordId: payment.id,
-        newValues: pickAuditFields(payment, [
-          "id",
-          "staffName",
-          "amount",
-          "paymentType",
-          "branch",
-          "date",
-        ]),
-      });
+            persistPayments([payment, ...paymentsRef.current]);
+
+            const payer = payment.paidBy;
+            recordStaffAction({
+              staffId: payer?.staffId ?? staff.id,
+              staffName: payer?.staffName ?? staff.name,
+              role: payer?.role ?? staff.role,
+              branch: staff.branch,
+              action: AUDIT_ACTIONS.STAFF_PAYMENT,
+              module: "staff",
+              recordId: payment.id,
+              newValues: pickAuditFields(payment, [
+                "id",
+                "staffName",
+                "amount",
+                "paymentType",
+                "branch",
+                "date",
+              ]),
+            });
+          },
+        });
+      })();
 
       return createValidationResult({}, payment);
     },
-    [getStaffById, persistPayments, upsertStaffPaymentExpense]
+    [
+      getStaffById,
+      persistPayments,
+      refreshExpensesFromApi,
+      refreshPaymentsFromApi,
+      upsertStaffPaymentExpense,
+    ]
   );
 
   const value = useMemo(

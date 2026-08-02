@@ -1,7 +1,9 @@
 "use client";
 
 import { Fragment, useState } from "react";
+import { TablePagination } from "@/components/shared/table-pagination";
 import { Card } from "@/components/shared/ui/card";
+import { usePaginatedList } from "@/hooks/use-paginated-list";
 import { useSettings } from "@/context/settings-context";
 import { getStaffRoleName } from "@/lib/staff/roles";
 import type { AuditLogRecord } from "@/types/audit-log";
@@ -37,6 +39,8 @@ function formatValues(values: Record<string, unknown> | null | undefined): strin
 export function AuditLogTable({ records }: AuditLogTableProps) {
   const { getBranchName } = useSettings();
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const pagination = usePaginatedList(records);
+  const { pageItems } = pagination;
 
   if (records.length === 0) {
     return (
@@ -76,7 +80,7 @@ export function AuditLogTable({ records }: AuditLogTableProps) {
             </tr>
           </thead>
           <tbody>
-            {records.map((record) => {
+            {pageItems.map((record) => {
               const isExpanded = expandedId === record.id;
               const hasChanges =
                 Boolean(record.oldValues) || Boolean(record.newValues);
@@ -157,6 +161,15 @@ export function AuditLogTable({ records }: AuditLogTableProps) {
           </tbody>
         </table>
       </div>
+      <TablePagination
+        page={pagination.page}
+        totalPages={pagination.totalPages}
+        totalItems={pagination.totalItems}
+        startIndex={pagination.startIndex}
+        endIndex={pagination.endIndex}
+        onPrevious={pagination.goToPreviousPage}
+        onNext={pagination.goToNextPage}
+      />
     </Card>
   );
 }

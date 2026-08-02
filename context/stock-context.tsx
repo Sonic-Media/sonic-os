@@ -9,6 +9,20 @@ import {
   useRef,
   useState,
 } from "react";
+import {
+  createStockMovementApi,
+  createStockProductApi,
+  deleteStockProductApi,
+  fetchStockMovements,
+  fetchStockPriceChanges,
+  fetchStockProducts,
+  updateStockProductApi,
+} from "@/lib/api/stock";
+import {
+  loadRemoteOrLocal,
+  runRemoteOrLocal,
+  shouldUseRemoteDataSource,
+} from "@/lib/data-source/context-api";
 import { getTodayISO } from "@/lib/dates";
 import {
   getStockMovements,
@@ -72,6 +86,7 @@ interface StockContextValue {
     products: StockProduct[];
     movements: StockMovement[];
   }) => void;
+  refreshStockFromApi: () => Promise<void>;
 }
 
 const StockContext = createContext<StockContextValue | null>(null);
@@ -120,10 +135,39 @@ export function StockProvider({ children }: { children: React.ReactNode }) {
     hasLoaded.current = true;
 
     queueMicrotask(() => {
-      setProducts(getStockProducts());
-      setMovements(getStockMovements());
-      setPriceChanges(getStockPriceChanges());
-      setIsLoaded(true);
+      void (async () => {
+        const loaded = await loadRemoteOrLocal({
+          remote: async () => {
+            const [remoteProducts, remoteMovements, remotePriceChanges] =
+              await Promise.all([
+                fetchStockProducts(),
+                fetchStockMovements(),
+                fetchStockPriceChanges(),
+              ]);
+
+            return {
+              products: sortProductsByName(remoteProducts),
+              movements: sortMovementsByDate(remoteMovements),
+              priceChanges: sortPriceChangesByDate(remotePriceChanges),
+            };
+          },
+          local: () => ({
+            products: getStockProducts(),
+            movements: getStockMovements(),
+            priceChanges: getStockPriceChanges(),
+          }),
+        });
+
+        productsRef.current = normalizeStockProductList(loaded.products);
+        movementsRef.current = normalizeStockMovementList(loaded.movements);
+        priceChangesRef.current = normalizeStockPriceChangeList(
+          loaded.priceChanges
+        );
+        setProducts(productsRef.current);
+        setMovements(movementsRef.current);
+        setPriceChanges(priceChangesRef.current);
+        setIsLoaded(true);
+      })();
     });
   }, []);
 
@@ -148,6 +192,26 @@ export function StockProvider({ children }: { children: React.ReactNode }) {
     saveStockPriceChanges(normalized);
     priceChangesRef.current = normalized;
     setPriceChanges(normalized);
+  }, []);
+
+  const refreshStockFromApi = useCallback(async () => {
+    if (!(await shouldUseRemoteDataSource())) {
+      return;
+    }
+
+    const [remoteProducts, remoteMovements, remotePriceChanges] =
+      await Promise.all([
+        fetchStockProducts(),
+        fetchStockMovements(),
+        fetchStockPriceChanges(),
+      ]);
+
+    productsRef.current = sortProductsByName(remoteProducts);
+    movementsRef.current = sortMovementsByDate(remoteMovements);
+    priceChangesRef.current = sortPriceChangesByDate(remotePriceChanges);
+    setProducts(productsRef.current);
+    setMovements(movementsRef.current);
+    setPriceChanges(priceChangesRef.current);
   }, []);
 
   const lookup = useMemo(
@@ -188,28 +252,34 @@ export function StockProvider({ children }: { children: React.ReactNode }) {
         updatedAt: now,
       };
 
-      const nextProducts = sortProductsByName([
-        ...productsRef.current,
-        product,
-      ]);
-      persistProducts(nextProducts);
+      void (async () => {
+        await runRemoteOrLocal({
+          remote: async () => {
+            await createStockProductApi(input);
+            await refreshStockFromApi();
+          },
+          local: () => {
+            persistProducts([...productsRef.current, product]);
 
-      recordStaffAction({
-        action: AUDIT_ACTIONS.CREATE,
-        module: "stock",
-        recordId: product.id,
-        newValues: pickAuditFields(product, [
-          "id",
-          "name",
-          "category",
-          "buyingPrice",
-          "sellingPrice",
-        ]),
-      });
+            recordStaffAction({
+              action: AUDIT_ACTIONS.CREATE,
+              module: "stock",
+              recordId: product.id,
+              newValues: pickAuditFields(product, [
+                "id",
+                "name",
+                "category",
+                "buyingPrice",
+                "sellingPrice",
+              ]),
+            });
+          },
+        });
+      })();
 
       return createValidationResult({}, product);
     },
-    [persistProducts, persistMovements]
+    [persistProducts, refreshStockFromApi]
   );
 
   const updateProduct = useCallback(
@@ -224,102 +294,130 @@ export function StockProvider({ children }: { children: React.ReactNode }) {
         return createValidationResult(errors);
       }
 
-      const now = new Date().toISOString();
-      const nextProducts = productsRef.current.map((product) =>
-        product.id === id
-          ? {
-              ...product,
-              name: input.name.trim(),
-              category: input.category,
-              sku: input.sku?.trim() || undefined,
-              buyingPrice: input.buyingPrice,
-              sellingPrice: input.sellingPrice,
-              minimumStockLevel: input.minimumStockLevel,
-              notes: input.notes?.trim() || undefined,
-              updatedAt: now,
-            }
-          : product
-      );
-
-      persistProducts(nextProducts);
-
-      const buyingPriceChanged = existing.buyingPrice !== input.buyingPrice;
-      const sellingPriceChanged = existing.sellingPrice !== input.sellingPrice;
-
-      if (buyingPriceChanged || sellingPriceChanged) {
-        const priceChange: StockPriceChange = {
-          id: crypto.randomUUID(),
-          productId: id,
-          previousBuyingPrice: existing.buyingPrice,
-          previousSellingPrice: existing.sellingPrice,
-          newBuyingPrice: input.buyingPrice,
-          newSellingPrice: input.sellingPrice,
-          createdAt: now,
-        };
-        persistPriceChanges([priceChange, ...priceChangesRef.current]);
-      }
-
-      const renamed = existing.name !== input.name.trim();
-      if (renamed) {
-        const nextMovements = movementsRef.current.map((movement) =>
-          movement.productId === id
-            ? { ...movement, productName: input.name.trim() }
-            : movement
-        );
-        persistMovements(nextMovements);
-      }
-
-      recordStaffAction({
-        action: AUDIT_ACTIONS.EDIT,
-        module: "stock",
-        recordId: id,
-        oldValues: pickAuditFields(existing, [
-          "name",
-          "category",
-          "buyingPrice",
-          "sellingPrice",
-          "currentStock",
-        ]),
-        newValues: pickAuditFields(
-          {
-            name: input.name.trim(),
-            category: input.category,
-            buyingPrice: input.buyingPrice,
-            sellingPrice: input.sellingPrice,
-            currentStock: existing.currentStock,
+      void (async () => {
+        await runRemoteOrLocal({
+          remote: async () => {
+            await updateStockProductApi(id, input);
+            await refreshStockFromApi();
           },
-          ["name", "category", "buyingPrice", "sellingPrice", "currentStock"]
-        ),
-      });
+          local: () => {
+            const now = new Date().toISOString();
+            const nextProducts = productsRef.current.map((product) =>
+              product.id === id
+                ? {
+                    ...product,
+                    name: input.name.trim(),
+                    category: input.category,
+                    sku: input.sku?.trim() || undefined,
+                    buyingPrice: input.buyingPrice,
+                    sellingPrice: input.sellingPrice,
+                    minimumStockLevel: input.minimumStockLevel,
+                    notes: input.notes?.trim() || undefined,
+                    updatedAt: now,
+                  }
+                : product
+            );
+
+            persistProducts(nextProducts);
+
+            const buyingPriceChanged =
+              existing.buyingPrice !== input.buyingPrice;
+            const sellingPriceChanged =
+              existing.sellingPrice !== input.sellingPrice;
+
+            if (buyingPriceChanged || sellingPriceChanged) {
+              const priceChange: StockPriceChange = {
+                id: crypto.randomUUID(),
+                productId: id,
+                previousBuyingPrice: existing.buyingPrice,
+                previousSellingPrice: existing.sellingPrice,
+                newBuyingPrice: input.buyingPrice,
+                newSellingPrice: input.sellingPrice,
+                createdAt: now,
+              };
+              persistPriceChanges([priceChange, ...priceChangesRef.current]);
+            }
+
+            const renamed = existing.name !== input.name.trim();
+            if (renamed) {
+              const nextMovements = movementsRef.current.map((movement) =>
+                movement.productId === id
+                  ? { ...movement, productName: input.name.trim() }
+                  : movement
+              );
+              persistMovements(nextMovements);
+            }
+
+            recordStaffAction({
+              action: AUDIT_ACTIONS.EDIT,
+              module: "stock",
+              recordId: id,
+              oldValues: pickAuditFields(existing, [
+                "name",
+                "category",
+                "buyingPrice",
+                "sellingPrice",
+                "currentStock",
+              ]),
+              newValues: pickAuditFields(
+                {
+                  name: input.name.trim(),
+                  category: input.category,
+                  buyingPrice: input.buyingPrice,
+                  sellingPrice: input.sellingPrice,
+                  currentStock: existing.currentStock,
+                },
+                ["name", "category", "buyingPrice", "sellingPrice", "currentStock"]
+              ),
+            });
+          },
+        });
+      })();
 
       return createValidationResult({});
     },
-    [persistProducts, persistMovements, persistPriceChanges]
+    [persistProducts, persistMovements, persistPriceChanges, refreshStockFromApi]
   );
 
   const deleteProduct = useCallback(
     (id: string) => {
-      const existing = productsRef.current.find((product) => product.id === id);
-      if (existing) {
-        recordStaffAction({
-          action: AUDIT_ACTIONS.DELETE,
-          module: "stock",
-          recordId: existing.id,
-          oldValues: pickAuditFields(existing, ["id", "name", "currentStock"]),
-        });
-      }
+      void (async () => {
+        await runRemoteOrLocal({
+          remote: async () => {
+            await deleteStockProductApi(id);
+            await refreshStockFromApi();
+          },
+          local: () => {
+            const existing = productsRef.current.find(
+              (product) => product.id === id
+            );
+            if (existing) {
+              recordStaffAction({
+                action: AUDIT_ACTIONS.DELETE,
+                module: "stock",
+                recordId: existing.id,
+                oldValues: pickAuditFields(existing, [
+                  "id",
+                  "name",
+                  "currentStock",
+                ]),
+              });
+            }
 
-      persistProducts(
-        productsRef.current.filter((product) => product.id !== id)
-      );
-      persistMovements(
-        movementsRef.current.filter((movement) => movement.productId !== id)
-      );
-      persistPriceChanges(
-        priceChangesRef.current.filter((change) => change.productId !== id)
-      );
+            persistProducts(
+              productsRef.current.filter((product) => product.id !== id)
+            );
+            persistMovements(
+              movementsRef.current.filter((movement) => movement.productId !== id)
+            );
+            persistPriceChanges(
+              priceChangesRef.current.filter((change) => change.productId !== id)
+            );
+          },
+        });
+      })();
     },
-    [persistProducts, persistMovements, persistPriceChanges]
+    [persistProducts, persistMovements, persistPriceChanges, refreshStockFromApi]
   );
 
   const recordMovement = useCallback(
@@ -342,70 +440,82 @@ export function StockProvider({ children }: { children: React.ReactNode }) {
         return createValidationResult({ form: DAY_CLOSED_EDIT_MESSAGE });
       }
 
-      const now = new Date().toISOString();
-      const actor = resolveCurrentStaffAction(input.branch);
-      const nextStock =
-        input.movement === "in"
-          ? product.currentStock + input.quantity
-          : product.currentStock - input.quantity;
+      void (async () => {
+        await runRemoteOrLocal({
+          remote: async () => {
+            const actor = resolveCurrentStaffAction(input.branch);
+            await createStockMovementApi({
+              ...input,
+              createdBy: actor,
+            } as StockMovementInput);
+            await refreshStockFromApi();
+          },
+          local: () => {
+            const now = new Date().toISOString();
+            const actor = resolveCurrentStaffAction(input.branch);
+            const nextStock =
+              input.movement === "in"
+                ? product.currentStock + input.quantity
+                : product.currentStock - input.quantity;
 
-      if (nextStock < 0) {
-        return createValidationResult({
-          quantity: "Stock cannot go below zero.",
-        });
-      }
-
-      const movement: StockMovement = {
-        id: crypto.randomUUID(),
-        date: input.date ?? getTodayISO(),
-        productId: product.id,
-        productName: product.name,
-        movement: input.movement,
-        quantity: input.quantity,
-        reason: input.reason.trim(),
-        branch: input.branch,
-        notes: input.notes?.trim() || undefined,
-        createdBy: actor,
-        createdAt: now,
-      };
-
-      const nextProducts = productsRef.current.map((item) =>
-        item.id === product.id
-          ? {
-              ...item,
-              currentStock: nextStock,
-              updatedAt: now,
+            if (nextStock < 0) {
+              return;
             }
-          : item
-      );
 
-      persistProducts(nextProducts);
-      persistMovements([movement, ...movementsRef.current]);
+            const movement: StockMovement = {
+              id: crypto.randomUUID(),
+              date: input.date ?? getTodayISO(),
+              productId: product.id,
+              productName: product.name,
+              movement: input.movement,
+              quantity: input.quantity,
+              reason: input.reason.trim(),
+              branch: input.branch,
+              notes: input.notes?.trim() || undefined,
+              createdBy: actor,
+              createdAt: now,
+            };
 
-      recordStaffAction({
-        staffId: actor?.staffId,
-        staffName: actor?.staffName,
-        role: actor?.role,
-        action:
-          input.movement === "in"
-            ? AUDIT_ACTIONS.STOCK_IN
-            : AUDIT_ACTIONS.STOCK_OUT,
-        module: "stock",
-        recordId: movement.id,
-        branch: input.branch,
-        newValues: pickAuditFields(movement, [
-          "id",
-          "productName",
-          "movement",
-          "quantity",
-          "reason",
-          "branch",
-        ]),
-      });
+            const nextProducts = productsRef.current.map((item) =>
+              item.id === product.id
+                ? {
+                    ...item,
+                    currentStock: nextStock,
+                    updatedAt: now,
+                  }
+                : item
+            );
+
+            persistProducts(nextProducts);
+            persistMovements([movement, ...movementsRef.current]);
+
+            recordStaffAction({
+              staffId: actor?.staffId,
+              staffName: actor?.staffName,
+              role: actor?.role,
+              action:
+                input.movement === "in"
+                  ? AUDIT_ACTIONS.STOCK_IN
+                  : AUDIT_ACTIONS.STOCK_OUT,
+              module: "stock",
+              recordId: movement.id,
+              branch: input.branch,
+              newValues: pickAuditFields(movement, [
+                "id",
+                "productName",
+                "movement",
+                "quantity",
+                "reason",
+                "branch",
+              ]),
+            });
+          },
+        });
+      })();
 
       return createValidationResult({});
     },
-    [persistProducts, persistMovements]
+    [persistProducts, persistMovements, refreshStockFromApi]
   );
 
   const getStockSnapshot = useCallback(
@@ -438,6 +548,7 @@ export function StockProvider({ children }: { children: React.ReactNode }) {
       recordMovement,
       getStockSnapshot,
       restoreStockSnapshot,
+      refreshStockFromApi,
     }),
     [
       products,
@@ -452,6 +563,7 @@ export function StockProvider({ children }: { children: React.ReactNode }) {
       recordMovement,
       getStockSnapshot,
       restoreStockSnapshot,
+      refreshStockFromApi,
     ]
   );
 

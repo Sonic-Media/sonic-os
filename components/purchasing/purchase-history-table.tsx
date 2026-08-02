@@ -1,6 +1,10 @@
+"use client";
+
 import Link from "next/link";
 import { PurchasingEmptyState } from "@/components/purchasing/purchasing-empty-state";
+import { TablePagination } from "@/components/shared/table-pagination";
 import { Card } from "@/components/shared/ui/card";
+import { usePaginatedList } from "@/hooks/use-paginated-list";
 import { formatCurrency } from "@/lib/format";
 import { formatPurchaseItemsSummary } from "@/lib/purchasing/format";
 import type { Purchase } from "@/types/purchasing";
@@ -23,6 +27,9 @@ function formatPurchaseDate(date: string): string {
 export function PurchaseHistoryTable({
   purchases,
 }: PurchaseHistoryTableProps) {
+  const pagination = usePaginatedList(purchases);
+  const { pageItems } = pagination;
+
   if (purchases.length === 0) {
     return <PurchasingEmptyState message="No purchases match your filters." />;
   }
@@ -54,7 +61,7 @@ export function PurchaseHistoryTable({
             </tr>
           </thead>
           <tbody>
-            {purchases.map((purchase) => (
+            {pageItems.map((purchase) => (
               <tr
                 key={purchase.id}
                 className="border-b border-zinc-800/60 last:border-b-0 transition-colors hover:bg-zinc-900/40"
@@ -87,6 +94,15 @@ export function PurchaseHistoryTable({
           </tbody>
         </table>
       </div>
+      <TablePagination
+        page={pagination.page}
+        totalPages={pagination.totalPages}
+        totalItems={pagination.totalItems}
+        startIndex={pagination.startIndex}
+        endIndex={pagination.endIndex}
+        onPrevious={pagination.goToPreviousPage}
+        onNext={pagination.goToNextPage}
+      />
     </Card>
   );
 }

@@ -1,10 +1,15 @@
+"use client";
+
 import Link from "next/link";
+import { useMemo } from "react";
 import { StockEmptyState } from "@/components/stock/stock-empty-state";
 import { StockStatusBadge } from "@/components/stock/stock-status-badge";
+import { TablePagination } from "@/components/shared/table-pagination";
 import { Card } from "@/components/shared/ui/card";
 import { Button } from "@/components/shared/ui/button";
+import { usePaginatedList } from "@/hooks/use-paginated-list";
 import { formatCurrency } from "@/lib/format";
-import { computeBranchNetQuantity } from "@/lib/stock/calculations";
+import { buildBranchStockMatrix } from "@/lib/stock/calculations";
 import { getStockCategoryLabel } from "@/lib/stock/constants";
 import { cn } from "@/lib/utils";
 import type { BranchEntity } from "@/types/branch";
@@ -25,6 +30,13 @@ export function StockProductsTable({
   onEdit,
   onDelete,
 }: StockProductsTableProps) {
+  const branchStockMatrix = useMemo(
+    () => buildBranchStockMatrix(branches, products, movements),
+    [branches, products, movements]
+  );
+  const pagination = usePaginatedList(products);
+  const { pageItems } = pagination;
+
   if (products.length === 0) {
     return <StockEmptyState message="No products yet." />;
   }
@@ -74,11 +86,11 @@ export function StockProductsTable({
             </tr>
           </thead>
           <tbody>
-            {products.map((product) => {
+            {pageItems.map((product) => {
               const profitPerItem = product.sellingPrice - product.buyingPrice;
-              const branchStock = branches.map((branch) =>
-                computeBranchNetQuantity(branch.code, product.id, movements)
-              );
+              const branchStock =
+                branchStockMatrix.get(product.id) ??
+                branches.map(() => 0);
 
               return (
                 <tr
@@ -161,6 +173,15 @@ export function StockProductsTable({
           </tbody>
         </table>
       </div>
+      <TablePagination
+        page={pagination.page}
+        totalPages={pagination.totalPages}
+        totalItems={pagination.totalItems}
+        startIndex={pagination.startIndex}
+        endIndex={pagination.endIndex}
+        onPrevious={pagination.goToPreviousPage}
+        onNext={pagination.goToNextPage}
+      />
     </Card>
   );
 }

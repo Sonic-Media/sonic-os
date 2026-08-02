@@ -45,12 +45,12 @@ export function UserDialog({ mode, user, onClose }: UserDialogProps) {
     [staff, user?.id]
   );
 
-  function handleSubmit(event: React.FormEvent) {
+  async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
 
     const result =
       mode === "add"
-        ? addUser({
+        ? await addUser({
             username,
             displayName,
             role,

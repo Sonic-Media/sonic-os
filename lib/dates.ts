@@ -69,6 +69,48 @@ export function getPreviousPeriodReference(
   }
 }
 
+export interface PeriodDateBounds {
+  start: string;
+  end: string;
+}
+
+export function getPeriodDateBounds(
+  period: ReportPeriod,
+  ref = new Date()
+): PeriodDateBounds {
+  const refDate = new Date(ref);
+
+  switch (period) {
+    case "daily":
+      return {
+        start: formatDateISO(refDate),
+        end: formatDateISO(refDate),
+      };
+    case "weekly": {
+      return {
+        start: formatDateISO(startOfWeek(refDate)),
+        end: formatDateISO(endOfWeek(refDate)),
+      };
+    }
+    case "monthly": {
+      const start = new Date(refDate.getFullYear(), refDate.getMonth(), 1);
+      const end = new Date(refDate.getFullYear(), refDate.getMonth() + 1, 0);
+      return {
+        start: formatDateISO(start),
+        end: formatDateISO(end),
+      };
+    }
+    case "yearly": {
+      const start = new Date(refDate.getFullYear(), 0, 1);
+      const end = new Date(refDate.getFullYear(), 11, 31);
+      return {
+        start: formatDateISO(start),
+        end: formatDateISO(end),
+      };
+    }
+  }
+}
+
 export function isInPeriod(
   dateStr: string,
   period: ReportPeriod,

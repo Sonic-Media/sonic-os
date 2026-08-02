@@ -242,7 +242,7 @@ export function StaffSection() {
     [activeBranches]
   );
 
-  function handleAddStaff() {
+  async function handleAddStaff() {
     setErrors({});
 
     const trimmedName = name.trim();
@@ -274,7 +274,7 @@ export function StaffSection() {
       return;
     }
 
-    const staffResult = addStaff({
+    const staffResult = await addStaff({
       name: trimmedName,
       branch,
       role,
@@ -288,7 +288,7 @@ export function StaffSection() {
     }
 
     if (loginEnabled) {
-      const userResult = addUser({
+      const userResult = await addUser({
         username,
         displayName: trimmedName,
         role,

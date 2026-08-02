@@ -2,11 +2,11 @@
 
 import { useMemo, useState } from "react";
 import { aggregateEntries } from "@/lib/aggregations";
+import { useActiveBranch } from "@/context/active-branch-context";
+import { useEntriesContext } from "@/context/entries-context";
 import { filterEntriesByPeriod } from "@/lib/entry-helpers";
 import { getPeriodLabel } from "@/lib/format";
 import { filterByBranchField } from "@/lib/active-branch/filters";
-import { useActiveBranch } from "@/context/active-branch-context";
-import { useEntriesContext } from "@/context/entries-context";
 import type { ReportPeriod } from "@/types";
 
 export function useReports() {

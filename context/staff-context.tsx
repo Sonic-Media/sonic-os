@@ -10,6 +10,19 @@ import {
   useState,
 } from "react";
 import {
+  createStaffApi,
+  deleteStaffApi,
+  fetchStaff,
+  linkStaffUserApi,
+  unlinkStaffUserApi,
+  updateStaffApi,
+} from "@/lib/api/staff";
+import {
+  loadRemoteOrLocal,
+  runRemoteOrLocal,
+  shouldUseRemoteDataSource,
+} from "@/lib/data-source/context-api";
+import {
   buildStaffLookup,
   getActiveStaffForBranch,
   getStaffList,
@@ -64,7 +77,7 @@ interface StaffContextValue {
   getStaffById: (id: string) => Staff | undefined;
   getActiveStaffForBranch: (branch: Branch) => Staff[];
   getStaffDisplayName: (staffId: string, fallbackName?: string) => string;
-  addStaff: (input: StaffInput) => StaffValidationResult;
+  addStaff: (input: StaffInput) => Promise<StaffValidationResult>;
   updateStaff: (
     id: string,
     patch: Partial<
@@ -171,14 +184,34 @@ export function StaffProvider({ children }: { children: React.ReactNode }) {
     hasLoaded.current = true;
 
     queueMicrotask(() => {
-      setStaff(getStaffList());
-      setIsLoaded(true);
+      void (async () => {
+        const loaded = await loadRemoteOrLocal({
+          remote: () => fetchStaff(),
+          local: () => getStaffList(),
+        });
+
+        const normalized = normalizeStaffList(loaded);
+        staffRef.current = normalized;
+        setStaff(normalized);
+        setIsLoaded(true);
+      })();
     });
   }, []);
 
   const persistStaff = useCallback((next: Staff[]) => {
     const normalized = normalizeStaffList(next);
     saveStaffList(normalized);
+    staffRef.current = normalized;
+    setStaff(normalized);
+  }, []);
+
+  const refreshStaffFromApi = useCallback(async () => {
+    if (!(await shouldUseRemoteDataSource())) {
+      return;
+    }
+
+    const remoteStaff = await fetchStaff();
+    const normalized = normalizeStaffList(remoteStaff);
     staffRef.current = normalized;
     setStaff(normalized);
   }, []);
@@ -207,7 +240,7 @@ export function StaffProvider({ children }: { children: React.ReactNode }) {
   );
 
   const addStaff = useCallback(
-    (input: StaffInput): StaffValidationResult => {
+    async (input: StaffInput): Promise<StaffValidationResult> => {
       const errors: Record<string, string | undefined> = {};
       const name = input.name.trim();
 
@@ -227,52 +260,67 @@ export function StaffProvider({ children }: { children: React.ReactNode }) {
         return createStaffValidationResult(errors);
       }
 
-      const status: StaffStatus = input.status ?? "active";
-      const member: Staff = {
-        id: crypto.randomUUID(),
-        name,
-        username: input.username?.trim() || undefined,
-        branch: input.branch,
-        role: input.role as StaffRoleId,
-        loginEnabled: input.loginEnabled === true,
-        status,
-        active: status === "active",
-        phone: input.phone?.trim() || undefined,
-        email: input.email?.trim() || undefined,
-        dailyWage:
-          typeof input.dailyWage === "number" && input.dailyWage >= 0
-            ? input.dailyWage
-            : undefined,
-        monthlySalary:
-          typeof input.monthlySalary === "number" && input.monthlySalary >= 0
-            ? input.monthlySalary
-            : undefined,
-        dateJoined: input.dateJoined?.trim() || getTodayISO(),
-        emergencyContact: input.emergencyContact?.trim() || undefined,
-        notes: input.notes?.trim() || undefined,
-      };
+      try {
+        const member = await runRemoteOrLocal({
+          remote: () => createStaffApi(input),
+          local: () => {
+            const status: StaffStatus = input.status ?? "active";
+            const created: Staff = {
+              id: crypto.randomUUID(),
+              name,
+              username: input.username?.trim() || undefined,
+              branch: input.branch,
+              role: input.role as StaffRoleId,
+              loginEnabled: input.loginEnabled === true,
+              status,
+              active: status === "active",
+              phone: input.phone?.trim() || undefined,
+              email: input.email?.trim() || undefined,
+              dailyWage:
+                typeof input.dailyWage === "number" && input.dailyWage >= 0
+                  ? input.dailyWage
+                  : undefined,
+              monthlySalary:
+                typeof input.monthlySalary === "number" && input.monthlySalary >= 0
+                  ? input.monthlySalary
+                  : undefined,
+              dateJoined: input.dateJoined?.trim() || getTodayISO(),
+              emergencyContact: input.emergencyContact?.trim() || undefined,
+              notes: input.notes?.trim() || undefined,
+            };
 
-      persistStaff(sortStaffByName([...staffRef.current, member]));
-      recordStaffAction({
-        staffId: member.id,
-        staffName: member.name,
-        role: member.role,
-        branch: member.branch,
-        action: AUDIT_ACTIONS.CREATE,
-        module: "staff",
-        recordId: member.id,
-        newValues: pickAuditFields(member, [
-          "id",
-          "name",
-          "branch",
-          "role",
-          "status",
-        ]),
-      });
+            persistStaff(sortStaffByName([...staffRef.current, created]));
+            recordStaffAction({
+              staffId: created.id,
+              staffName: created.name,
+              role: created.role,
+              branch: created.branch,
+              action: AUDIT_ACTIONS.CREATE,
+              module: "staff",
+              recordId: created.id,
+              newValues: pickAuditFields(created, [
+                "id",
+                "name",
+                "branch",
+                "role",
+                "status",
+              ]),
+            });
 
-      return createStaffValidationResult({}, member);
+            return created;
+          },
+        });
+
+        if (await shouldUseRemoteDataSource()) {
+          await refreshStaffFromApi();
+        }
+
+        return createStaffValidationResult({}, member);
+      } catch {
+        return createStaffValidationResult({ form: "Failed to create staff member." });
+      }
     },
-    [persistStaff]
+    [persistStaff, refreshStaffFromApi]
   );
 
   const updateStaff = useCallback(
@@ -301,105 +349,138 @@ export function StaffProvider({ children }: { children: React.ReactNode }) {
       const existing = staffRef.current.find((member) => member.id === id);
       const normalizedPatch = normalizeStaffPatch(patch);
 
-      persistStaff(
-        sortStaffByName(
-          staffRef.current.map((member) =>
-            member.id === id
-              ? {
-                  ...member,
-                  ...normalizedPatch,
-                  name:
-                    typeof normalizedPatch.name === "string"
-                      ? normalizedPatch.name.trim() || member.name
-                      : member.name,
-                }
-              : member
-          )
-        )
-      );
+      void (async () => {
+        await runRemoteOrLocal({
+          remote: async () => {
+            await updateStaffApi(id, normalizedPatch);
+            await refreshStaffFromApi();
+          },
+          local: () => {
+            persistStaff(
+              sortStaffByName(
+                staffRef.current.map((member) =>
+                  member.id === id
+                    ? {
+                        ...member,
+                        ...normalizedPatch,
+                        name:
+                          typeof normalizedPatch.name === "string"
+                            ? normalizedPatch.name.trim() || member.name
+                            : member.name,
+                      }
+                    : member
+                )
+              )
+            );
 
-      if (existing) {
-        const updated = {
-          ...existing,
-          ...normalizedPatch,
-          name:
-            typeof normalizedPatch.name === "string"
-              ? normalizedPatch.name.trim() || existing.name
-              : existing.name,
-        };
+            if (existing) {
+              const updated = {
+                ...existing,
+                ...normalizedPatch,
+                name:
+                  typeof normalizedPatch.name === "string"
+                    ? normalizedPatch.name.trim() || existing.name
+                    : existing.name,
+              };
 
-        let action: string = AUDIT_ACTIONS.EDIT;
-        if (
-          normalizedPatch.role &&
-          normalizedPatch.role !== existing.role
-        ) {
-          action = AUDIT_ACTIONS.ROLE_CHANGED;
-        } else if (
-          normalizedPatch.status === "inactive" &&
-          existing.status !== "inactive"
-        ) {
-          action = AUDIT_ACTIONS.DEACTIVATE;
-        } else if (
-          normalizedPatch.status === "active" &&
-          existing.status !== "active"
-        ) {
-          action = AUDIT_ACTIONS.ACTIVATE;
-        }
+              let action: string = AUDIT_ACTIONS.EDIT;
+              if (
+                normalizedPatch.role &&
+                normalizedPatch.role !== existing.role
+              ) {
+                action = AUDIT_ACTIONS.ROLE_CHANGED;
+              } else if (
+                normalizedPatch.status === "inactive" &&
+                existing.status !== "inactive"
+              ) {
+                action = AUDIT_ACTIONS.DEACTIVATE;
+              } else if (
+                normalizedPatch.status === "active" &&
+                existing.status !== "active"
+              ) {
+                action = AUDIT_ACTIONS.ACTIVATE;
+              }
 
-        recordStaffAction({
-          staffId: existing.id,
-          staffName: existing.name,
-          role: existing.role,
-          branch: existing.branch,
-          action,
-          module: "staff",
-          recordId: existing.id,
-          oldValues: pickAuditFields(existing, [
-            "name",
-            "branch",
-            "role",
-            "status",
-            "dailyWage",
-          ]),
-          newValues: pickAuditFields(updated, [
-            "name",
-            "branch",
-            "role",
-            "status",
-            "dailyWage",
-          ]),
+              recordStaffAction({
+                staffId: existing.id,
+                staffName: existing.name,
+                role: existing.role,
+                branch: existing.branch,
+                action,
+                module: "staff",
+                recordId: existing.id,
+                oldValues: pickAuditFields(existing, [
+                  "name",
+                  "branch",
+                  "role",
+                  "status",
+                  "dailyWage",
+                ]),
+                newValues: pickAuditFields(updated, [
+                  "name",
+                  "branch",
+                  "role",
+                  "status",
+                  "dailyWage",
+                ]),
+              });
+            }
+          },
         });
-      }
+      })();
     },
-    [persistStaff]
+    [persistStaff, refreshStaffFromApi]
   );
 
   const linkStaffAccount = useCallback(
     (staffId: string, userId: string, username?: string) => {
-      const next = linkStaffToUser(staffId, userId, username);
-      staffRef.current = next;
-      setStaff(next);
-      const member = next.find((item) => item.id === staffId);
-      if (member) {
-        recordStaffAction({
-          staffId: member.id,
-          staffName: member.name,
-          role: member.role,
-          branch: member.branch,
-          action: "Login Linked",
-          module: "staff",
-          detail: username,
+      void (async () => {
+        await runRemoteOrLocal({
+          remote: async () => {
+            await linkStaffUserApi(staffId, { userId, username });
+            await refreshStaffFromApi();
+          },
+          local: () => {
+            const next = linkStaffToUser(staffId, userId, username);
+            staffRef.current = next;
+            setStaff(next);
+            const member = next.find((item) => item.id === staffId);
+            if (member) {
+              recordStaffAction({
+                staffId: member.id,
+                staffName: member.name,
+                role: member.role,
+                branch: member.branch,
+                action: "Login Linked",
+                module: "staff",
+                detail: username,
+              });
+            }
+          },
         });
-      }
+      })();
     },
-    []
+    [refreshStaffFromApi]
   );
 
-  const unlinkStaffAccount = useCallback((staffId: string) => {
-    const next = unlinkStaffUser(staffId);
-    staffRef.current = next;
-    setStaff(next);
-  }, []);
+  const unlinkStaffAccount = useCallback(
+    (staffId: string) => {
+      void (async () => {
+        await runRemoteOrLocal({
+          remote: async () => {
+            await unlinkStaffUserApi(staffId);
+            await refreshStaffFromApi();
+          },
+          local: () => {
+            const next = unlinkStaffUser(staffId);
+            staffRef.current = next;
+            setStaff(next);
+          },
+        });
+      })();
+    },
+    [refreshStaffFromApi]
+  );
 
   const deactivateStaff = useCallback(
     (id: string) => {
@@ -417,23 +498,35 @@ export function StaffProvider({ children }: { children: React.ReactNode }) {
       }
 
       const existing = staffRef.current.find((member) => member.id === id);
-      if (existing) {
-        recordStaffAction({
-          staffId: existing.id,
-          staffName: existing.name,
-          role: existing.role,
-          branch: existing.branch,
-          action: AUDIT_ACTIONS.DELETE,
-          module: "staff",
-          recordId: existing.id,
-          oldValues: pickAuditFields(existing, ["id", "name", "branch", "role"]),
-        });
-      }
 
-      persistStaff(staffRef.current.filter((member) => member.id !== id));
+      void (async () => {
+        await runRemoteOrLocal({
+          remote: async () => {
+            await deleteStaffApi(id);
+            await refreshStaffFromApi();
+          },
+          local: () => {
+            if (existing) {
+              recordStaffAction({
+                staffId: existing.id,
+                staffName: existing.name,
+                role: existing.role,
+                branch: existing.branch,
+                action: AUDIT_ACTIONS.DELETE,
+                module: "staff",
+                recordId: existing.id,
+                oldValues: pickAuditFields(existing, ["id", "name", "branch", "role"]),
+              });
+            }
+
+            persistStaff(staffRef.current.filter((member) => member.id !== id));
+          },
+        });
+      })();
+
       return createStaffValidationResult({});
     },
-    [persistStaff]
+    [persistStaff, refreshStaffFromApi]
   );
 
   const value = useMemo(

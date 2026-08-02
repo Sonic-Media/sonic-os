@@ -20,6 +20,8 @@ export interface StaffPaymentInput {
   notes?: string;
 }
 
+export type StaffPayment = StaffPaymentRecord;
+
 export interface StaffPaymentRecord {
   id: string;
   staffId: string;

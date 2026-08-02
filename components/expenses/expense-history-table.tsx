@@ -2,8 +2,10 @@
 
 import Link from "next/link";
 import { ExpensesEmptyState } from "@/components/expenses/expenses-empty-state";
+import { TablePagination } from "@/components/shared/table-pagination";
 import { Card } from "@/components/shared/ui/card";
 import { Button } from "@/components/shared/ui/button";
+import { usePaginatedList } from "@/hooks/use-paginated-list";
 import { formatCurrency } from "@/lib/format";
 import { getExpensePaymentMethodLabel } from "@/lib/expenses-module/constants";
 import { isStaffPaymentExpense } from "@/lib/staff-payments/calculations";
@@ -35,6 +37,8 @@ export function ExpenseHistoryTable({
 }: ExpenseHistoryTableProps) {
   const { getBranchName } = useSettings();
   const { getPaymentByExpenseId, getPaymentById } = useStaffPaymentsModule();
+  const pagination = usePaginatedList(expenses);
+  const { pageItems } = pagination;
   const showActions = Boolean(onEdit || onDelete);
 
   if (expenses.length === 0) {
@@ -97,7 +101,7 @@ export function ExpenseHistoryTable({
             </tr>
           </thead>
           <tbody>
-            {expenses.map((expense) => (
+            {pageItems.map((expense) => (
               <tr
                 key={expense.id}
                 className="border-b border-zinc-800/60 last:border-b-0 transition-colors hover:bg-zinc-900/40"
@@ -159,6 +163,15 @@ export function ExpenseHistoryTable({
           </tbody>
         </table>
       </div>
+      <TablePagination
+        page={pagination.page}
+        totalPages={pagination.totalPages}
+        totalItems={pagination.totalItems}
+        startIndex={pagination.startIndex}
+        endIndex={pagination.endIndex}
+        onPrevious={pagination.goToPreviousPage}
+        onNext={pagination.goToNextPage}
+      />
     </Card>
   );
 }

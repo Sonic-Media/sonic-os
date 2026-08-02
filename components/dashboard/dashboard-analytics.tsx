@@ -1,11 +1,9 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { DashboardFilterToolbar } from "@/components/dashboard/analytics/dashboard-filter-toolbar";
 import { AnalyticsSkeleton } from "@/components/dashboard/analytics/analytics-skeleton";
-import { DrillDownPanel } from "@/components/dashboard/analytics/drill-down-panel";
 import { InsightsSection } from "@/components/dashboard/analytics/insights-section";
-import { InteractiveCharts } from "@/components/dashboard/analytics/interactive-charts";
-import { KpiDetailDrawer } from "@/components/dashboard/analytics/kpi-detail-drawer";
 import { MetricCard } from "@/components/dashboard/analytics/metric-card";
 import {
   DashboardProvider,
@@ -14,6 +12,30 @@ import {
 import { formatCurrency, formatPercent } from "@/lib/format";
 import type { MetricFocus } from "@/lib/analytics-view";
 import type { DashboardMetricWithTrend } from "@/types";
+
+const InteractiveCharts = dynamic(
+  () =>
+    import("@/components/dashboard/analytics/interactive-charts").then(
+      (module) => ({ default: module.InteractiveCharts })
+    ),
+  { loading: () => <AnalyticsSkeleton /> }
+);
+
+const KpiDetailDrawer = dynamic(
+  () =>
+    import("@/components/dashboard/analytics/kpi-detail-drawer").then(
+      (module) => ({ default: module.KpiDetailDrawer })
+    ),
+  { ssr: false }
+);
+
+const DrillDownPanel = dynamic(
+  () =>
+    import("@/components/dashboard/analytics/drill-down-panel").then(
+      (module) => ({ default: module.DrillDownPanel })
+    ),
+  { ssr: false }
+);
 
 const METRIC_CONFIG: {
   key: MetricFocus;

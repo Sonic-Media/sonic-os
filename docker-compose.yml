@@ -1,16 +1,65 @@
+name: sonic-os
+
 services:
   postgres:
     image: postgres:16-alpine
-    container_name: sonic-os-postgres
     restart: unless-stopped
-    ports:
-      - "5432:5432"
     environment:
-      POSTGRES_USER: sonic
-      POSTGRES_PASSWORD: sonic
-      POSTGRES_DB: sonic_os
+      POSTGRES_USER: ${POSTGRES_USER:-sonic}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-sonic}
+      POSTGRES_DB: ${POSTGRES_DB:-sonic_os}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
     volumes:
-      - sonic_os_postgres_data:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_USER:-sonic} -d ${POSTGRES_DB:-sonic_os}",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "${APP_PORT:-3000}:3000"
+    env_file:
+      - ${SONIC_ENV_FILE:-deploy/env/production.env}
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-sonic}:${POSTGRES_PASSWORD:-sonic}@postgres:5432/${POSTGRES_DB:-sonic_os}?schema=public
+    profiles:
+      - production
+      - staging
+
+  app-dev:
+    image: node:20-alpine
+    working_dir: /app
+    command: sh -c "npm ci && npm run dev"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "${APP_PORT:-3000}:3000"
+    volumes:
+      - .:/app
+      - app_node_modules:/app/node_modules
+    env_file:
+      - ${SONIC_ENV_FILE:-deploy/env/development.env}
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-sonic}:${POSTGRES_PASSWORD:-sonic}@postgres:5432/${POSTGRES_DB:-sonic_os}?schema=public
+    profiles:
+      - development
 
 volumes:
-  sonic_os_postgres_data:
+  postgres_data:
+  app_node_modules:

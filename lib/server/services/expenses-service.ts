@@ -1,0 +1,372 @@
+import { randomUUID } from "crypto";
+import { ApiError } from "@/lib/api/errors";
+import { prisma } from "@/lib/db";
+import { getBranchIdByCode } from "@/lib/server/branch-lookup";
+import { toJsonField } from "@/lib/server/json-fields";
+import {
+  mapExpenseCategoryToEntity,
+  mapExpenseRecordToEntity,
+} from "@/lib/server/mappers/entities";
+import { getSessionFromRequest } from "@/lib/server/session";
+import { recordTransactionAudit } from "@/lib/server/transaction-audit";
+import { AUDIT_ACTIONS } from "@/lib/audit-log/constants";
+import {
+  STAFF_PAYMENT_CATEGORY_ID,
+  isStaffPaymentCategory,
+} from "@/lib/expenses-module/constants";
+import { isStaffPaymentExpense } from "@/lib/staff-payments/calculations";
+import type {
+  ExpenseCategory,
+  ExpenseCategoryInput,
+  ExpenseCategoryUpdateInput,
+  ExpenseRecord,
+  ExpenseRecordInput,
+  ExpenseRecordUpdateInput,
+} from "@/types/expenses-module";
+import type { StaffActionRecord } from "@/types/staff-session";
+
+const expenseInclude = { branch: true } as const;
+
+export async function listCategories(): Promise<ExpenseCategory[]> {
+  const categories = await prisma.expenseCategory.findMany({
+    orderBy: { name: "asc" },
+  });
+
+  return categories.map(mapExpenseCategoryToEntity);
+}
+
+export async function createCategory(
+  input: ExpenseCategoryInput
+): Promise<ExpenseCategory> {
+  const name = input.name.trim();
+  if (!name) {
+    throw new ApiError("Category name is required.", {
+      status: 400,
+      code: "validation_error",
+    });
+  }
+
+  const duplicate = await prisma.expenseCategory.findFirst({
+    where: { name: { equals: name, mode: "insensitive" } },
+  });
+
+  if (duplicate) {
+    throw new ApiError("A category with this name already exists.", {
+      status: 409,
+      code: "duplicate_category",
+    });
+  }
+
+  const category = await prisma.expenseCategory.create({
+    data: {
+      id: randomUUID(),
+      name,
+      isDefault: false,
+    },
+  });
+
+  return mapExpenseCategoryToEntity(category);
+}
+
+export async function updateCategory(
+  id: string,
+  input: ExpenseCategoryUpdateInput
+): Promise<ExpenseCategory> {
+  if (id === STAFF_PAYMENT_CATEGORY_ID) {
+    throw new ApiError(
+      "Staff Payment is a system category and cannot be edited.",
+      { status: 400, code: "system_category" }
+    );
+  }
+
+  const existing = await prisma.expenseCategory.findUnique({ where: { id } });
+  if (!existing) {
+    throw new ApiError("Category not found.", {
+      status: 404,
+      code: "not_found",
+    });
+  }
+
+  const name = input.name.trim();
+  if (!name) {
+    throw new ApiError("Category name is required.", {
+      status: 400,
+      code: "validation_error",
+    });
+  }
+
+  const duplicate = await prisma.expenseCategory.findFirst({
+    where: {
+      name: { equals: name, mode: "insensitive" },
+      NOT: { id },
+    },
+  });
+
+  if (duplicate) {
+    throw new ApiError("A category with this name already exists.", {
+      status: 409,
+      code: "duplicate_category",
+    });
+  }
+
+  const category = await prisma.$transaction(async (tx) => {
+    if (existing.name !== name) {
+      await tx.expenseRecord.updateMany({
+        where: { categoryId: id },
+        data: { categoryName: name },
+      });
+    }
+
+    return tx.expenseCategory.update({
+      where: { id },
+      data: { name },
+    });
+  });
+
+  return mapExpenseCategoryToEntity(category);
+}
+
+export async function deleteCategory(id: string): Promise<void> {
+  if (id === STAFF_PAYMENT_CATEGORY_ID) {
+    throw new ApiError(
+      "Staff Payment is a system category and cannot be deleted.",
+      { status: 400, code: "system_category" }
+    );
+  }
+
+  const existing = await prisma.expenseCategory.findUnique({ where: { id } });
+  if (!existing) {
+    throw new ApiError("Category not found.", {
+      status: 404,
+      code: "not_found",
+    });
+  }
+
+  const inUse = await prisma.expenseRecord.count({ where: { categoryId: id } });
+  if (inUse > 0) {
+    throw new ApiError("Cannot delete a category that is used by expenses.", {
+      status: 409,
+      code: "category_in_use",
+    });
+  }
+
+  await prisma.expenseCategory.delete({ where: { id } });
+}
+
+export async function listExpenses(): Promise<ExpenseRecord[]> {
+  const expenses = await prisma.expenseRecord.findMany({
+    include: expenseInclude,
+    orderBy: [{ date: "desc" }, { createdAt: "desc" }],
+  });
+
+  return expenses.map(mapExpenseRecordToEntity);
+}
+
+export async function createExpense(
+  input: ExpenseRecordInput,
+  createdBy?: StaffActionRecord
+): Promise<ExpenseRecord> {
+  if (isStaffPaymentCategory(input.categoryId)) {
+    throw new ApiError(
+      "Staff payment expenses are managed in Staff Payments.",
+      { status: 400, code: "staff_payment_category" }
+    );
+  }
+
+  const category = await prisma.expenseCategory.findUnique({
+    where: { id: input.categoryId },
+  });
+
+  if (!category) {
+    throw new ApiError("Category not found.", {
+      status: 404,
+      code: "not_found",
+    });
+  }
+
+  if (input.amount <= 0) {
+    throw new ApiError("Amount must be greater than zero.", {
+      status: 400,
+      code: "validation_error",
+    });
+  }
+
+  const branchId = await getBranchIdByCode(input.branch);
+  const session = await getSessionFromRequest();
+
+  const record = await prisma.$transaction(async (tx) => {
+    const created = await tx.expenseRecord.create({
+      data: {
+        date: input.date,
+        categoryId: category.id,
+        categoryName: category.name,
+        description: input.description.trim(),
+        amount: input.amount,
+        paymentMethod: input.paymentMethod,
+        branchId,
+        staffId: createdBy?.staffId ?? null,
+        staffName: createdBy?.staffName ?? null,
+        staffRole: createdBy?.role ?? null,
+        createdBy: toJsonField(createdBy),
+        notes: input.notes?.trim() || null,
+      },
+      include: expenseInclude,
+    });
+
+    if (session) {
+      await recordTransactionAudit(
+        tx,
+        session,
+        AUDIT_ACTIONS.EXPENSE_ADDED,
+        `${category.name}: ${input.description.trim()} (${input.amount}).`
+      );
+    }
+
+    return created;
+  });
+
+  return mapExpenseRecordToEntity(record);
+}
+
+export async function updateExpense(
+  id: string,
+  input: ExpenseRecordUpdateInput
+): Promise<ExpenseRecord> {
+  const existing = await prisma.expenseRecord.findUnique({
+    where: { id },
+    include: expenseInclude,
+  });
+
+  if (!existing) {
+    throw new ApiError("Expense not found.", {
+      status: 404,
+      code: "not_found",
+    });
+  }
+
+  const mapped = mapExpenseRecordToEntity(existing);
+  if (existing.staffPaymentId || isStaffPaymentExpense(mapped)) {
+    throw new ApiError(
+      "Staff payment expenses are managed in Staff Payments.",
+      { status: 400, code: "staff_payment_expense" }
+    );
+  }
+
+  if (isStaffPaymentCategory(input.categoryId)) {
+    throw new ApiError(
+      "Staff payment expenses are managed in Staff Payments.",
+      { status: 400, code: "staff_payment_category" }
+    );
+  }
+
+  const category = await prisma.expenseCategory.findUnique({
+    where: { id: input.categoryId },
+  });
+
+  if (!category) {
+    throw new ApiError("Category not found.", {
+      status: 404,
+      code: "not_found",
+    });
+  }
+
+  if (input.amount <= 0) {
+    throw new ApiError("Amount must be greater than zero.", {
+      status: 400,
+      code: "validation_error",
+    });
+  }
+
+  const branchId = await getBranchIdByCode(input.branch);
+  const session = await getSessionFromRequest();
+
+  const record = await prisma.$transaction(async (tx) => {
+    const updated = await tx.expenseRecord.update({
+      where: { id },
+      data: {
+        date: input.date,
+        categoryId: category.id,
+        categoryName: category.name,
+        description: input.description.trim(),
+        amount: input.amount,
+        paymentMethod: input.paymentMethod,
+        branchId,
+        notes: input.notes?.trim() || null,
+      },
+      include: expenseInclude,
+    });
+
+    if (session) {
+      await recordTransactionAudit(
+        tx,
+        session,
+        AUDIT_ACTIONS.EXPENSE_EDITED,
+        `${category.name}: ${input.description.trim()} (${input.amount}).`
+      );
+    }
+
+    return updated;
+  });
+
+  return mapExpenseRecordToEntity(record);
+}
+
+export async function deleteExpense(id: string): Promise<void> {
+  const existing = await prisma.expenseRecord.findUnique({ where: { id } });
+
+  if (!existing) {
+    throw new ApiError("Expense not found.", {
+      status: 404,
+      code: "not_found",
+    });
+  }
+
+  if (existing.staffPaymentId || isStaffPaymentCategory(existing.categoryId)) {
+    throw new ApiError(
+      "Staff payment expenses are managed in Staff Payments.",
+      { status: 400, code: "staff_payment_expense" }
+    );
+  }
+
+  await prisma.expenseRecord.delete({ where: { id } });
+}
+
+export async function upsertStaffPaymentExpense(
+  expense: ExpenseRecord
+): Promise<ExpenseRecord> {
+  const branchId = await getBranchIdByCode(expense.branch);
+
+  const record = await prisma.expenseRecord.upsert({
+    where: { id: expense.id },
+    create: {
+      id: expense.id,
+      date: expense.date,
+      categoryId: expense.categoryId,
+      categoryName: expense.categoryName,
+      description: expense.description,
+      amount: expense.amount,
+      paymentMethod: expense.paymentMethod,
+      branchId,
+      staffPaymentId: expense.staffPaymentId ?? null,
+      staffPaymentType: expense.staffPaymentType ?? null,
+      paidBy: toJsonField(expense.paidBy),
+      notes: expense.notes ?? null,
+    },
+    update: {
+      date: expense.date,
+      categoryId: expense.categoryId,
+      categoryName: expense.categoryName,
+      description: expense.description,
+      amount: expense.amount,
+      paymentMethod: expense.paymentMethod,
+      branchId,
+      staffPaymentId: expense.staffPaymentId ?? null,
+      staffPaymentType: expense.staffPaymentType ?? null,
+      paidBy: toJsonField(expense.paidBy),
+      notes: expense.notes ?? null,
+    },
+    include: expenseInclude,
+  });
+
+  return mapExpenseRecordToEntity(record);
+}

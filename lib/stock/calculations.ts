@@ -14,18 +14,51 @@ export function computeBranchNetQuantity(
   productId: string,
   movements: StockMovement[]
 ): number {
-  return movements
-    .filter(
-      (movement) =>
-        movement.productId === productId && movement.branch === branchCode
-    )
-    .reduce(
-      (sum, movement) =>
-        movement.movement === "in"
-          ? sum + movement.quantity
-          : sum - movement.quantity,
-      0
+  let total = 0;
+
+  for (const movement of movements) {
+    if (movement.productId !== productId || movement.branch !== branchCode) {
+      continue;
+    }
+
+    total +=
+      movement.movement === "in"
+        ? movement.quantity
+        : -movement.quantity;
+  }
+
+  return total;
+}
+
+export function buildBranchStockMatrix(
+  branches: Array<{ code: string }>,
+  products: StockProduct[],
+  movements: StockMovement[]
+): Map<string, number[]> {
+  const movementTotals = new Map<string, number>();
+
+  for (const movement of movements) {
+    const key = `${movement.productId}:${movement.branch}`;
+    const current = movementTotals.get(key) ?? 0;
+    movementTotals.set(
+      key,
+      current +
+        (movement.movement === "in"
+          ? movement.quantity
+          : -movement.quantity)
     );
+  }
+
+  const matrix = new Map<string, number[]>();
+
+  for (const product of products) {
+    const branchStock = branches.map((branch) => {
+      return movementTotals.get(`${product.id}:${branch.code}`) ?? 0;
+    });
+    matrix.set(product.id, branchStock);
+  }
+
+  return matrix;
 }
 
 export function computeProductStatus(
