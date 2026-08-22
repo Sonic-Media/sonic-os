@@ -17,7 +17,13 @@ import { SALE_PAYMENT_METHODS } from "@/lib/sales/constants";
 import { cn } from "@/lib/utils";
 import type { SalePaymentMethod } from "@/types/sales";
 
-export function NewSaleForm() {
+export function NewSaleForm({
+  inline = false,
+  onSuccess,
+}: {
+  inline?: boolean;
+  onSuccess?: () => void;
+} = {}) {
   const router = useRouter();
   const { activeBranch } = useActiveBranch();
   const { products } = useStock();
@@ -95,13 +101,14 @@ export function NewSaleForm() {
     }));
   }
 
-  function handleSubmit(event: React.FormEvent) {
+  async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
-    if (!selectedProduct) return;
+    if (!selectedProduct || isSubmitting) return;
 
     setIsSubmitting(true);
+    setErrors({});
 
-    const result = completeSale({
+    const result = await completeSale({
       productId,
       quantity: parsedQuantity,
       unitPrice: parsedUnitPrice,
@@ -119,6 +126,18 @@ export function NewSaleForm() {
       return;
     }
 
+    if (onSuccess) {
+      onSuccess();
+      setProductId("");
+      setQuantity("1");
+      setUnitPrice("");
+      setDiscount("");
+      setCustomerId("");
+      setPaymentMethod("");
+      setNotes("");
+      return;
+    }
+
     router.push("/sales/history");
   }
 
@@ -126,22 +145,36 @@ export function NewSaleForm() {
     return (
       <Card>
         <p className="text-sm text-zinc-400">
-          Add items to stock before recording sales.
+          {inline
+            ? "No accessory items are available to sell yet. Ask the owner to add stock."
+            : "Add items to stock before recording sales."}
         </p>
-        <Button href="/stock/products" variant="secondary" className="mt-4">
-          Go to Stock
-        </Button>
+        {!inline && (
+          <Button href="/stock/products" variant="secondary" className="mt-4">
+            Go to Stock
+          </Button>
+        )}
       </Card>
     );
   }
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_320px] lg:items-start">
+      <div
+        className={
+          inline
+            ? "space-y-4"
+            : "grid grid-cols-1 gap-6 lg:grid-cols-[1fr_320px] lg:items-start"
+        }
+      >
         <Card className="space-y-4">
           <h2 className="text-sm font-medium uppercase tracking-wide text-zinc-500">
-            Sale Details
+            {inline ? "New Accessory Sale" : "Sale Details"}
           </h2>
+
+          {errors.form && (
+            <p className="text-sm text-red-400">{errors.form}</p>
+          )}
 
           <div>
             <Select
@@ -252,6 +285,7 @@ export function NewSaleForm() {
           />
         </Card>
 
+        {!inline && (
         <Card className="lg:sticky lg:top-8">
           <h2 className="mb-4 text-sm font-medium uppercase tracking-wide text-zinc-500">
             Totals
@@ -292,6 +326,16 @@ export function NewSaleForm() {
             Complete Sale
           </Button>
         </Card>
+        )}
+
+        {inline && (
+          <Button
+            type="submit"
+            disabled={isSubmitting || !productId || !paymentMethod}
+          >
+            Complete Sale
+          </Button>
+        )}
       </div>
     </form>
   );

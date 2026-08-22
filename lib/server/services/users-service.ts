@@ -28,20 +28,7 @@ const userInclude = {
 const USERNAME_PATTERN = /^[a-z0-9._-]+$/;
 
 function sortUsers(users: AppUser[]): AppUser[] {
-  const order: AppUser["role"][] = [
-    "owner",
-    "ceo",
-    "branch-manager",
-    "manager",
-    "accountant",
-    "administrator",
-    "cashier",
-    "sales-attendant",
-    "salesperson",
-    "inventory-officer",
-    "technician",
-    "store-attendant",
-  ];
+  const order: AppUser["role"][] = ["owner", "branch-manager", "cashier"];
 
   return [...users].sort((left, right) => {
     const leftIndex = order.indexOf(left.role);
@@ -74,6 +61,46 @@ async function requireUserWithRelations(id: string): Promise<UserWithRelations> 
   }
 
   return user;
+}
+
+const USER_IN_USE_MESSAGE =
+  "This user has linked business records and cannot be deleted. Disable the account instead.";
+
+async function assertUserDeletable(user: UserWithRelations): Promise<void> {
+  const checks: Promise<number>[] = [
+    prisma.dayClosing.count({
+      where: {
+        OR: [{ closedBy: user.id }, { reopenedBy: user.id }],
+      },
+    }),
+  ];
+
+  if (user.staffId) {
+    const staffId = user.staffId;
+    checks.push(
+      prisma.sale.count({ where: { staffId } }),
+      prisma.purchase.count({ where: { staffId } }),
+      prisma.expenseRecord.count({ where: { staffId } }),
+      prisma.dailyOperation.count({ where: { staffId } }),
+      prisma.staffPayment.count({ where: { staffId } }),
+      prisma.stockMovement.count({
+        where: {
+          createdBy: {
+            path: ["staffId"],
+            equals: staffId,
+          },
+        },
+      })
+    );
+  }
+
+  const counts = await Promise.all(checks);
+  if (counts.some((count) => count > 0)) {
+    throw new ApiError(USER_IN_USE_MESSAGE, {
+      status: 400,
+      code: "user_in_use",
+    });
+  }
 }
 
 export async function listUsers(): Promise<AppUser[]> {
@@ -272,4 +299,48 @@ export async function enableUser(id: string): Promise<AppUser> {
   });
 
   return mapUserToAppUser(user);
+}
+
+export async function deleteUser(id: string): Promise<void> {
+  const existing = await requireUserWithRelations(id);
+
+  if (existing.role.slug === "owner") {
+    throw new ApiError("The owner account cannot be deleted.", {
+      status: 400,
+      code: "owner_protected",
+    });
+  }
+
+  const session = await getSessionFromRequest();
+  if (session?.userId === id) {
+    throw new ApiError("You cannot delete your own account while signed in.", {
+      status: 400,
+      code: "self_delete_blocked",
+    });
+  }
+
+  await assertUserDeletable(existing);
+
+  await prisma.$transaction(async (tx) => {
+    if (session) {
+      await recordSecurityAuditInTransaction(
+        tx,
+        session,
+        "delete-user",
+        `Deleted user ${existing.username}.`
+      );
+    }
+
+    if (existing.staffId) {
+      await tx.staff.update({
+        where: { id: existing.staffId },
+        data: {
+          loginEnabled: false,
+          username: null,
+        },
+      });
+    }
+
+    await tx.user.delete({ where: { id } });
+  });
 }

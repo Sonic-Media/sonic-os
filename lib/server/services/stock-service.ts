@@ -1,6 +1,6 @@
 import { ApiError } from "@/lib/api/errors";
 import { prisma } from "@/lib/db";
-import { getBranchIdByCode } from "@/lib/server/branch-lookup";
+import { getBranchIdForSession } from "@/lib/server/branch-lookup";
 import { getCategoryIdBySlug } from "@/lib/server/product-category-lookup";
 import { toJsonField } from "@/lib/server/json-fields";
 import {
@@ -9,10 +9,10 @@ import {
   mapProductToEntity,
 } from "@/lib/server/mappers/entities";
 import { applyStockMovement } from "@/lib/server/stock-transactions";
-import { getSessionFromRequest } from "@/lib/server/session";
+import { requireSession } from "@/lib/server/session";
 import { recordTransactionAudit } from "@/lib/server/transaction-audit";
 import { AUDIT_ACTIONS } from "@/lib/audit-log/constants";
-import { computeProductStatus } from "@/lib/stock/calculations";
+import { computeProductStatus } from "@/lib/stock/product-status";
 import type {
   StockMovement,
   StockMovementInput,
@@ -38,9 +38,19 @@ export async function listProducts(): Promise<StockProduct[]> {
 export async function createProduct(
   input: StockProductInput
 ): Promise<StockProduct> {
+  const session = await requireSession();
+  const branchId = await getBranchIdForSession(session);
+
   const name = input.name.trim();
   if (!name) {
     throw new ApiError("Product name is required.", {
+      status: 400,
+      code: "validation_error",
+    });
+  }
+
+  if (input.buyingPrice <= 0 || input.sellingPrice <= 0) {
+    throw new ApiError("Prices must be greater than zero.", {
       status: 400,
       code: "validation_error",
     });
@@ -68,21 +78,18 @@ export async function createProduct(
     });
 
     if (initialStock > 0) {
-      const branch = await tx.branch.findFirst({ where: { active: true } });
-      if (branch) {
-        await tx.stockMovement.create({
-          data: {
-            date: today,
-            productId: created.id,
-            productName: created.name,
-            movement: "in",
-            quantity: initialStock,
-            reason: "Opening stock",
-            branchId: branch.id,
-            notes: "Initial product stock",
-          },
-        });
-      }
+      await tx.stockMovement.create({
+        data: {
+          date: today,
+          productId: created.id,
+          productName: created.name,
+          movement: "in",
+          quantity: initialStock,
+          reason: "Opening stock",
+          branchId,
+          notes: "Initial product stock",
+        },
+      });
     }
 
     return created;
@@ -106,6 +113,13 @@ export async function updateProduct(
   const name = input.name.trim();
   if (!name) {
     throw new ApiError("Product name is required.", {
+      status: 400,
+      code: "validation_error",
+    });
+  }
+
+  if (input.buyingPrice <= 0 || input.sellingPrice <= 0) {
+    throw new ApiError("Prices must be greater than zero.", {
       status: 400,
       code: "validation_error",
     });
@@ -145,6 +159,10 @@ export async function updateProduct(
         sellingPrice: input.sellingPrice,
         minimumStockLevel: input.minimumStockLevel,
         notes: input.notes?.trim() || null,
+        status: computeProductStatus(
+          existing.currentStock,
+          input.minimumStockLevel
+        ),
       },
       include: productInclude,
     });
@@ -212,9 +230,17 @@ export async function createMovement(
     });
   }
 
-  const branchId = await getBranchIdByCode(input.branch);
+  const branchCode = input.branch?.trim();
+  if (!branchCode) {
+    throw new ApiError("Branch is required.", {
+      status: 400,
+      code: "validation_error",
+    });
+  }
+
+  const session = await requireSession();
+  const branchId = await getBranchIdForSession(session, branchCode);
   let movementId: string;
-  const session = await getSessionFromRequest();
 
   await prisma.$transaction(async (tx) => {
     movementId = await applyStockMovement(tx, {

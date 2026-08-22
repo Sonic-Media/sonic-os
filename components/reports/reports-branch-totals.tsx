@@ -3,6 +3,7 @@
 import { Card } from "@/components/shared/ui/card";
 import { TotalsGrid } from "@/components/shared/totals-grid";
 import { useSettings } from "@/context/settings-context";
+import { getBranchTotals } from "@/lib/aggregations";
 import type { ReportSummary } from "@/types";
 
 interface ReportsBranchTotalsProps {
@@ -19,7 +20,7 @@ export function ReportsBranchTotals({ byBranch }: ReportsBranchTotalsProps) {
       </h2>
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
         {branches.map((branch) => {
-          const totals = byBranch[branch.id];
+          const totals = getBranchTotals(byBranch, branch.id);
           return (
             <Card key={branch.id}>
               <h3 className="text-base font-semibold text-white mb-4">

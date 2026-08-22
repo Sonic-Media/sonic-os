@@ -47,6 +47,7 @@ export function getTrendVsAverage(value: number, average: number): string {
 const EXPENSE_CATEGORY_KEYS: Record<string, ExpenseBreakdownKey> = {
   Rent: "rent",
   Staff: "staff-payments",
+  Payroll: "staff-payments",
   "Staff Payments": "staff-payments",
   Lunch: "lunch",
   Electricity: "electricity",

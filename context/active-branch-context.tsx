@@ -10,12 +10,8 @@ import {
   useState,
 } from "react";
 import { setActiveBranchApi } from "@/lib/api/auth";
-import { isApiAvailable } from "@/lib/data-source";
-import { shouldUseApiDataSource } from "@/lib/env";
-import {
-  ACTIVE_BRANCH_STORAGE_KEY,
-  DEFAULT_BRANCH_CODE,
-} from "@/lib/constants";
+import { getDataSourceErrorMessage } from "@/lib/data-source/context-api";
+import { DEFAULT_BRANCH_CODE } from "@/lib/constants";
 import { useAuth } from "@/context/auth-context";
 import { useBranches } from "@/context/branches-context";
 import type { Branch } from "@/types";
@@ -30,22 +26,12 @@ const ActiveBranchContext = createContext<ActiveBranchContextValue | null>(
   null
 );
 
-function readStoredBranch(): Branch {
-  if (typeof window === "undefined") return DEFAULT_BRANCH_CODE;
-  return localStorage.getItem(ACTIVE_BRANCH_STORAGE_KEY)?.trim() || DEFAULT_BRANCH_CODE;
-}
-
-function writeStoredBranch(branch: Branch) {
-  if (typeof window === "undefined") return;
-  localStorage.setItem(ACTIVE_BRANCH_STORAGE_KEY, branch);
-}
-
 export function ActiveBranchProvider({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const { session, isLoaded: authLoaded } = useAuth();
+  const { session, isLoaded: authLoaded, isAuthenticated } = useAuth();
   const { activeBranches, getBranchByCode, isLoaded: branchesLoaded } =
     useBranches();
   const [activeBranch, setActiveBranchState] = useState<Branch>(
@@ -55,33 +41,40 @@ export function ActiveBranchProvider({
   const hasInitialized = useRef(false);
 
   useEffect(() => {
-    if (!authLoaded || !branchesLoaded || hasInitialized.current) return;
+    if (!authLoaded || !branchesLoaded) return;
+
+    if (!isAuthenticated || !session) {
+      setActiveBranchState(DEFAULT_BRANCH_CODE);
+      setIsLoaded(true);
+      return;
+    }
+
+    if (hasInitialized.current) return;
     hasInitialized.current = true;
 
-    async function initialize() {
-      const stored = readStoredBranch();
-      let nextBranch = stored;
+    void (async () => {
+      let nextBranch = session.branch;
 
-      if (shouldUseApiDataSource() && (await isApiAvailable()) && session) {
-        try {
-          const response = await fetch("/api/auth/session", {
-            cache: "no-store",
-            credentials: "include",
-          });
-          if (response.ok) {
-            const payload = (await response.json()) as {
-              data?: { activeBranchCode?: string | null; session?: { branch?: Branch } | null };
+      try {
+        const response = await fetch("/api/auth/session", {
+          cache: "no-store",
+          credentials: "include",
+        });
+
+        if (response.ok) {
+          const payload = (await response.json()) as {
+            data?: {
+              activeBranchCode?: string | null;
+              session?: { branch?: Branch } | null;
             };
-            nextBranch =
-              payload.data?.activeBranchCode ??
-              stored ??
-              payload.data?.session?.branch ??
-              nextBranch;
-          }
-        } catch {
-          // Keep stored branch when preference API is unavailable.
+          };
+
+          nextBranch =
+            payload.data?.activeBranchCode ??
+            payload.data?.session?.branch ??
+            session.branch;
         }
-      } else if (!localStorage.getItem(ACTIVE_BRANCH_STORAGE_KEY) && session?.branch) {
+      } catch {
         nextBranch = session.branch;
       }
 
@@ -89,32 +82,29 @@ export function ActiveBranchProvider({
         nextBranch = activeBranches[0].code;
       }
 
-      writeStoredBranch(nextBranch);
       setActiveBranchState(nextBranch);
       setIsLoaded(true);
-    }
-
-    void initialize();
+    })();
   }, [
     activeBranches,
     authLoaded,
     branchesLoaded,
     getBranchByCode,
+    isAuthenticated,
     session,
   ]);
 
   const setActiveBranch = useCallback(
     async (branch: Branch) => {
       const normalized = branch.trim().toLowerCase();
-      writeStoredBranch(normalized);
       setActiveBranchState(normalized);
 
-      if (shouldUseApiDataSource() && (await isApiAvailable()) && session) {
-        try {
-          await setActiveBranchApi(normalized);
-        } catch {
-          // Local preference still applies when API write fails.
-        }
+      if (!session) return;
+
+      try {
+        await setActiveBranchApi(normalized);
+      } catch (error) {
+        console.error(getDataSourceErrorMessage(error));
       }
     },
     [session]

@@ -6,9 +6,9 @@ import {
 } from "@/lib/server/services/stock-service";
 import { normalizeStaffActionRecord } from "@/lib/staff/session";
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    const movements = await withDatabase(() => listMovements());
+    const movements = await withDatabase(() => listMovements(), { request });
     return jsonOk(movements);
   } catch (error) {
     return handleRouteError(error);
@@ -19,7 +19,10 @@ export async function POST(request: Request) {
   try {
     const body = await request.json();
     const createdBy = normalizeStaffActionRecord(body.createdBy);
-    const movement = await withDatabase(() => createMovement(body, createdBy));
+    const movement = await withDatabase(
+      () => createMovement(body, createdBy),
+      { request }
+    );
     return jsonCreated(movement);
   } catch (error) {
     return handleRouteError(error);

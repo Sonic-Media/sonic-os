@@ -10,15 +10,22 @@ import {
   useState,
 } from "react";
 import {
+  createExpenseTemplateApi,
+  deleteExpenseTemplateApi,
+  fetchExpenseTemplates,
+  updateExpenseTemplateApi,
+} from "@/lib/api/expense-templates";
+import { useAuth } from "@/context/auth-context";
+import {
+  getDataSourceErrorMessage,
+  loadFromApi,
+  runOnApi,
+} from "@/lib/data-source/context-api";
+import {
   buildExpensesFromActiveTemplates,
   getTemplateIds,
 } from "@/lib/expense-templates";
-import {
-  getExpenseTemplates,
-  normalizeExpenseTemplates,
-  saveExpenseTemplates,
-  sortExpenseTemplates,
-} from "@/lib/expense-template-storage";
+import { sortExpenseTemplates } from "@/lib/expense-template-storage";
 import { recordActivity } from "@/lib/activity-log";
 import type { Expense, ExpenseBreakdownKey, ExpenseTemplate } from "@/types";
 
@@ -28,6 +35,7 @@ interface ExpenseTemplatesContextValue {
   templateIds: Set<string>;
   activeTemplateExpenses: Expense[];
   isLoaded: boolean;
+  loadError: string | null;
   getTemplateById: (id: string) => ExpenseTemplate | undefined;
   addTemplate: (input: {
     name: string;
@@ -52,10 +60,10 @@ export function ExpenseTemplatesProvider({
 }: {
   children: React.ReactNode;
 }) {
-  const [templates, setTemplates] = useState<ExpenseTemplate[]>(() =>
-    getExpenseTemplates()
-  );
+  const { isAuthenticated, isLoaded: authLoaded } = useAuth();
+  const [templates, setTemplates] = useState<ExpenseTemplate[]>([]);
   const [isLoaded, setIsLoaded] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const hasLoaded = useRef(false);
   const templatesRef = useRef(templates);
 
@@ -63,22 +71,45 @@ export function ExpenseTemplatesProvider({
     templatesRef.current = templates;
   }, [templates]);
 
+  const refreshTemplatesFromApi = useCallback(async () => {
+    const remoteTemplates = await fetchExpenseTemplates();
+    const normalized = sortExpenseTemplates(remoteTemplates);
+    templatesRef.current = normalized;
+    setTemplates(normalized);
+    setLoadError(null);
+  }, []);
+
   useEffect(() => {
+    if (!authLoaded) return;
+    if (hasLoaded.current && !isAuthenticated) {
+      templatesRef.current = [];
+      setTemplates([]);
+      setLoadError(null);
+      setIsLoaded(true);
+      return;
+    }
+    if (!isAuthenticated) {
+      templatesRef.current = [];
+      setTemplates([]);
+      setLoadError(null);
+      setIsLoaded(true);
+      return;
+    }
     if (hasLoaded.current) return;
     hasLoaded.current = true;
 
     queueMicrotask(() => {
-      setTemplates(getExpenseTemplates());
-      setIsLoaded(true);
+      void (async () => {
+        try {
+          await loadFromApi(() => refreshTemplatesFromApi());
+        } catch (error) {
+          setLoadError(getDataSourceErrorMessage(error));
+        } finally {
+          setIsLoaded(true);
+        }
+      })();
     });
-  }, []);
-
-  const persistTemplates = useCallback((next: ExpenseTemplate[]) => {
-    const normalized = normalizeExpenseTemplates(next);
-    saveExpenseTemplates(normalized);
-    templatesRef.current = normalized;
-    setTemplates(normalized);
-  }, []);
+  }, [authLoaded, isAuthenticated, refreshTemplatesFromApi]);
 
   const templateIds = useMemo(() => getTemplateIds(templates), [templates]);
 
@@ -108,22 +139,31 @@ export function ExpenseTemplatesProvider({
       category: ExpenseBreakdownKey;
       defaultAmount?: number;
     }) => {
-      const template: ExpenseTemplate = {
+      const optimistic: ExpenseTemplate = {
         id: crypto.randomUUID(),
         name: input.name.trim(),
         category: input.category,
         defaultAmount: input.defaultAmount,
         active: true,
       };
-      persistTemplates([...templatesRef.current, template]);
-      recordActivity({
-        type: "template-updated",
-        title: "Expense template updated",
-        description: `${template.name} template was added.`,
-      });
-      return template;
+
+      void (async () => {
+        try {
+          const created = await runOnApi(() => createExpenseTemplateApi(input));
+          await refreshTemplatesFromApi();
+          recordActivity({
+            type: "template-updated",
+            title: "Expense template updated",
+            description: `${created.name} template was added.`,
+          });
+        } catch (error) {
+          console.error(getDataSourceErrorMessage(error));
+        }
+      })();
+
+      return optimistic;
     },
-    [persistTemplates]
+    [refreshTemplatesFromApi]
   );
 
   const updateTemplate = useCallback(
@@ -133,42 +173,24 @@ export function ExpenseTemplatesProvider({
         Pick<ExpenseTemplate, "name" | "category" | "defaultAmount" | "active">
       >
     ) => {
-      persistTemplates(
-        sortExpenseTemplates(
-          templatesRef.current.map((template) => {
-            if (template.id !== id) return template;
-
-            const next: ExpenseTemplate = {
-              ...template,
-              ...patch,
-              name:
-                typeof patch.name === "string"
-                  ? patch.name.trim() || template.name
-                  : template.name,
-            };
-
-            if ("defaultAmount" in patch) {
-              next.defaultAmount =
-                patch.defaultAmount === undefined
-                  ? undefined
-                  : Math.max(0, patch.defaultAmount);
-            }
-
-            return next;
-          })
-        )
-      );
-
-      const updated = templatesRef.current.find((template) => template.id === id);
-      if (updated) {
-        recordActivity({
-          type: "template-updated",
-          title: "Expense template updated",
-          description: `${updated.name} template was updated.`,
-        });
-      }
+      void (async () => {
+        try {
+          await runOnApi(() => updateExpenseTemplateApi(id, patch));
+          await refreshTemplatesFromApi();
+          const updated = templatesRef.current.find((template) => template.id === id);
+          if (updated) {
+            recordActivity({
+              type: "template-updated",
+              title: "Expense template updated",
+              description: `${updated.name} template was updated.`,
+            });
+          }
+        } catch (error) {
+          console.error(getDataSourceErrorMessage(error));
+        }
+      })();
     },
-    [persistTemplates]
+    [refreshTemplatesFromApi]
   );
 
   const deactivateTemplate = useCallback(
@@ -180,9 +202,16 @@ export function ExpenseTemplatesProvider({
 
   const deleteTemplate = useCallback(
     (id: string) => {
-      persistTemplates(templatesRef.current.filter((template) => template.id !== id));
+      void (async () => {
+        try {
+          await runOnApi(() => deleteExpenseTemplateApi(id));
+          await refreshTemplatesFromApi();
+        } catch (error) {
+          console.error(getDataSourceErrorMessage(error));
+        }
+      })();
     },
-    [persistTemplates]
+    [refreshTemplatesFromApi]
   );
 
   const value = useMemo(
@@ -192,6 +221,7 @@ export function ExpenseTemplatesProvider({
       templateIds,
       activeTemplateExpenses,
       isLoaded,
+      loadError,
       getTemplateById,
       addTemplate,
       updateTemplate,
@@ -204,6 +234,7 @@ export function ExpenseTemplatesProvider({
       templateIds,
       activeTemplateExpenses,
       isLoaded,
+      loadError,
       getTemplateById,
       addTemplate,
       updateTemplate,

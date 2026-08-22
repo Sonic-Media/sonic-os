@@ -17,26 +17,22 @@ import {
   updateCustomerApi,
 } from "@/lib/api/customers";
 import { createSaleApi, fetchSales } from "@/lib/api/sales";
+import { useAuth } from "@/context/auth-context";
 import {
-  loadRemoteOrLocal,
-  runRemoteOrLocal,
-  shouldUseRemoteDataSource,
+  getDataSourceErrorMessage,
+  loadFromApi,
+  runOnApi,
 } from "@/lib/data-source/context-api";
 import { formatEntryTime, getTodayISO } from "@/lib/dates";
 import {
-  getCustomers,
-  getSales,
   normalizeCustomerList,
   normalizeSaleList,
-  saveCustomers,
-  saveSales,
   sortCustomersByName,
   sortSalesByDate,
 } from "@/lib/sales-storage";
 import {
   computeSalesDashboardMetrics,
   computeSalePreview,
-  generateInvoiceNumber,
 } from "@/lib/sales/calculations";
 import {
   hasValidationErrors,
@@ -53,6 +49,8 @@ import {
 import {
   DAY_CLOSED_EDIT_MESSAGE,
   isBranchDayClosed,
+  isBranchDayOpened,
+  SHOP_NOT_OPENED_MESSAGE,
 } from "@/lib/day-closing/storage";
 import type {
   Customer,
@@ -63,13 +61,13 @@ import type {
   SalesDashboardMetrics,
   SaleValidationResult,
 } from "@/types/sales";
-import type { StockMovementInput } from "@/types/stock";
 
 interface SalesContextValue {
   sales: Sale[];
   customers: Customer[];
   metrics: SalesDashboardMetrics;
   isLoaded: boolean;
+  loadError: string | null;
   getCustomerById: (id: string) => Customer | undefined;
   addCustomer: (input: CustomerInput) => SaleValidationResult;
   updateCustomer: (
@@ -77,27 +75,32 @@ interface SalesContextValue {
     input: CustomerUpdateInput
   ) => SaleValidationResult;
   deleteCustomer: (id: string) => SaleValidationResult;
-  completeSale: (input: SaleInput) => SaleValidationResult;
+  completeSale: (input: SaleInput) => Promise<SaleValidationResult>;
 }
 
 const SalesContext = createContext<SalesContextValue | null>(null);
 
 function createValidationResult(
-  errors: Record<string, string | undefined>
+  errors: Record<string, string | undefined>,
+  sale?: Sale
 ): SaleValidationResult {
   return {
     success: !hasValidationErrors(errors),
     errors,
+    sale,
   };
 }
 
 export function SalesProvider({ children }: { children: React.ReactNode }) {
-  const { getProductById, recordMovement, refreshStockFromApi } = useStock();
+  const { isAuthenticated, isLoaded: authLoaded } = useAuth();
+  const { getProductById, refreshStockFromApi } = useStock();
 
-  const [sales, setSales] = useState<Sale[]>(() => getSales());
-  const [customers, setCustomers] = useState<Customer[]>(() => getCustomers());
+  const [sales, setSales] = useState<Sale[]>([]);
+  const [customers, setCustomers] = useState<Customer[]>([]);
   const [isLoaded, setIsLoaded] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const hasLoaded = useRef(false);
+  const saleInFlight = useRef(false);
   const salesRef = useRef(sales);
   const customersRef = useRef(customers);
 
@@ -109,14 +112,39 @@ export function SalesProvider({ children }: { children: React.ReactNode }) {
     customersRef.current = customers;
   }, [customers]);
 
+  const refreshSalesFromApi = useCallback(async () => {
+    const [remoteSales, remoteCustomers] = await Promise.all([
+      fetchSales(),
+      fetchCustomers(),
+    ]);
+
+    salesRef.current = normalizeSaleList(remoteSales);
+    customersRef.current = normalizeCustomerList(remoteCustomers);
+    setSales(salesRef.current);
+    setCustomers(customersRef.current);
+  }, []);
+
   useEffect(() => {
+    if (!authLoaded) return;
+
+    if (!isAuthenticated) {
+      salesRef.current = [];
+      customersRef.current = [];
+      setSales([]);
+      setCustomers([]);
+      setLoadError(null);
+      hasLoaded.current = false;
+      setIsLoaded(true);
+      return;
+    }
+
     if (hasLoaded.current) return;
     hasLoaded.current = true;
 
     queueMicrotask(() => {
       void (async () => {
-        const loaded = await loadRemoteOrLocal({
-          remote: async () => {
+        try {
+          const loaded = await loadFromApi(async () => {
             const [remoteSales, remoteCustomers] = await Promise.all([
               fetchSales(),
               fetchCustomers(),
@@ -126,51 +154,21 @@ export function SalesProvider({ children }: { children: React.ReactNode }) {
               sales: sortSalesByDate(remoteSales),
               customers: sortCustomersByName(remoteCustomers),
             };
-          },
-          local: () => ({
-            sales: getSales(),
-            customers: getCustomers(),
-          }),
-        });
+          });
 
-        salesRef.current = normalizeSaleList(loaded.sales);
-        customersRef.current = normalizeCustomerList(loaded.customers);
-        setSales(salesRef.current);
-        setCustomers(customersRef.current);
-        setIsLoaded(true);
+          salesRef.current = normalizeSaleList(loaded.sales);
+          customersRef.current = normalizeCustomerList(loaded.customers);
+          setSales(salesRef.current);
+          setCustomers(customersRef.current);
+          setLoadError(null);
+        } catch (error) {
+          setLoadError(getDataSourceErrorMessage(error));
+        } finally {
+          setIsLoaded(true);
+        }
       })();
     });
-  }, []);
-
-  const persistSales = useCallback((next: Sale[]) => {
-    const normalized = sortSalesByDate(normalizeSaleList(next));
-    saveSales(normalized);
-    salesRef.current = normalized;
-    setSales(normalized);
-  }, []);
-
-  const persistCustomers = useCallback((next: Customer[]) => {
-    const normalized = sortCustomersByName(normalizeCustomerList(next));
-    saveCustomers(normalized);
-    customersRef.current = normalized;
-    setCustomers(normalized);
-  }, []);
-
-  const refreshSalesFromApi = useCallback(async () => {
-    if (!(await shouldUseRemoteDataSource())) {
-      return;
-    }
-
-    const [remoteSales, remoteCustomers] = await Promise.all([
-      fetchSales(),
-      fetchCustomers(),
-    ]);
-
-    salesRef.current = sortSalesByDate(remoteSales);
-    customersRef.current = sortCustomersByName(remoteCustomers);
-    setSales(salesRef.current);
-    setCustomers(customersRef.current);
-  }, []);
+  }, [authLoaded, isAuthenticated]);
 
   const customerLookup = useMemo(
     () => new Map(customers.map((customer) => [customer.id, customer])),
@@ -195,37 +193,19 @@ export function SalesProvider({ children }: { children: React.ReactNode }) {
       }
 
       void (async () => {
-        await runRemoteOrLocal({
-          remote: async () => {
+        try {
+          await runOnApi(async () => {
             await createCustomerApi(input);
             await refreshSalesFromApi();
-          },
-          local: () => {
-            const now = new Date().toISOString();
-            const customer: Customer = {
-              id: crypto.randomUUID(),
-              name: input.name.trim(),
-              phone: input.phone?.trim() || undefined,
-              email: input.email?.trim() || undefined,
-              notes: input.notes?.trim() || undefined,
-              createdAt: now,
-              updatedAt: now,
-            };
-
-            persistCustomers([...customersRef.current, customer]);
-            recordStaffAction({
-              action: AUDIT_ACTIONS.CREATE,
-              module: "sales",
-              recordId: customer.id,
-              newValues: pickAuditFields(customer, ["id", "name", "phone", "email"]),
-            });
-          },
-        });
+          });
+        } catch (error) {
+          console.error(getDataSourceErrorMessage(error));
+        }
       })();
 
       return createValidationResult({});
     },
-    [persistCustomers, refreshSalesFromApi]
+    [refreshSalesFromApi]
   );
 
   const updateCustomer = useCallback(
@@ -243,59 +223,19 @@ export function SalesProvider({ children }: { children: React.ReactNode }) {
       }
 
       void (async () => {
-        await runRemoteOrLocal({
-          remote: async () => {
+        try {
+          await runOnApi(async () => {
             await updateCustomerApi(id, input);
             await refreshSalesFromApi();
-          },
-          local: () => {
-            const now = new Date().toISOString();
-            const nextCustomers = customersRef.current.map((customer) =>
-              customer.id === id
-                ? {
-                    ...customer,
-                    name: input.name.trim(),
-                    phone: input.phone?.trim() || undefined,
-                    email: input.email?.trim() || undefined,
-                    notes: input.notes?.trim() || undefined,
-                    updatedAt: now,
-                  }
-                : customer
-            );
-
-            persistCustomers(nextCustomers);
-
-            const renamed = existing.name !== input.name.trim();
-            if (renamed) {
-              const nextSales = salesRef.current.map((sale) =>
-                sale.customerId === id
-                  ? { ...sale, customerName: input.name.trim() }
-                  : sale
-              );
-              persistSales(nextSales);
-            }
-
-            recordStaffAction({
-              action: AUDIT_ACTIONS.EDIT,
-              module: "sales",
-              recordId: existing.id,
-              oldValues: pickAuditFields(existing, ["name", "phone", "email"]),
-              newValues: pickAuditFields(
-                {
-                  name: input.name.trim(),
-                  phone: input.phone?.trim(),
-                  email: input.email?.trim(),
-                },
-                ["name", "phone", "email"]
-              ),
-            });
-          },
-        });
+          });
+        } catch (error) {
+          console.error(getDataSourceErrorMessage(error));
+        }
       })();
 
       return createValidationResult({});
     },
-    [persistCustomers, persistSales, refreshSalesFromApi]
+    [refreshSalesFromApi]
   );
 
   const deleteCustomer = useCallback(
@@ -308,38 +248,29 @@ export function SalesProvider({ children }: { children: React.ReactNode }) {
       }
 
       void (async () => {
-        await runRemoteOrLocal({
-          remote: async () => {
+        try {
+          await runOnApi(async () => {
             await deleteCustomerApi(id);
             await refreshSalesFromApi();
-          },
-          local: () => {
-            const existing = customersRef.current.find(
-              (customer) => customer.id === id
-            );
-            if (existing) {
-              recordStaffAction({
-                action: AUDIT_ACTIONS.DELETE,
-                module: "sales",
-                recordId: existing.id,
-                oldValues: pickAuditFields(existing, ["id", "name"]),
-              });
-            }
-
-            persistCustomers(
-              customersRef.current.filter((customer) => customer.id !== id)
-            );
-          },
-        });
+          });
+        } catch (error) {
+          console.error(getDataSourceErrorMessage(error));
+        }
       })();
 
       return createValidationResult({});
     },
-    [persistCustomers, refreshSalesFromApi]
+    [refreshSalesFromApi]
   );
 
   const completeSale = useCallback(
-    (input: SaleInput): SaleValidationResult => {
+    async (input: SaleInput): Promise<SaleValidationResult> => {
+      if (saleInFlight.current) {
+        return createValidationResult({
+          form: "A sale is already being processed. Please wait.",
+        });
+      }
+
       const product = getProductById(input.productId);
       if (!product) {
         return createValidationResult({ productId: "Item not found." });
@@ -354,6 +285,9 @@ export function SalesProvider({ children }: { children: React.ReactNode }) {
       if (isBranchDayClosed(input.branch, dateISO)) {
         return createValidationResult({ form: DAY_CLOSED_EDIT_MESSAGE });
       }
+      if (!isBranchDayOpened(input.branch, dateISO)) {
+        return createValidationResult({ form: SHOP_NOT_OPENED_MESSAGE });
+      }
 
       const discount = input.discount ?? 0;
       const preview = computeSalePreview(
@@ -364,7 +298,6 @@ export function SalesProvider({ children }: { children: React.ReactNode }) {
       );
 
       const now = new Date();
-      const invoiceNumber = generateInvoiceNumber(salesRef.current, dateISO);
       const customer = input.customerId
         ? getCustomerById(input.customerId)
         : undefined;
@@ -382,7 +315,7 @@ export function SalesProvider({ children }: { children: React.ReactNode }) {
 
       const sale: Sale = {
         id: crypto.randomUUID(),
-        invoiceNumber,
+        invoiceNumber: "",
         date: dateISO,
         time: formatEntryTime(now),
         customerId: customer?.id,
@@ -403,60 +336,45 @@ export function SalesProvider({ children }: { children: React.ReactNode }) {
         createdAt: now.toISOString(),
       };
 
-      const movementInput: StockMovementInput = {
-        productId: product.id,
-        movement: "out",
-        quantity: input.quantity,
-        reason: "Sale",
-        notes: `Sale ${invoiceNumber}`,
-        branch: input.branch,
-      };
+      saleInFlight.current = true;
 
-      void (async () => {
-        await runRemoteOrLocal({
-          remote: async () => {
-            await createSaleApi(sale);
-            await refreshSalesFromApi();
-            await refreshStockFromApi();
-          },
-          local: () => {
-            const movementResult = recordMovement(movementInput);
-            if (!movementResult.success) {
-              return;
-            }
+      try {
+        const saved = await runOnApi(async () => {
+          const created = await createSaleApi(sale);
+          await refreshSalesFromApi();
+          await refreshStockFromApi();
 
-            persistSales([sale, ...salesRef.current]);
-            recordStaffAction({
-              staffId: actor?.staffId,
-              staffName: actor?.staffName,
-              role: actor?.role,
-              branch: input.branch,
-              action: AUDIT_ACTIONS.COMPLETE_SALE,
-              module: "sales",
-              recordId: sale.id,
-              newValues: pickAuditFields(sale, [
-                "id",
-                "invoiceNumber",
-                "total",
-                "profit",
-                "branch",
-                "paymentMethod",
-              ]),
-            });
-          },
+          recordStaffAction({
+            staffId: actor?.staffId,
+            staffName: actor?.staffName,
+            role: actor?.role,
+            branch: input.branch,
+            action: AUDIT_ACTIONS.COMPLETE_SALE,
+            module: "sales",
+            recordId: created.id,
+            newValues: pickAuditFields(created, [
+              "id",
+              "invoiceNumber",
+              "total",
+              "profit",
+              "branch",
+              "paymentMethod",
+            ]),
+          });
+
+          return created;
         });
-      })();
 
-      return createValidationResult({});
+        return createValidationResult({}, saved);
+      } catch (error) {
+        return createValidationResult({
+          form: getDataSourceErrorMessage(error),
+        });
+      } finally {
+        saleInFlight.current = false;
+      }
     },
-    [
-      getProductById,
-      getCustomerById,
-      recordMovement,
-      persistSales,
-      refreshSalesFromApi,
-      refreshStockFromApi,
-    ]
+    [getProductById, getCustomerById, refreshSalesFromApi, refreshStockFromApi]
   );
 
   const value = useMemo(
@@ -465,6 +383,7 @@ export function SalesProvider({ children }: { children: React.ReactNode }) {
       customers,
       metrics,
       isLoaded,
+      loadError,
       getCustomerById,
       addCustomer,
       updateCustomer,
@@ -476,6 +395,7 @@ export function SalesProvider({ children }: { children: React.ReactNode }) {
       customers,
       metrics,
       isLoaded,
+      loadError,
       getCustomerById,
       addCustomer,
       updateCustomer,

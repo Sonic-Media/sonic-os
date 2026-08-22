@@ -1,10 +1,11 @@
 "use client";
 
+import { useState } from "react";
 import { useEntryForm } from "@/hooks/use-entry-form";
-import { CloseDayDialog } from "@/components/operations/close-day-dialog";
+import { CloseDayWorkspace } from "@/components/operations/close-day-workspace";
+import { OperationsClosingPanel } from "@/components/operations/operations-closing-panel";
 import { OperationsForm } from "@/components/operations/operations-form";
 import { DuplicateEntryDialog } from "@/components/entry/duplicate-entry-dialog";
-import { useSettings } from "@/context/settings-context";
 import type { Branch, Entry } from "@/types";
 
 interface OperationsWorkspaceProps {
@@ -22,21 +23,19 @@ export function OperationsWorkspace({
   initialDate,
   lockDate = mode === "today",
 }: OperationsWorkspaceProps) {
-  const { getBranchName } = useSettings();
+  const [closeFlowActive, setCloseFlowActive] = useState(false);
   const {
     form,
     isSaving,
     status,
-    sales,
+    movieRevenue,
+    accessorySales,
     totalExpenses,
     staffPayouts,
     balance,
     duplicateEntry,
-    showCloseDayDialog,
     updateField,
     handleSubmitRequest,
-    handleConfirmCloseDay,
-    handleCancelCloseDay,
     handleEditExisting,
     handleCancelDuplicate,
     seedCommonExpenses,
@@ -49,13 +48,38 @@ export function OperationsWorkspace({
     redirectTo: mode === "historical" ? "/history" : undefined,
   });
 
+  if (mode === "today" && closeFlowActive) {
+    return (
+      <div className="space-y-8">
+        <OperationsClosingPanel
+          form={form}
+          movieRevenue={movieRevenue}
+          accessorySales={accessorySales}
+          totalExpenses={totalExpenses}
+          staffPayouts={staffPayouts}
+          netCash={balance}
+          updateField={updateField}
+        />
+        <CloseDayWorkspace
+          onCancel={() => setCloseFlowActive(false)}
+          onCloseComplete={() => setCloseFlowActive(false)}
+          movieRevenue={movieRevenue}
+          accessorySales={accessorySales}
+          savings={Number.parseFloat(form.savingsAllocation) || 0}
+          redirectAfterClose="/operations/today"
+        />
+      </div>
+    );
+  }
+
   return (
     <>
       <OperationsForm
         mode={mode}
         form={form}
         isSaving={isSaving}
-        sales={sales}
+        movieRevenue={movieRevenue}
+        accessorySales={accessorySales}
         totalExpenses={totalExpenses}
         staffPayouts={staffPayouts}
         netCash={balance}
@@ -64,15 +88,15 @@ export function OperationsWorkspace({
         seedCommonExpenses={seedCommonExpenses}
         updateField={updateField}
         onSubmit={handleSubmitRequest}
+        onCloseDay={
+          mode === "today"
+            ? () => {
+                handleSubmitRequest();
+                setCloseFlowActive(true);
+              }
+            : undefined
+        }
       />
-
-      {showCloseDayDialog && (
-        <CloseDayDialog
-          branchName={getBranchName(form.branch)}
-          onConfirm={handleConfirmCloseDay}
-          onCancel={handleCancelCloseDay}
-        />
-      )}
 
       {duplicateEntry && (
         <DuplicateEntryDialog

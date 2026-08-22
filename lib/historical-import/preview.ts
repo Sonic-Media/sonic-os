@@ -8,11 +8,19 @@ export function buildImportPreview(
   rows: Record<string, unknown>[],
   existingEntries: Entry[],
   activeBranches: BranchEntity[],
-  getBranchName: (code: string) => string
+  getBranchName: (code: string) => string,
+  blankRowsSkipped = 0
 ): ImportPreviewResult {
-  const validatedRows = rows.map((raw, index) =>
-    validateImportRow(index + 1, raw, activeBranches, getBranchName)
-  );
+  const validatedRows = rows.map((raw, index) => {
+    const sourceRowNumber =
+      typeof raw.sourceRowNumber === "number" ? raw.sourceRowNumber : index + 1;
+    return validateImportRow(
+      sourceRowNumber,
+      raw,
+      activeBranches,
+      getBranchName
+    );
+  });
 
   const rowsWithDuplicates = applyDuplicateDetection(
     validatedRows,
@@ -21,6 +29,7 @@ export function buildImportPreview(
 
   return {
     rows: rowsWithDuplicates,
+    blankRowsSkipped,
     ...countPreviewRows(rowsWithDuplicates),
   };
 }

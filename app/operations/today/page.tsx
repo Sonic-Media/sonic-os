@@ -1,9 +1,12 @@
 "use client";
 
-import { Suspense, useMemo } from "react";
+import { Suspense, useMemo, useState } from "react";
+import { DayClosedBanner } from "@/components/operations/day-closed-banner";
+import { OpenShopPage } from "@/components/operations/open-shop-page";
 import { OperationsReadOnlyView } from "@/components/operations/operations-read-only-view";
 import { OperationsSubnav } from "@/components/operations/operations-subnav";
 import { OperationsWorkspace } from "@/components/operations/operations-workspace";
+import { ShiftCompletedPage } from "@/components/operations/shift-completed-page";
 import { PageContainer } from "@/components/shared/layout/page-container";
 import { PageHeader } from "@/components/shared/layout/page-header";
 import { PageSkeleton } from "@/components/shared/page-skeleton";
@@ -13,15 +16,24 @@ import {
 } from "@/lib/entry-helpers";
 import { getTodayISO } from "@/lib/dates";
 import { useActiveBranch } from "@/context/active-branch-context";
+import { useAuth } from "@/context/auth-context";
 import { useDayClosing } from "@/context/day-closing-context";
 import { useEntriesContext } from "@/context/entries-context";
 
 function TodayOperationsContent() {
   const { activeBranch, isLoaded: branchLoaded } = useActiveBranch();
+  const { session } = useAuth();
   const today = getTodayISO();
   const { entries, isLoaded } = useEntriesContext();
-  const { isBranchDayClosed, getClosedRecord, isLoaded: closingLoaded } =
-    useDayClosing();
+  const {
+    isBranchDayClosed,
+    needsShopOpening,
+    getClosedRecord,
+    isLoaded: closingLoaded,
+  } = useDayClosing();
+  const [shiftFlowActive, setShiftFlowActive] = useState(false);
+
+  const isOwner = session?.role === "owner";
 
   const { completedEntry, draftEntry } = useMemo(() => {
     if (!isLoaded) {
@@ -40,36 +52,49 @@ function TodayOperationsContent() {
 
   const activeEntry = completedEntry ?? draftEntry;
   const closedRecord = getClosedRecord(activeBranch, today);
-  const isReadOnly =
-    completedEntry?.status === "completed" ||
-    isBranchDayClosed(activeBranch, today);
+  const isDayClosed = isBranchDayClosed(activeBranch, today);
+  const shopNeedsOpening = needsShopOpening(activeBranch, today);
+
+  if (!isOwner && isDayClosed) {
+    return (
+      <PageContainer>
+        <ShiftCompletedPage />
+      </PageContainer>
+    );
+  }
+
+  if (!isOwner && (shopNeedsOpening || shiftFlowActive)) {
+    return (
+      <PageContainer>
+        <OpenShopPage
+          onShiftStarted={() => setShiftFlowActive(true)}
+          onFlowComplete={() => setShiftFlowActive(false)}
+        />
+      </PageContainer>
+    );
+  }
 
   return (
     <PageContainer>
       <PageHeader
         title="Today's Operations"
-        subtitle="Record and close today's branch operations"
+        subtitle={
+          isDayClosed
+            ? "Today's records are closed and read-only"
+            : "Record movie revenue, accessory sales, expenses, staff payments, and close the day"
+        }
         showBranchBadge
       />
 
       <OperationsSubnav />
 
-      {isReadOnly && (completedEntry || closedRecord) ? (
-        <OperationsReadOnlyView entry={completedEntry ?? {
-          id: closedRecord?.id ?? "closed-day",
-          date: today,
-          time: "",
-          timestamp: 0,
-          branch: activeBranch,
-          sales: closedRecord?.summary.sales ?? 0,
-          expenses: [],
-          staffId: "",
-          staffName: closedRecord?.closedByName ?? "",
-          notes: closedRecord?.closingNotes ?? "Day closed",
-          savingsAllocation: closedRecord?.summary.operatingFund,
-          createdAt: closedRecord?.closedAt ?? today,
-          status: "completed",
-        }} />
+      {isDayClosed && closedRecord ? (
+        <>
+          <DayClosedBanner branch={activeBranch} record={closedRecord} />
+          {activeEntry ? (
+            <OperationsReadOnlyView entry={activeEntry} />
+          ) : null}
+        </>
       ) : (
         <OperationsWorkspace
           mode="today"

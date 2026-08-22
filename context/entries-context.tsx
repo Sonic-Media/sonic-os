@@ -16,27 +16,33 @@ import {
   importDailyOperationsApi,
   upsertDailyOperationApi,
 } from "@/lib/api/daily-operations";
+import { useAuth } from "@/context/auth-context";
 import {
-  loadRemoteOrLocal,
-  runRemoteOrLocal,
+  getDataSourceErrorMessage,
+  loadFromApi,
+  runOnApi,
 } from "@/lib/data-source/context-api";
-import { getEntries, saveEntries, upsertEntryInList } from "@/lib/storage";
+import { upsertEntryInList } from "@/lib/storage";
 import type { Entry } from "@/types";
 
 interface EntriesContextValue {
   entries: Entry[];
   isLoaded: boolean;
+  loadError: string | null;
+  refreshEntries: () => Promise<void>;
   upsertEntry: (entry: Entry) => Entry;
   deleteEntry: (id: string) => void;
-  importEntries: (entries: Entry[]) => Entry[];
+  importEntries: (entries: Entry[]) => Promise<Entry[]>;
   removeEntriesByIds: (ids: string[]) => number;
 }
 
 const EntriesContext = createContext<EntriesContextValue | null>(null);
 
 export function EntriesProvider({ children }: { children: React.ReactNode }) {
+  const { isAuthenticated, isLoaded: authLoaded } = useAuth();
   const [entries, setEntries] = useState<Entry[]>([]);
   const [isLoaded, setIsLoaded] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const hasLoaded = useRef(false);
   const entriesRef = useRef<Entry[]>([]);
 
@@ -44,40 +50,60 @@ export function EntriesProvider({ children }: { children: React.ReactNode }) {
     entriesRef.current = entries;
   }, [entries]);
 
+  const refreshEntriesFromApi = useCallback(async () => {
+    const loaded = await fetchDailyOperations();
+    entriesRef.current = loaded;
+    setEntries(loaded);
+    setLoadError(null);
+  }, []);
+
   useEffect(() => {
+    if (!authLoaded) return;
+
+    if (hasLoaded.current && !isAuthenticated) {
+      entriesRef.current = [];
+      setEntries([]);
+      setLoadError(null);
+      setIsLoaded(true);
+      return;
+    }
+
+    if (!isAuthenticated) {
+      entriesRef.current = [];
+      setEntries([]);
+      setLoadError(null);
+      setIsLoaded(true);
+      return;
+    }
+
     if (hasLoaded.current) return;
     hasLoaded.current = true;
 
     queueMicrotask(() => {
       void (async () => {
-        const loaded = await loadRemoteOrLocal({
-          remote: () => fetchDailyOperations(),
-          local: () => getEntries(),
-        });
-
-        entriesRef.current = loaded;
-        setEntries(loaded);
-        setIsLoaded(true);
+        try {
+          await loadFromApi(() => refreshEntriesFromApi());
+        } catch (error) {
+          setLoadError(getDataSourceErrorMessage(error));
+        } finally {
+          setIsLoaded(true);
+        }
       })();
     });
-  }, []);
+  }, [authLoaded, isAuthenticated, refreshEntriesFromApi]);
 
   const upsertEntry = useCallback((entry: Entry): Entry => {
     void (async () => {
-      await runRemoteOrLocal({
-        remote: async () => {
+      try {
+        await runOnApi(async () => {
           const saved = await upsertDailyOperationApi(entry);
           const next = upsertEntryInList(entriesRef.current, saved);
           entriesRef.current = next;
           setEntries(next);
-        },
-        local: () => {
-          const next = upsertEntryInList(entriesRef.current, entry);
-          saveEntries(next);
-          entriesRef.current = next;
-          setEntries(next);
-        },
-      });
+        });
+      } catch (error) {
+        console.error(getDataSourceErrorMessage(error));
+      }
     })();
 
     return entry;
@@ -85,48 +111,32 @@ export function EntriesProvider({ children }: { children: React.ReactNode }) {
 
   const deleteEntry = useCallback((id: string) => {
     void (async () => {
-      await runRemoteOrLocal({
-        remote: async () => {
+      try {
+        await runOnApi(async () => {
           await deleteDailyOperationApi(id);
           const next = entriesRef.current.filter((entry) => entry.id !== id);
           entriesRef.current = next;
           setEntries(next);
-        },
-        local: () => {
-          const next = entriesRef.current.filter((entry) => entry.id !== id);
-          saveEntries(next);
-          entriesRef.current = next;
-          setEntries(next);
-        },
-      });
+        });
+      } catch (error) {
+        console.error(getDataSourceErrorMessage(error));
+      }
     })();
   }, []);
 
-  const importEntries = useCallback((imported: Entry[]): Entry[] => {
-    void (async () => {
-      await runRemoteOrLocal({
-        remote: async () => {
-          const saved = await importDailyOperationsApi(imported);
-          let next = entriesRef.current;
-          for (const entry of saved) {
-            next = upsertEntryInList(next, entry);
-          }
-          entriesRef.current = next;
-          setEntries(next);
-        },
-        local: () => {
-          let next = entriesRef.current;
-          for (const entry of imported) {
-            next = upsertEntryInList(next, entry);
-          }
-          saveEntries(next);
-          entriesRef.current = next;
-          setEntries(next);
-        },
-      });
-    })();
+  const importEntries = useCallback(async (imported: Entry[]): Promise<Entry[]> => {
+    const saved = await runOnApi(async () => {
+      const persisted = await importDailyOperationsApi(imported);
+      let next = entriesRef.current;
+      for (const entry of persisted) {
+        next = upsertEntryInList(next, entry);
+      }
+      entriesRef.current = next;
+      setEntries(next);
+      return persisted;
+    });
 
-    return imported;
+    return saved;
   }, []);
 
   const removeEntriesByIds = useCallback((ids: string[]): number => {
@@ -140,18 +150,15 @@ export function EntriesProvider({ children }: { children: React.ReactNode }) {
     if (removedCount === 0) return 0;
 
     void (async () => {
-      await runRemoteOrLocal({
-        remote: async () => {
+      try {
+        await runOnApi(async () => {
           await bulkDeleteDailyOperationsApi(ids);
           entriesRef.current = next;
           setEntries(next);
-        },
-        local: () => {
-          saveEntries(next);
-          entriesRef.current = next;
-          setEntries(next);
-        },
-      });
+        });
+      } catch (error) {
+        console.error(getDataSourceErrorMessage(error));
+      }
     })();
 
     return removedCount;
@@ -161,12 +168,23 @@ export function EntriesProvider({ children }: { children: React.ReactNode }) {
     () => ({
       entries,
       isLoaded,
+      loadError,
+      refreshEntries: refreshEntriesFromApi,
       upsertEntry,
       deleteEntry,
       importEntries,
       removeEntriesByIds,
     }),
-    [entries, isLoaded, upsertEntry, deleteEntry, importEntries, removeEntriesByIds]
+    [
+      entries,
+      isLoaded,
+      loadError,
+      refreshEntriesFromApi,
+      upsertEntry,
+      deleteEntry,
+      importEntries,
+      removeEntriesByIds,
+    ]
   );
 
   return (

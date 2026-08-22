@@ -1,7 +1,3 @@
-import {
-  SALES_CUSTOMERS_STORAGE_KEY,
-  SALES_STORAGE_KEY,
-} from "@/lib/constants";
 import { normalizeBranchCode } from "@/lib/branch-storage";
 import { normalizeStaffActionRecord } from "@/lib/staff/session";
 import type {
@@ -170,40 +166,6 @@ export function normalizeCustomerList(value: unknown): Customer[] {
   return value
     .map(normalizeCustomer)
     .filter((customer): customer is Customer => customer !== null);
-}
-
-export function getSales(): Sale[] {
-  if (typeof window === "undefined") return [];
-
-  try {
-    const raw = localStorage.getItem(SALES_STORAGE_KEY);
-    if (!raw) return [];
-    return normalizeSaleList(JSON.parse(raw) as unknown);
-  } catch {
-    return [];
-  }
-}
-
-export function saveSales(sales: Sale[]): void {
-  if (typeof window === "undefined") return;
-  localStorage.setItem(SALES_STORAGE_KEY, JSON.stringify(sales));
-}
-
-export function getCustomers(): Customer[] {
-  if (typeof window === "undefined") return [];
-
-  try {
-    const raw = localStorage.getItem(SALES_CUSTOMERS_STORAGE_KEY);
-    if (!raw) return [];
-    return normalizeCustomerList(JSON.parse(raw) as unknown);
-  } catch {
-    return [];
-  }
-}
-
-export function saveCustomers(customers: Customer[]): void {
-  if (typeof window === "undefined") return;
-  localStorage.setItem(SALES_CUSTOMERS_STORAGE_KEY, JSON.stringify(customers));
 }
 
 export function sortSalesByDate(sales: Sale[]): Sale[] {

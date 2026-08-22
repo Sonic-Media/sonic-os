@@ -2,16 +2,19 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { SALES_NAV_ITEMS } from "@/lib/sales/constants";
+import { useAuth } from "@/context/auth-context";
+import { getVisibleSalesNavItems } from "@/lib/auth/sales-nav-visibility";
 import { cn } from "@/lib/utils";
 
 export function SalesSubnav() {
   const pathname = usePathname();
+  const { session } = useAuth();
+  const navItems = session ? getVisibleSalesNavItems(session.role) : [];
 
   return (
     <nav className="mb-8">
       <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
-        {SALES_NAV_ITEMS.map((item) => {
+        {navItems.map((item) => {
           const isActive = item.exact
             ? pathname === item.href
             : pathname.startsWith(item.href);

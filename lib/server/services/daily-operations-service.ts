@@ -76,6 +76,7 @@ export async function upsertDailyOperation(entry: Entry): Promise<Entry> {
     name: expense.name,
     amount: expense.amount,
   }));
+  let persistedId = entry.id;
 
   await prisma.$transaction(async (tx) => {
     const existing = await tx.dailyOperation.findUnique({
@@ -99,6 +100,32 @@ export async function upsertDailyOperation(entry: Entry): Promise<Entry> {
       return;
     }
 
+    const existingByDate = await tx.dailyOperation.findUnique({
+      where: {
+        branchId_date: {
+          branchId,
+          date: entry.date,
+        },
+      },
+    });
+
+    if (existingByDate) {
+      persistedId = existingByDate.id;
+      await tx.dailyOperationExpense.deleteMany({
+        where: { dailyOperationId: existingByDate.id },
+      });
+      await tx.dailyOperation.update({
+        where: { id: existingByDate.id },
+        data: {
+          ...data,
+          expenses: {
+            create: expenseRows,
+          },
+        },
+      });
+      return;
+    }
+
     await tx.dailyOperation.create({
       data: {
         id: entry.id,
@@ -111,7 +138,7 @@ export async function upsertDailyOperation(entry: Entry): Promise<Entry> {
   });
 
   const operation = await prisma.dailyOperation.findUniqueOrThrow({
-    where: { id: entry.id },
+    where: { id: persistedId },
     include: dailyOperationInclude,
   });
 
@@ -142,36 +169,37 @@ export async function importDailyOperations(
     }
   }
 
+  const importedIds: string[] = [];
+
   await prisma.$transaction(async (tx) => {
     for (const entry of entries) {
       const branchId = branchIds.get(entry.branch)!;
+
+      const existingByDate = await tx.dailyOperation.findUnique({
+        where: {
+          branchId_date: {
+            branchId,
+            date: entry.date,
+          },
+        },
+      });
+
+      if (existingByDate) {
+        throw new ApiError(
+          `Daily operation already exists for ${entry.branch} on ${entry.date}.`,
+          {
+            status: 409,
+            code: "duplicate_daily_operation",
+          }
+        );
+      }
+
       const data = entryToDailyOperationData(entry, branchId);
       const expenseRows = entry.expenses.map((expense) => ({
         id: expenseIdForDb(expense),
         name: expense.name,
         amount: expense.amount,
       }));
-
-      const existing = await tx.dailyOperation.findUnique({
-        where: { id: entry.id },
-      });
-
-      if (existing) {
-        await tx.dailyOperationExpense.deleteMany({
-          where: { dailyOperationId: entry.id },
-        });
-
-        await tx.dailyOperation.update({
-          where: { id: entry.id },
-          data: {
-            ...data,
-            expenses: {
-              create: expenseRows,
-            },
-          },
-        });
-        continue;
-      }
 
       await tx.dailyOperation.create({
         data: {
@@ -182,12 +210,13 @@ export async function importDailyOperations(
           },
         },
       });
+
+      importedIds.push(entry.id);
     }
   });
 
-  const ids = entries.map((entry) => entry.id);
   const operations = await prisma.dailyOperation.findMany({
-    where: { id: { in: ids } },
+    where: { id: { in: importedIds } },
     include: dailyOperationInclude,
   });
 

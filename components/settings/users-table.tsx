@@ -12,6 +12,7 @@ interface UsersTableProps {
   onResetPassword: (user: AppUser) => void;
   onDisable: (user: AppUser) => void;
   onEnable: (user: AppUser) => void;
+  onDelete: (user: AppUser) => void;
 }
 
 export function UsersTable({
@@ -20,6 +21,7 @@ export function UsersTable({
   onResetPassword,
   onDisable,
   onEnable,
+  onDelete,
 }: UsersTableProps) {
   const { getBranchName } = useBranches();
 
@@ -120,6 +122,15 @@ export function UsersTable({
                         Enable
                       </Button>
                     )}
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      className="h-9 px-3 text-red-400 hover:text-red-300"
+                      onClick={() => onDelete(user)}
+                      disabled={user.role === "owner"}
+                    >
+                      Delete
+                    </Button>
                   </div>
                 </td>
               </tr>

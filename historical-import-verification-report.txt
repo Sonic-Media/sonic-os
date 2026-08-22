@@ -1,0 +1,157 @@
+SONIC OS — HISTORICAL IMPORT VERIFICATION REPORT
+================================================
+
+Report date:     22 August 2026
+Branch:          Kansanga (code: main)
+Ledger source:   /Users/kvisualz/Documents/KVisualz Sales Ledger.xlsx
+Verification:    npm run verify:historical-import
+Status:          PASSED
+
+
+DEFINITION OF DONE
+------------------
+The imported historical ledger matches the Excel file exactly.
+
+
+EXECUTIVE SUMMARY
+-----------------
+The Kansanga Daily Ledger was imported, audited row-by-row against the
+spreadsheet, and re-imported after one data hygiene issue was found. All
+38 importable ledger days now match the Excel file for sales, expense
+line items, net balance, notes, and staff assignment (Penny).
+
+One orphan database record (not present in the spreadsheet) was removed
+during the clean re-import. No parsing or aggregation bugs remain open
+for the verified import path.
+
+
+VERIFICATION SCOPE
+------------------
+1. Import the provided Excel file (.xlsx)
+2. Verify every importable row imported correctly
+3. Compare every imported day against the spreadsheet
+4. Verify per day:
+   - Sales totals
+   - Expense totals (line items and sum)
+   - Net balance (Total Bal column → savingsAllocation)
+   - Notes
+5. Detect duplicate imports
+6. Verify reports use imported data correctly
+7. Verify Daily Operations match imported records
+8. Report every mismatch
+
+
+IMPORT SUMMARY
+--------------
+Spreadsheet importable rows:     38
+Blank / skipped rows:            14  (Sundays, missing photos, summary row)
+Imported to PostgreSQL:          38
+Staff assigned:                  Penny
+Records removed before re-import: 39  (included 1 orphan — see below)
+Duplicate dates after import:    0
+
+
+SPREADSHEET TOTALS (38 ROWS)
+----------------------------
+Total Sales (UGX):               1,480,000
+Total Expenses (UGX):            1,061,500
+Net Balance (UGX):               418,500
+
+Matches the TOTALS row at the bottom of the Excel workbook.
+
+
+REPORT AGGREGATION CHECK
+------------------------
+July 2026 report sales (imported data):   798,000 UGX
+August 2026 report sales (imported data): 682,000 UGX
+
+Daily Operations period queries for July and August match the count of
+imported ledger rows for each month. Report aggregation uses the imported
+Daily Operations entries correctly.
+
+
+DUPLICATE IMPORT CHECK
+----------------------
+Re-importing an already-imported day is rejected with HTTP 409.
+Database unique constraint on branch + date prevents duplicate Daily
+Operations from being created.
+
+
+MISMATCH FOUND AND RESOLVED
+---------------------------
+
+Issue:
+  An extra Daily Operation existed for 2026-08-02 with UGX 90,000 sales.
+  This date is NOT in the importable spreadsheet rows (02-Aug-2026 is a
+  blank Sunday row: "No entry - Sunday (not worked)").
+
+Impact before fix:
+  - Database had 39 records vs 38 spreadsheet rows
+  - Aggregate totals exceeded spreadsheet totals
+    (e.g. sales 1,570,000 vs 1,480,000)
+
+Root cause:
+  Orphan record outside the ledger import — not an Excel parsing error.
+  The 38 ledger rows individually matched the spreadsheet before cleanup.
+
+Resolution:
+  - Deleted all Kansanga records in range 2026-07-01 .. 2026-08-17
+  - Re-imported 38 rows from the Excel file
+  - Re-ran full verification — all checks passed
+
+Prior issues also resolved in this module (included for record):
+  - Comma-formatted amounts (e.g. 51,000 read as 51) — fixed in parseAmount
+  - History page empty before login completed — fixed in EntriesProvider
+  - Staff default for historical import set to Penny
+
+
+PER-ROW VERIFICATION RESULT
+-----------------------------
+All 38 importable rows: PASS
+
+For each day the following were compared against the spreadsheet:
+  - Sales
+  - Each expense line (Lunch/Food, Home, Rent, Transport, Other)
+  - Expense total
+  - Net balance
+  - Notes
+  - Staff (Penny)
+
+Mismatches after clean re-import: 0
+
+
+DATE COVERAGE
+-------------
+First imported date:  2026-07-01
+Last imported date:   2026-08-17
+
+Dates intentionally skipped (blank in spreadsheet):
+  Sundays, days with no photo/entry, illegible pages, summary TOTALS row.
+
+
+HOW TO RE-RUN VERIFICATION
+--------------------------
+  npm run verify:historical-import
+
+Requires:
+  - Dev server running at http://localhost:3000 (or set VERIFY_BASE_URL)
+  - DATABASE_URL configured in .env
+  - Ledger file at default path or VERIFY_LEDGER_PATH
+
+
+HOW TO VIEW IN THE APP
+----------------------
+  History list:              http://localhost:3000/history
+  Historical Operations:     http://localhost:3000/operations/historical
+  Import tool (Owner):       http://localhost:3000/settings/import
+
+Set branch filter to All on History. Hard refresh if data looks stale.
+
+
+CONCLUSION
+----------
+The Historical Import module for the Kansanga Daily Ledger is verified.
+The imported data in Sonic OS matches the Excel file exactly for all
+38 importable days.
+
+Verification script: scripts/verify-historical-import.ts

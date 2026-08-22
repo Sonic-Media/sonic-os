@@ -21,6 +21,7 @@ import { useEntriesContext } from "@/context/entries-context";
 import { useExpenseTemplates } from "@/context/expense-templates-context";
 import { useStaff } from "@/context/staff-context";
 import { useStaffPaymentsModule } from "@/context/staff-payments-context";
+import { useSalesDashboard } from "@/hooks/use-sales-dashboard";
 import { computeStaffPayoutTotalForBranchDate } from "@/lib/staff-payments/calculations";
 import type { Branch, Entry, EntryFormData, Expense } from "@/types";
 
@@ -58,6 +59,7 @@ export function useEntryForm(options: UseEntryFormOptions = {}) {
   const { activeTemplateExpenses } = useExpenseTemplates();
   const { getStaffById } = useStaff();
   const { payments } = useStaffPaymentsModule();
+  const { metrics: salesMetrics } = useSalesDashboard();
   const { activeBranch, isLoaded: activeBranchLoaded } = useActiveBranch();
   const isEdit = !!options.entry;
   const isDraftEdit = isEdit && options.entry?.status === "draft";
@@ -74,7 +76,6 @@ export function useEntryForm(options: UseEntryFormOptions = {}) {
   );
   const [isSaving, setIsSaving] = useState(false);
   const [duplicateEntry, setDuplicateEntry] = useState<Entry | null>(null);
-  const [showCloseDayDialog, setShowCloseDayDialog] = useState(false);
   const [hasStarted, setHasStarted] = useState(isEdit);
   const hasInteracted = useRef(isEdit);
   const draftIdRef = useRef<string | null>(
@@ -88,7 +89,8 @@ export function useEntryForm(options: UseEntryFormOptions = {}) {
     entriesRef.current = entries;
   }, [entries]);
 
-  const sales = parseAmount(form.sales);
+  const movieRevenue = parseAmount(form.sales);
+  const accessorySales = salesMetrics.todayRevenue ?? 0;
   const totalExpenses = calculateExpenses(form);
   const staffPayouts = useMemo(
     () =>
@@ -99,7 +101,7 @@ export function useEntryForm(options: UseEntryFormOptions = {}) {
       ),
     [payments, form.branch, form.date]
   );
-  const balance = sales - totalExpenses - staffPayouts;
+  const balance = movieRevenue + accessorySales - totalExpenses - staffPayouts;
   const mode = options.mode ?? "today";
   const status = isEdit ? options.entry!.status : "draft";
   const showStatus = isEdit || hasStarted;
@@ -360,25 +362,42 @@ export function useEntryForm(options: UseEntryFormOptions = {}) {
       );
     } finally {
       saveLockRef.current = false;
-      setShowCloseDayDialog(false);
     }
   }
 
   function handleSubmitRequest() {
     if (mode === "today") {
-      setShowCloseDayDialog(true);
-      setIsSaving(false);
+      cancelPendingAutosave();
+      saveLockRef.current = true;
+      setIsSaving(true);
+
+      try {
+        const activeDraftId = resolveActiveDraftId();
+        const existing = activeDraftId
+          ? entriesRef.current.find((entry) => entry.id === activeDraftId)
+          : undefined;
+        const entry = formToEntry(form, {
+          id: activeDraftId ?? undefined,
+          status: "draft",
+          existing,
+          staffName: resolveStaffName(existing),
+        });
+
+        upsertEntry(entry);
+        syncEntriesRef(entry);
+        draftIdRef.current = entry.id;
+      } finally {
+        saveLockRef.current = false;
+        setIsSaving(false);
+      }
       return;
     }
     handleSave();
   }
 
-  function handleConfirmCloseDay() {
-    handleSave();
-  }
-
-  function handleCancelCloseDay() {
-    setShowCloseDayDialog(false);
+  function handleCancelDuplicate() {
+    setDuplicateEntry(null);
+    setIsSaving(false);
   }
 
   function handleEditExisting() {
@@ -386,11 +405,6 @@ export function useEntryForm(options: UseEntryFormOptions = {}) {
     setDuplicateEntry(null);
     setIsSaving(false);
     router.push(`/entry/${duplicateEntry.id}/edit`);
-  }
-
-  function handleCancelDuplicate() {
-    setDuplicateEntry(null);
-    setIsSaving(false);
   }
 
   return {
@@ -401,17 +415,16 @@ export function useEntryForm(options: UseEntryFormOptions = {}) {
     lockBranch,
     mode,
     status: showStatus ? status : undefined,
-    sales,
+    sales: movieRevenue,
+    movieRevenue,
+    accessorySales,
     totalExpenses,
     staffPayouts,
     balance,
     duplicateEntry,
-    showCloseDayDialog,
     updateField,
     handleSave,
     handleSubmitRequest,
-    handleConfirmCloseDay,
-    handleCancelCloseDay,
     handleEditExisting,
     handleCancelDuplicate,
     seedCommonExpenses: !isEdit,

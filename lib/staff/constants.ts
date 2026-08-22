@@ -1,3 +1,5 @@
+export const DEFAULT_DAILY_WAGE = 10_000;
+
 export const STAFF_NAV_ITEMS: {
   href: string;
   label: string;

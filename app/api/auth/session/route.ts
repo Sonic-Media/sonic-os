@@ -46,7 +46,7 @@ export async function POST(request: Request) {
 
     if (action === "login") {
       const parsed = loginSchema.parse(body);
-      const session = await login(parsed);
+      const session = await login(parsed, request);
       return jsonOk({ session });
     }
 
@@ -64,7 +64,7 @@ export async function POST(request: Request) {
     if (action === "unlock") {
       await requireSession();
       const password = typeof body.password === "string" ? body.password : "";
-      const session = await unlockSession(password);
+      const session = await unlockSession(password, request);
       return jsonOk({ session });
     }
 

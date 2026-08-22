@@ -1,4 +1,3 @@
-import { STAFF_PAYMENTS_STORAGE_KEY } from "@/lib/constants";
 import { normalizeBranchCode } from "@/lib/branch-storage";
 import { normalizeStaffActionRecord } from "@/lib/staff/session";
 import { isStaffRoleId } from "@/lib/staff/roles";
@@ -109,23 +108,6 @@ export function normalizeStaffPaymentList(value: unknown): StaffPaymentRecord[] 
   return value
     .map(normalizeStaffPaymentRecord)
     .filter((payment): payment is StaffPaymentRecord => payment !== null);
-}
-
-export function getStaffPayments(): StaffPaymentRecord[] {
-  if (typeof window === "undefined") return [];
-
-  try {
-    const raw = localStorage.getItem(STAFF_PAYMENTS_STORAGE_KEY);
-    if (!raw) return [];
-    return normalizeStaffPaymentList(JSON.parse(raw) as unknown);
-  } catch {
-    return [];
-  }
-}
-
-export function saveStaffPayments(payments: StaffPaymentRecord[]): void {
-  if (typeof window === "undefined") return;
-  localStorage.setItem(STAFF_PAYMENTS_STORAGE_KEY, JSON.stringify(payments));
 }
 
 export function sortStaffPaymentsByDate(

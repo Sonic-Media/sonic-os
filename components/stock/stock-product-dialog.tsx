@@ -80,7 +80,7 @@ export function StockProductDialog({
     setFormError(undefined);
   }
 
-  function handleSubmit(event: React.FormEvent) {
+  async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
     setFormError(undefined);
 
@@ -122,7 +122,7 @@ export function StockProductDialog({
         notes: form.notes,
       };
 
-      const result = addProduct(input);
+      const result = await addProduct(input);
       if (!result.success) {
         setErrors(result.errors);
         setFormError(result.errors.form);
@@ -142,7 +142,7 @@ export function StockProductDialog({
         notes: form.notes,
       };
 
-      const result = updateProduct(product.id, input);
+      const result = await updateProduct(product.id, input);
       if (!result.success) {
         setErrors(result.errors);
         setFormError(result.errors.form);

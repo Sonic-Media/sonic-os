@@ -1,75 +1,58 @@
-import { STAFF_AUDIT_STORAGE_KEY } from "@/lib/constants";
 import { recordAuditEntry } from "@/lib/audit-log/record";
-import { getSession } from "@/lib/auth-storage";
-import { getStaffList } from "@/lib/staff-storage";
+import { getClientSession } from "@/lib/client/session-registry";
+import { fetchStaff } from "@/lib/api/staff";
 import type { Staff } from "@/types";
+import type { AuditLogRecord } from "@/types/audit-log";
 import type { StaffAuditInput, StaffAuditRecord } from "@/types/staff-audit";
 
-const MAX_AUDIT_RECORDS = 500;
+let staffListCache: Staff[] = [];
+let auditRecordCache: StaffAuditRecord[] = [];
 
-function normalizeStaffAuditRecord(value: unknown): StaffAuditRecord | null {
-  if (!value || typeof value !== "object") return null;
+export function setStaffAuditCache(records: StaffAuditRecord[]): void {
+  auditRecordCache = records;
+}
 
-  const raw = value as Record<string, unknown>;
-  const id = typeof raw.id === "string" ? raw.id.trim() : "";
-  const timestamp = typeof raw.timestamp === "string" ? raw.timestamp.trim() : "";
-  const staffId = typeof raw.staffId === "string" ? raw.staffId.trim() : "";
-  const staffName = typeof raw.staffName === "string" ? raw.staffName.trim() : "";
-  const role = typeof raw.role === "string" ? raw.role.trim() : "";
-  const branch = typeof raw.branch === "string" ? raw.branch.trim() : "";
-  const action = typeof raw.action === "string" ? raw.action.trim() : "";
-  const module = typeof raw.module === "string" ? raw.module.trim() : "";
+export function setStaffListCache(staff: Staff[]): void {
+  staffListCache = staff;
+}
 
-  if (!id || !timestamp || !staffId || !staffName || !role || !branch || !action || !module) {
-    return null;
-  }
-
+function mapAuditLogToStaffAudit(record: AuditLogRecord): StaffAuditRecord {
   return {
-    id,
-    timestamp,
-    staffId,
-    staffName,
-    role: role as StaffAuditRecord["role"],
-    branch,
-    action,
-    module: module as StaffAuditRecord["module"],
-    detail:
-      typeof raw.detail === "string" && raw.detail.trim()
-        ? raw.detail.trim()
-        : undefined,
+    id: record.id,
+    timestamp: record.timestamp,
+    staffId: record.userId,
+    staffName: record.userName,
+    role: record.role as StaffAuditRecord["role"],
+    branch: record.branch,
+    action: record.action,
+    module: record.module,
   };
 }
 
-export function getStaffAuditRecords(): StaffAuditRecord[] {
-  if (typeof window === "undefined") return [];
-
-  try {
-    const raw = localStorage.getItem(STAFF_AUDIT_STORAGE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw) as unknown;
-    if (!Array.isArray(parsed)) return [];
-
-    return parsed
-      .map(normalizeStaffAuditRecord)
-      .filter((record): record is StaffAuditRecord => record !== null);
-  } catch {
-    return [];
-  }
+export function syncStaffAuditCacheFromAuditLog(records: AuditLogRecord[]): void {
+  auditRecordCache = records.map(mapAuditLogToStaffAudit);
 }
 
-export function saveStaffAuditRecords(records: StaffAuditRecord[]): void {
-  if (typeof window === "undefined") return;
-  localStorage.setItem(STAFF_AUDIT_STORAGE_KEY, JSON.stringify(records));
+export function getStaffAuditRecords(): StaffAuditRecord[] {
+  return auditRecordCache;
 }
 
 export function resolveStaffFromSession(): Staff | undefined {
-  const session = getSession();
+  const session = getClientSession();
   if (!session) return undefined;
-  return getStaffList().find((member) => member.userId === session.userId);
+  return staffListCache.find((member) => member.userId === session.userId);
 }
 
 export function resolveStaffByUserId(userId: string): Staff | undefined {
-  return getStaffList().find((member) => member.userId === userId);
+  return staffListCache.find((member) => member.userId === userId);
+}
+
+export async function refreshStaffListCache(): Promise<void> {
+  try {
+    staffListCache = await fetchStaff();
+  } catch {
+    staffListCache = [];
+  }
 }
 
 export function recordStaffAction(input: StaffAuditInput): StaffAuditRecord | null {
@@ -116,22 +99,18 @@ export function recordStaffAction(input: StaffAuditInput): StaffAuditRecord | nu
     detail: input.detail?.trim() || undefined,
   };
 
-  if (typeof window !== "undefined") {
-    const next = [record, ...getStaffAuditRecords()].slice(0, MAX_AUDIT_RECORDS);
-    saveStaffAuditRecords(next);
-  }
-
+  auditRecordCache = [record, ...auditRecordCache].slice(0, 500);
   return record;
 }
 
 export function getStaffAuditForProfile(staffId: string): StaffAuditRecord[] {
-  return getStaffAuditRecords()
+  return auditRecordCache
     .filter((record) => record.staffId === staffId)
     .sort((left, right) => right.timestamp.localeCompare(left.timestamp));
 }
 
 export function getGlobalStaffAuditLog(): StaffAuditRecord[] {
-  return [...getStaffAuditRecords()].sort((left, right) =>
+  return [...auditRecordCache].sort((left, right) =>
     right.timestamp.localeCompare(left.timestamp)
   );
 }

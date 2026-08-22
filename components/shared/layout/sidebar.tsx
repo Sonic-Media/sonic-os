@@ -6,16 +6,23 @@ import { isNavItemActive, navItems } from "@/components/shared/layout/nav-items"
 import { BranchSwitcher } from "@/components/shared/layout/branch-switcher";
 import { AppNotificationCenter } from "@/components/shared/layout/app-notification-center";
 import { useAuth } from "@/context/auth-context";
-import { canAccessRoute } from "@/lib/auth/permissions";
+import { useStaff } from "@/context/staff-context";
+import { isNavVisibleForRole } from "@/lib/auth/nav-visibility";
+import { isCashierRole } from "@/lib/auth/permissions";
 import { cn } from "@/lib/utils";
 
 export function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const { session, lock, logout } = useAuth();
+  const { staff } = useStaff();
+
+  const linkedStaff = session
+    ? staff.find((member) => member.userId === session.userId)
+    : undefined;
 
   const visibleNavItems = navItems.filter((item) =>
-    session ? canAccessRoute(session.role, item.href) : false
+    session ? isNavVisibleForRole(session.role, item.href) : false
   );
 
   function handleLock() {
@@ -72,6 +79,14 @@ export function Sidebar() {
 
         {session && (
           <div className="mt-6 space-y-2 border-t border-zinc-800/80 pt-4">
+            {linkedStaff && !isCashierRole(session.role) && (
+              <Link
+                href={`/staff/${linkedStaff.id}`}
+                className="block rounded-xl px-3 py-2 text-sm text-zinc-400 hover:bg-zinc-900/60 hover:text-white"
+              >
+                Profile
+              </Link>
+            )}
             {session.role === "owner" && (
               <Link
                 href="/settings/users"
@@ -80,13 +95,15 @@ export function Sidebar() {
                 Users
               </Link>
             )}
-            <button
-              type="button"
-              onClick={handleLock}
-              className="block w-full rounded-xl px-3 py-2 text-left text-sm text-zinc-400 hover:bg-zinc-900/60 hover:text-white"
-            >
-              Lock
-            </button>
+            {!isCashierRole(session.role) && (
+              <button
+                type="button"
+                onClick={handleLock}
+                className="block w-full rounded-xl px-3 py-2 text-left text-sm text-zinc-400 hover:bg-zinc-900/60 hover:text-white"
+              >
+                Lock
+              </button>
+            )}
             <button
               type="button"
               onClick={logout}

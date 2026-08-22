@@ -6,9 +6,9 @@ import {
 } from "@/lib/server/services/expenses-service";
 import { normalizeStaffActionRecord } from "@/lib/staff/session";
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    const expenses = await withDatabase(() => listExpenses());
+    const expenses = await withDatabase(() => listExpenses(), { request });
     return jsonOk(expenses);
   } catch (error) {
     return handleRouteError(error);
@@ -19,7 +19,10 @@ export async function POST(request: Request) {
   try {
     const body = await request.json();
     const createdBy = normalizeStaffActionRecord(body.createdBy);
-    const expense = await withDatabase(() => createExpense(body, createdBy));
+    const expense = await withDatabase(
+      () => createExpense(body, createdBy),
+      { request }
+    );
     return jsonCreated(expense);
   } catch (error) {
     return handleRouteError(error);

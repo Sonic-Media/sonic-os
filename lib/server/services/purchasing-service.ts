@@ -2,7 +2,7 @@ import { ApiError } from "@/lib/api/errors";
 import { prisma } from "@/lib/db";
 import type { Prisma } from "@/lib/prisma";
 import { getTodayISO } from "@/lib/dates";
-import { getBranchIdByCode } from "@/lib/server/branch-lookup";
+import { getBranchIdForSession } from "@/lib/server/branch-lookup";
 import { toJsonField } from "@/lib/server/json-fields";
 import {
   mapPurchaseToEntity,
@@ -12,10 +12,15 @@ import {
   computeLineSubtotal,
   mergePurchaseLineItems,
 } from "@/lib/purchasing/calculations";
+import {
+  hasValidationErrors,
+  validatePurchaseInput,
+} from "@/lib/purchasing/validation";
 import { applyPurchaseStockIn, type ProductCache } from "@/lib/server/stock-transactions";
-import { getSessionFromRequest } from "@/lib/server/session";
+import { requireSession } from "@/lib/server/session";
 import { recordTransactionAudit } from "@/lib/server/transaction-audit";
 import { AUDIT_ACTIONS } from "@/lib/audit-log/constants";
+import type { AuthSession } from "@/types/auth";
 import type {
   Purchase,
   PurchaseInput,
@@ -29,6 +34,52 @@ const purchaseInclude = {
   branch: true,
   items: true,
 } as const;
+
+async function resolvePurchaseStaff(
+  tx: Prisma.TransactionClient,
+  createdBy: StaffActionRecord | undefined,
+  session: AuthSession
+): Promise<{
+  staffId: string | null;
+  staffName: string | null;
+}> {
+  let staffId = createdBy?.staffId ?? null;
+  let staffName = createdBy?.staffName ?? null;
+
+  if (!staffId) {
+    const user = await tx.user.findUnique({
+      where: { id: session.userId },
+      include: { staff: true },
+    });
+    if (user?.staffId) {
+      staffId = user.staffId;
+      staffName = user.staff?.name ?? null;
+    }
+  }
+
+  if (staffId && !staffName) {
+    const staffMember = await tx.staff.findUnique({
+      where: { id: staffId },
+      select: { name: true },
+    });
+    staffName = staffMember?.name ?? null;
+  }
+
+  return { staffId, staffName };
+}
+
+function assertValidPurchaseInput(input: PurchaseInput): void {
+  const errors = validatePurchaseInput(input);
+  if (hasValidationErrors(errors)) {
+    const message =
+      Object.values(errors).find((value) => typeof value === "string" && value) ??
+      "Invalid purchase input.";
+    throw new ApiError(message, {
+      status: 400,
+      code: "validation_error",
+    });
+  }
+}
 
 async function generatePurchaseInvoiceNumber(
   tx: Prisma.TransactionClient,
@@ -150,6 +201,8 @@ export async function createPurchase(
   input: PurchaseInput,
   createdBy?: StaffActionRecord
 ): Promise<Purchase> {
+  assertValidPurchaseInput(input);
+
   const supplier = await prisma.supplier.findUnique({
     where: { id: input.supplierId },
   });
@@ -170,7 +223,8 @@ export async function createPurchase(
   }
 
   const dateISO = input.date ?? getTodayISO();
-  const branchId = await getBranchIdByCode(input.branch);
+  const session = await requireSession();
+  const branchId = await getBranchIdForSession(session, input.branch);
 
   const productIds = mergedItems.map((item) => item.productId);
   const products = await prisma.product.findMany({
@@ -187,6 +241,12 @@ export async function createPurchase(
     }
     if (item.quantity <= 0) {
       throw new ApiError("Purchase quantity must be greater than zero.", {
+        status: 400,
+        code: "validation_error",
+      });
+    }
+    if (!Number.isFinite(item.buyingPrice) || item.buyingPrice <= 0) {
+      throw new ApiError("Buying price must be greater than zero.", {
         status: 400,
         code: "validation_error",
       });
@@ -208,10 +268,14 @@ export async function createPurchase(
   );
 
   let purchaseId: string;
-  const session = await getSessionFromRequest();
 
   await prisma.$transaction(async (tx) => {
     const invoiceNumber = await generatePurchaseInvoiceNumber(tx, dateISO);
+    const { staffId, staffName } = await resolvePurchaseStaff(
+      tx,
+      createdBy,
+      session
+    );
     const productCache: ProductCache = new Map(
       [...productById.values()].map((product) => [product.id, product])
     );
@@ -240,8 +304,8 @@ export async function createPurchase(
         supplierName: supplier.name,
         totalCost,
         branchId,
-        staffId: createdBy?.staffId ?? null,
-        staffName: createdBy?.staffName ?? null,
+        staffId,
+        staffName,
         createdBy: toJsonField(createdBy),
         notes: input.notes?.trim() || null,
         items: {

@@ -12,7 +12,9 @@ export async function PATCH(
   try {
     const { id } = await context.params;
     const body = await request.json();
-    const product = await withDatabase(() => updateProduct(id, body));
+    const product = await withDatabase(() => updateProduct(id, body), {
+      request,
+    });
     return jsonOk(product);
   } catch (error) {
     return handleRouteError(error);
@@ -25,7 +27,7 @@ export async function DELETE(
 ) {
   try {
     const { id } = await context.params;
-    await withDatabase(() => deleteProduct(id));
+    await withDatabase(() => deleteProduct(id), { request: _request });
     return jsonOk(null);
   } catch (error) {
     return handleRouteError(error);

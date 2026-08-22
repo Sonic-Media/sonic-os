@@ -2,7 +2,6 @@ import { parseAmount } from "@/lib/amounts";
 import {
   DEFAULT_EXPENSE_TEMPLATES,
   EXPENSE_BREAKDOWN_ITEMS,
-  EXPENSE_TEMPLATES_STORAGE_KEY,
 } from "@/lib/constants";
 import type { ExpenseBreakdownKey, ExpenseTemplate } from "@/types";
 
@@ -52,30 +51,6 @@ export function normalizeExpenseTemplates(value: unknown): ExpenseTemplate[] {
   return templates.length > 0
     ? sortExpenseTemplates(templates)
     : DEFAULT_EXPENSE_TEMPLATES.map((template) => ({ ...template }));
-}
-
-export function getExpenseTemplates(): ExpenseTemplate[] {
-  if (typeof window === "undefined") {
-    return DEFAULT_EXPENSE_TEMPLATES.map((template) => ({ ...template }));
-  }
-
-  try {
-    const raw = localStorage.getItem(EXPENSE_TEMPLATES_STORAGE_KEY);
-    if (!raw) {
-      return DEFAULT_EXPENSE_TEMPLATES.map((template) => ({ ...template }));
-    }
-    return normalizeExpenseTemplates(JSON.parse(raw) as unknown);
-  } catch {
-    return DEFAULT_EXPENSE_TEMPLATES.map((template) => ({ ...template }));
-  }
-}
-
-export function saveExpenseTemplates(templates: ExpenseTemplate[]): void {
-  if (typeof window === "undefined") return;
-  localStorage.setItem(
-    EXPENSE_TEMPLATES_STORAGE_KEY,
-    JSON.stringify(sortExpenseTemplates(templates))
-  );
 }
 
 export function sortExpenseTemplates(

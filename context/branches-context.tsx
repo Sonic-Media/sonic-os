@@ -10,24 +10,22 @@ import {
   useState,
 } from "react";
 import {
-  buildBranchLookup,
-  getBranches,
-  normalizeBranchList,
-  saveBranches,
-  sortBranchesByName,
-} from "@/lib/branch-storage";
-import {
   createBranchApi,
   fetchBranches,
   setBranchActiveApi,
   updateBranchApi,
 } from "@/lib/api/branches";
-import { isApiAvailable } from "@/lib/data-source";
-import { shouldUseApiDataSource } from "@/lib/env";
+import {
+  getDataSourceErrorMessage,
+  loadFromApi,
+  runOnApi,
+} from "@/lib/data-source/context-api";
 import {
   hasValidationErrors,
   validateBranchInput,
 } from "@/lib/branch/validation";
+import { sortBranchesByName } from "@/lib/branch-storage";
+import { useAuth } from "@/context/auth-context";
 import { AUDIT_ACTIONS } from "@/lib/audit-log/constants";
 import { pickAuditFields } from "@/lib/audit-log/snapshots";
 import { recordStaffAction } from "@/lib/staff/audit";
@@ -43,6 +41,7 @@ interface BranchesContextValue {
   branches: BranchEntity[];
   activeBranches: BranchEntity[];
   isLoaded: boolean;
+  loadError: string | null;
   getBranchByCode: (code: Branch) => BranchEntity | undefined;
   getBranchName: (code: Branch) => string;
   addBranch: (input: BranchInput) => BranchValidationResult;
@@ -63,8 +62,10 @@ function createValidationResult(
 }
 
 export function BranchesProvider({ children }: { children: React.ReactNode }) {
-  const [branches, setBranches] = useState<BranchEntity[]>(() => getBranches());
+  const { isAuthenticated, isLoaded: authLoaded } = useAuth();
+  const [branches, setBranches] = useState<BranchEntity[]>([]);
   const [isLoaded, setIsLoaded] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const hasLoaded = useRef(false);
   const branchesRef = useRef(branches);
 
@@ -72,48 +73,50 @@ export function BranchesProvider({ children }: { children: React.ReactNode }) {
     branchesRef.current = branches;
   }, [branches]);
 
+  const refreshBranchesFromApi = useCallback(async () => {
+    const remoteBranches = await fetchBranches();
+    const normalized = sortBranchesByName(remoteBranches);
+    branchesRef.current = normalized;
+    setBranches(normalized);
+    setLoadError(null);
+  }, []);
+
   useEffect(() => {
+    if (!authLoaded) return;
+    if (hasLoaded.current && !isAuthenticated) {
+      branchesRef.current = [];
+      setBranches([]);
+      setLoadError(null);
+      setIsLoaded(true);
+      return;
+    }
+    if (!isAuthenticated) {
+      branchesRef.current = [];
+      setBranches([]);
+      setLoadError(null);
+      setIsLoaded(true);
+      return;
+    }
     if (hasLoaded.current) return;
     hasLoaded.current = true;
 
     queueMicrotask(() => {
       void (async () => {
-        if (shouldUseApiDataSource() && (await isApiAvailable())) {
-          try {
-            const remoteBranches = await fetchBranches();
-            branchesRef.current = sortBranchesByName(remoteBranches);
-            setBranches(branchesRef.current);
-            setIsLoaded(true);
-            return;
-          } catch {
-            // Fall back to local storage when API is unavailable.
-          }
+        try {
+          await loadFromApi(() => refreshBranchesFromApi());
+        } catch (error) {
+          setLoadError(getDataSourceErrorMessage(error));
+        } finally {
+          setIsLoaded(true);
         }
-
-        setBranches(getBranches());
-        setIsLoaded(true);
       })();
     });
-  }, []);
+  }, [authLoaded, isAuthenticated, refreshBranchesFromApi]);
 
-  const persistBranches = useCallback((next: BranchEntity[]) => {
-    const normalized = sortBranchesByName(normalizeBranchList(next));
-    branchesRef.current = normalized;
-    setBranches(normalized);
-    saveBranches(normalized);
-  }, []);
-
-  const refreshBranchesFromApi = useCallback(async () => {
-    if (!(shouldUseApiDataSource() && (await isApiAvailable()))) {
-      return;
-    }
-
-    const remoteBranches = await fetchBranches();
-    branchesRef.current = sortBranchesByName(remoteBranches);
-    setBranches(branchesRef.current);
-  }, []);
-
-  const lookup = useMemo(() => buildBranchLookup(branches), [branches]);
+  const lookup = useMemo(
+    () => new Map(branches.map((branch) => [branch.code, branch])),
+    [branches]
+  );
 
   const activeBranches = useMemo(
     () => branches.filter((branch) => branch.active),
@@ -138,40 +141,19 @@ export function BranchesProvider({ children }: { children: React.ReactNode }) {
       }
 
       void (async () => {
-        if (shouldUseApiDataSource() && (await isApiAvailable())) {
-          try {
+        try {
+          await runOnApi(async () => {
             await createBranchApi(input);
             await refreshBranchesFromApi();
-            return;
-          } catch {
-            // Fall back to local persistence below.
-          }
+          });
+        } catch (error) {
+          console.error(getDataSourceErrorMessage(error));
         }
-
-        const branch: BranchEntity = {
-          id: crypto.randomUUID(),
-          name: input.name.trim(),
-          code: input.code.trim().toLowerCase(),
-          address: input.address?.trim() || undefined,
-          phone: input.phone?.trim() || undefined,
-          manager: input.manager?.trim() || undefined,
-          active: true,
-          createdAt: new Date().toISOString(),
-        };
-
-        persistBranches([...branchesRef.current, branch]);
-        recordStaffAction({
-          action: AUDIT_ACTIONS.CREATE,
-          module: "settings",
-          branch: branch.code,
-          recordId: branch.id,
-          newValues: pickAuditFields(branch, ["id", "name", "code", "active"]),
-        });
       })();
 
       return createValidationResult({});
     },
-    [persistBranches, refreshBranchesFromApi]
+    [refreshBranchesFromApi]
   );
 
   const updateBranch = useCallback(
@@ -187,125 +169,51 @@ export function BranchesProvider({ children }: { children: React.ReactNode }) {
       }
 
       void (async () => {
-        if (shouldUseApiDataSource() && (await isApiAvailable())) {
-          try {
+        try {
+          await runOnApi(async () => {
             await updateBranchApi(id, input);
             await refreshBranchesFromApi();
-            return;
-          } catch {
-            // Fall back to local persistence below.
-          }
+          });
+        } catch (error) {
+          console.error(getDataSourceErrorMessage(error));
         }
-
-        const updated = {
-          ...existing,
-          name: input.name.trim(),
-          code: input.code.trim().toLowerCase(),
-          address: input.address?.trim() || undefined,
-          phone: input.phone?.trim() || undefined,
-          manager: input.manager?.trim() || undefined,
-        };
-
-        const nextBranches = branchesRef.current.map((branch) =>
-          branch.id === id ? updated : branch
-        );
-
-        persistBranches(nextBranches);
-        recordStaffAction({
-          action: AUDIT_ACTIONS.BRANCH_CHANGED,
-          module: "settings",
-          branch: updated.code,
-          recordId: existing.id,
-          oldValues: pickAuditFields(existing, [
-            "name",
-            "code",
-            "address",
-            "phone",
-            "manager",
-            "active",
-          ]),
-          newValues: pickAuditFields(updated, [
-            "name",
-            "code",
-            "address",
-            "phone",
-            "manager",
-            "active",
-          ]),
-        });
       })();
 
       return createValidationResult({});
     },
-    [persistBranches, refreshBranchesFromApi]
+    [refreshBranchesFromApi]
   );
 
   const deactivateBranch = useCallback(
     (id: string) => {
       void (async () => {
-        if (shouldUseApiDataSource() && (await isApiAvailable())) {
-          try {
+        try {
+          await runOnApi(async () => {
             await setBranchActiveApi(id, false);
             await refreshBranchesFromApi();
-            return;
-          } catch {
-            // Fall back to local persistence below.
-          }
+          });
+        } catch (error) {
+          console.error(getDataSourceErrorMessage(error));
         }
-
-        const existing = branchesRef.current.find((branch) => branch.id === id);
-        if (!existing) return;
-
-        persistBranches(
-          branchesRef.current.map((branch) =>
-            branch.id === id ? { ...branch, active: false } : branch
-          )
-        );
-        recordStaffAction({
-          action: AUDIT_ACTIONS.DEACTIVATE,
-          module: "settings",
-          branch: existing.code,
-          recordId: existing.id,
-          oldValues: pickAuditFields(existing, ["name", "active"]),
-          newValues: { active: false },
-        });
       })();
     },
-    [persistBranches, refreshBranchesFromApi]
+    [refreshBranchesFromApi]
   );
 
   const reactivateBranch = useCallback(
     (id: string) => {
       void (async () => {
-        if (shouldUseApiDataSource() && (await isApiAvailable())) {
-          try {
+        try {
+          await runOnApi(async () => {
             await setBranchActiveApi(id, true);
             await refreshBranchesFromApi();
-            return;
-          } catch {
-            // Fall back to local persistence below.
-          }
+          });
+        } catch (error) {
+          console.error(getDataSourceErrorMessage(error));
         }
-
-        const existing = branchesRef.current.find((branch) => branch.id === id);
-        if (!existing) return;
-
-        persistBranches(
-          branchesRef.current.map((branch) =>
-            branch.id === id ? { ...branch, active: true } : branch
-          )
-        );
-        recordStaffAction({
-          action: AUDIT_ACTIONS.ACTIVATE,
-          module: "settings",
-          branch: existing.code,
-          recordId: existing.id,
-          oldValues: pickAuditFields(existing, ["name", "active"]),
-          newValues: { active: true },
-        });
       })();
     },
-    [persistBranches, refreshBranchesFromApi]
+    [refreshBranchesFromApi]
   );
 
   const value = useMemo(
@@ -313,6 +221,7 @@ export function BranchesProvider({ children }: { children: React.ReactNode }) {
       branches,
       activeBranches,
       isLoaded,
+      loadError,
       getBranchByCode,
       getBranchName,
       addBranch,
@@ -324,6 +233,7 @@ export function BranchesProvider({ children }: { children: React.ReactNode }) {
       branches,
       activeBranches,
       isLoaded,
+      loadError,
       getBranchByCode,
       getBranchName,
       addBranch,

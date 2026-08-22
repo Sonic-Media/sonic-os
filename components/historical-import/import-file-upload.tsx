@@ -3,9 +3,9 @@
 import { useRef } from "react";
 import { Card } from "@/components/shared/ui/card";
 import { Button } from "@/components/shared/ui/button";
-
 interface ImportFileUploadProps {
   fileName: string | null;
+  branchName: string;
   onFileSelected: (file: File) => void;
   onReset: () => void;
   disabled?: boolean;
@@ -13,6 +13,7 @@ interface ImportFileUploadProps {
 
 export function ImportFileUpload({
   fileName,
+  branchName,
   onFileSelected,
   onReset,
   disabled = false,
@@ -32,15 +33,16 @@ export function ImportFileUpload({
         Upload File
       </h3>
       <p className="mb-4 text-sm text-zinc-400">
-        Import historical daily operations as JSON. Records are saved using the
-        existing Daily Operations entry model.
+        Import historical daily ledger spreadsheets (.xlsx) into{" "}
+        {branchName}. Every row is validated and previewed before
+        anything is saved.
       </p>
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
         <input
           ref={inputRef}
           type="file"
-          accept="application/json,.json"
+          accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/json,.json"
           className="hidden"
           onChange={handleChange}
           disabled={disabled}
@@ -51,7 +53,7 @@ export function ImportFileUpload({
           disabled={disabled}
           onClick={() => inputRef.current?.click()}
         >
-          Choose JSON File
+          Choose Ledger File
         </Button>
         {fileName && (
           <div className="flex flex-1 items-center justify-between gap-3 rounded-xl border border-zinc-800/80 bg-zinc-950/40 px-4 py-3">
@@ -63,24 +65,11 @@ export function ImportFileUpload({
         )}
       </div>
 
-      <pre className="mt-4 overflow-x-auto rounded-xl border border-zinc-800/80 bg-zinc-950/40 p-4 text-xs text-zinc-400">
-{`{
-  "records": [
-    {
-      "date": "2024-01-15",
-      "branch": "kansanga",
-      "sales": 150000,
-      "expenses": [
-        { "name": "Rent", "amount": 50000 },
-        { "name": "Lunch", "amount": 3000 }
-      ],
-      "staffName": "Staff K",
-      "notes": "Historical record",
-      "savingsAllocation": 97000
-    }
-  ]
-}`}
-      </pre>
+      <p className="mt-4 text-xs text-zinc-500">
+        Expected columns: Date, Total Sales (UGX), Lunch/Food, Home, Rent,
+        Transport, Other (label), Other (UGX), Total Exp (UGX), Total Bal (UGX),
+        Note.
+      </p>
     </Card>
   );
 }

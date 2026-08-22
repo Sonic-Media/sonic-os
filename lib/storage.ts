@@ -1,4 +1,4 @@
-import { LEGACY_EXPENSE_FIELDS, STORAGE_KEY } from "@/lib/constants";
+import { LEGACY_EXPENSE_FIELDS } from "@/lib/constants";
 import { parseAmount } from "@/lib/amounts";
 import { formatEntryTime, getTodayISO } from "@/lib/dates";
 import { parseBranch } from "@/lib/entry-helpers";
@@ -95,26 +95,6 @@ function migrateEntry(raw: Record<string, unknown>): Entry {
 
 export function normalizeEntry(raw: Record<string, unknown>): Entry {
   return migrateEntry(raw);
-}
-
-export function getEntries(): Entry[] {
-  if (typeof window === "undefined") return [];
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw) as unknown;
-    if (!Array.isArray(parsed)) return [];
-    return parsed.map((item) =>
-      migrateEntry(item as Record<string, unknown>)
-    );
-  } catch {
-    return [];
-  }
-}
-
-export function saveEntries(entries: Entry[]): void {
-  if (typeof window === "undefined") return;
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(entries));
 }
 
 export function upsertEntryInList(entries: Entry[], entry: Entry): Entry[] {

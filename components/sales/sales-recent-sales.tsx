@@ -7,6 +7,8 @@ import type { Sale } from "@/types/sales";
 
 interface SalesRecentSalesProps {
   sales: Sale[];
+  title?: string;
+  limit?: number;
 }
 
 function formatSaleDate(date: string): string {
@@ -20,19 +22,23 @@ function formatSaleDate(date: string): string {
   });
 }
 
-export function SalesRecentSales({ sales }: SalesRecentSalesProps) {
+export function SalesRecentSales({
+  sales,
+  title = "Recent Accessory Sales",
+  limit = 5,
+}: SalesRecentSalesProps) {
   const recentSales = sales
     .filter((sale) => sale.status === "completed")
-    .slice(0, 5);
+    .slice(0, limit);
 
   return (
     <section>
       <h2 className="mb-3 text-sm font-medium uppercase tracking-wide text-zinc-500">
-        Recent Sales
+        {title}
       </h2>
 
       {recentSales.length === 0 ? (
-        <SalesEmptyState message="No sales recorded yet." />
+        <SalesEmptyState message="No accessory sales recorded yet." />
       ) : (
         <div className="space-y-2">
           {recentSales.map((sale) => (

@@ -19,6 +19,7 @@ export default function SettingsUsersPage() {
     canManageUsers,
     disableUser,
     enableUser,
+    deleteUser,
   } = useAuth();
   const [dialogMode, setDialogMode] = useState<"add" | "edit" | null>(null);
   const [resetUser, setResetUser] = useState<AppUser | null>(null);
@@ -63,6 +64,18 @@ export default function SettingsUsersPage() {
     }
   }
 
+  async function handleDelete(user: AppUser) {
+    const confirmed = window.confirm(
+      `Permanently delete ${user.displayName}? This cannot be undone.`
+    );
+    if (!confirmed) return;
+
+    const result = await deleteUser(user.id);
+    if (!result.success) {
+      window.alert(result.errors.form ?? "Unable to delete this user.");
+    }
+  }
+
   return (
     <PageContainer>
       <PageHeader
@@ -82,6 +95,7 @@ export default function SettingsUsersPage() {
         onResetPassword={setResetUser}
         onDisable={handleDisable}
         onEnable={(user) => enableUser(user.id)}
+        onDelete={handleDelete}
       />
 
       {dialogMode === "add" && <UserDialog mode="add" onClose={closeDialog} />}

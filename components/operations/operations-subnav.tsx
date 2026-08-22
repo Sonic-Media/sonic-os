@@ -2,24 +2,16 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useAuth } from "@/context/auth-context";
-import { canAccessCloseDay } from "@/lib/day-closing/permissions";
 import { OPERATIONS_NAV_ITEMS } from "@/lib/operations/constants";
 import { cn } from "@/lib/utils";
 
 export function OperationsSubnav() {
   const pathname = usePathname();
-  const { session } = useAuth();
-  const canCloseDay = session ? canAccessCloseDay(session.role) : false;
-
-  const items = OPERATIONS_NAV_ITEMS.filter(
-    (item) => !item.requiresCloseDayAccess || canCloseDay
-  );
 
   return (
     <nav className="mb-8">
       <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
-        {items.map((item) => {
+        {OPERATIONS_NAV_ITEMS.map((item) => {
           const isActive = item.exact
             ? pathname === item.href
             : pathname.startsWith(item.href);

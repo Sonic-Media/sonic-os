@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 
 interface SalesQuickActionsProps {
   onNewSale?: () => void;
+  showHistoryLink?: boolean;
 }
 
 function SalesQuickAction({
@@ -74,25 +75,36 @@ function HistoryIcon() {
   );
 }
 
-export function SalesQuickActions({ onNewSale }: SalesQuickActionsProps) {
+export function SalesQuickActions({
+  onNewSale,
+  showHistoryLink = true,
+}: SalesQuickActionsProps) {
   return (
     <section>
       <h2 className="text-sm font-medium text-zinc-500 mb-3 tracking-wide uppercase">
         Quick Actions
       </h2>
-      <div className="grid grid-cols-2 gap-3 sm:max-w-md">
+      <div
+        className={
+          showHistoryLink
+            ? "grid grid-cols-2 gap-3 sm:max-w-md"
+            : "grid grid-cols-1 gap-3 sm:max-w-xs"
+        }
+      >
         <SalesQuickAction
-          label="+ New Sale"
+          label="+ New Accessory Sale"
           variant="primary"
           icon={<NewSaleIcon />}
           href={onNewSale ? undefined : "/sales/new"}
           onClick={onNewSale}
         />
-        <SalesQuickAction
-          label="View History"
-          icon={<HistoryIcon />}
-          href="/sales/history"
-        />
+        {showHistoryLink && (
+          <SalesQuickAction
+            label="View History"
+            icon={<HistoryIcon />}
+            href="/sales/history"
+          />
+        )}
       </div>
     </section>
   );

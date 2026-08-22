@@ -1,4 +1,5 @@
 import { formatCurrency } from "@/lib/format";
+import { computeProductStatus } from "@/lib/stock/product-status";
 import type {
   StockDashboardMetrics,
   StockMovement,
@@ -61,14 +62,7 @@ export function buildBranchStockMatrix(
   return matrix;
 }
 
-export function computeProductStatus(
-  currentStock: number,
-  minimumStockLevel: number
-): StockProductStatus {
-  if (currentStock <= 0) return "out-of-stock";
-  if (currentStock <= minimumStockLevel) return "low-stock";
-  return "in-stock";
-}
+export { computeProductStatus } from "@/lib/stock/product-status";
 
 export function computeProfitPerItem(
   buyingPrice: number,

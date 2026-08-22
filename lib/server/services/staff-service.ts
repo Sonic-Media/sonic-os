@@ -79,19 +79,35 @@ async function getStaffRecord(id: string) {
   return staff;
 }
 
-async function assertStaffNotReferenced(id: string): Promise<void> {
-  const [sales, purchases, expenses, entries] = await Promise.all([
-    prisma.sale.count({ where: { staffId: id } }),
-    prisma.purchase.count({ where: { staffId: id } }),
-    prisma.expenseRecord.count({ where: { staffId: id } }),
-    prisma.dailyOperation.count({ where: { staffId: id } }),
-  ]);
+const STAFF_IN_USE_MESSAGE =
+  "This staff member has linked business records and cannot be deleted. Deactivate the staff member instead.";
 
-  if (sales + purchases + expenses + entries > 0) {
-    throw new ApiError(
-      "Cannot delete a staff member linked to sales, purchases, expenses, or entries.",
-      { status: 400, code: "staff_in_use" }
-    );
+async function assertStaffNotReferenced(id: string): Promise<void> {
+  const [sales, purchases, expenses, entries, staffPayments, stockMovements] =
+    await Promise.all([
+      prisma.sale.count({ where: { staffId: id } }),
+      prisma.purchase.count({ where: { staffId: id } }),
+      prisma.expenseRecord.count({ where: { staffId: id } }),
+      prisma.dailyOperation.count({ where: { staffId: id } }),
+      prisma.staffPayment.count({ where: { staffId: id } }),
+      prisma.stockMovement.count({
+        where: {
+          createdBy: {
+            path: ["staffId"],
+            equals: id,
+          },
+        },
+      }),
+    ]);
+
+  if (
+    sales + purchases + expenses + entries + staffPayments + stockMovements >
+    0
+  ) {
+    throw new ApiError(STAFF_IN_USE_MESSAGE, {
+      status: 400,
+      code: "staff_in_use",
+    });
   }
 }
 
@@ -276,11 +292,7 @@ export async function deleteStaff(id: string): Promise<void> {
   await assertStaffNotReferenced(id);
 
   await prisma.$transaction(async (tx) => {
-    await tx.user.updateMany({
-      where: { staffId: id },
-      data: { staffId: null },
-    });
-
+    await tx.user.deleteMany({ where: { staffId: id } });
     await tx.staff.delete({ where: { id } });
   });
 }

@@ -167,11 +167,14 @@ export function computeFilteredAnalytics(
     );
   }
 
+  const branchIds = Object.keys(options.branchNames) as Branch[];
+
   const analytics = getDashboardAnalyticsFromEntries(
     filteredCurrent,
     filteredPrevious,
     period,
     {
+      branchIds,
       branchNames: options.branchNames,
       staff: options.staff,
     }
@@ -179,12 +182,14 @@ export function computeFilteredAnalytics(
 
   const chartData = getDashboardChartDataFromEntries(
     filteredCurrent,
-    options.branchNames
+    options.branchNames,
+    branchIds
   );
 
   const previousChartData = getDashboardChartDataFromEntries(
     filteredPrevious,
-    options.branchNames
+    options.branchNames,
+    branchIds
   );
 
   return {

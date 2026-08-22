@@ -1,4 +1,4 @@
-import { isDatabaseConfigured, prisma } from "@/lib/db";
+import { isDatabaseConfigured, verifyDatabaseConnection } from "@/lib/db";
 import { jsonOk } from "@/lib/api/response";
 
 export async function GET() {
@@ -7,10 +7,11 @@ export async function GET() {
   let databaseConnected = false;
   if (databaseConfigured) {
     try {
-      await prisma.$queryRaw`SELECT 1`;
+      await verifyDatabaseConnection();
       databaseConnected = true;
-    } catch {
+    } catch (error) {
       databaseConnected = false;
+      console.error("[health] database check failed:", error);
     }
   }
 

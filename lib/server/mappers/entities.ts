@@ -1,4 +1,5 @@
 import { mapStaffActionRecord } from "@/lib/server/json-fields";
+import { computeProductStatus } from "@/lib/stock/product-status";
 import type { Entry, Expense, Staff } from "@/types";
 import type { AppUser, UserRole } from "@/types/auth";
 import type {
@@ -405,7 +406,10 @@ export function mapProductToEntity(product: ProductRecord): StockProduct {
     currentStock: product.currentStock,
     minimumStockLevel: product.minimumStockLevel,
     notes: product.notes ?? undefined,
-    status: product.status as StockProductStatus,
+    status: computeProductStatus(
+      product.currentStock,
+      product.minimumStockLevel
+    ),
     createdAt: product.createdAt.toISOString(),
     updatedAt: product.updatedAt.toISOString(),
   };

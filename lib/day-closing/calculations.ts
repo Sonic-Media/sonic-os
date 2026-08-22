@@ -39,7 +39,7 @@ function computeTodayOperatingExpenses(
     .filter(
       (entry) =>
         entry.date === today &&
-        entry.status === "completed" &&
+        (entry.status === "completed" || entry.status === "draft") &&
         entry.branch === branchCode
     )
     .reduce((sum, entry) => sum + calculateExpenses(entry), 0);

@@ -1,0 +1,24 @@
+Sonic OS Roles & Permissions Certification Report
+Generated: 2026-08-22T17:50:33.994Z
+Certified Owner, Branch Manager, and Cashier sidebar visibility, URL blocking, workflow APIs, and 403 enforcement.
+
+[PASS] 1. Cashier sidebar shows only Today's Operations and Accessory Sales — Today's Operations, Accessory Sales
+[PASS] 2. Branch Manager sidebar shows intended modules only — Home, Today's Operations, Reports, Stock, Accessory Sales, Purchasing, Expenses, Staff
+[PASS] 3. Owner sidebar shows all navigation items — 10 items visible
+[PASS] 4. Viewer role is not implemented — No viewer role exists in production role definitions
+[PASS] 5. Cashier hidden routes are blocked by direct URL access rules — 14 blocked routes verified
+[PASS] 6. Branch Manager cannot access Users, Roles, Settings, or Branches by URL — 4 blocked routes verified; Staff routes allowed
+[PASS] 7. Owner has unrestricted route access — Settings, Staff, and Branches routes allowed
+[PASS] 8. Cashier can open Today's Operations and read workflow APIs — operations, sales, and stock product read allowed
+[PASS] 9. Cashier can record accessory sales — Sale total 30000 UGX
+[PASS] 10. Cashier can record operating expenses inside Today's Operations — Operating expense 5000 UGX recorded in daily operations
+[PASS] 11. Cashier can record staff payments — Staff payment 10000 UGX recorded
+[PASS] 12. Cashier can record movie revenue and savings — Movie revenue 250000 UGX, savings 30000 UGX
+[PASS] 13. Cashier can close the business day — Day closed with expected cash 730000 UGX
+[PASS] 14. Cashier receives 403 Forbidden on unauthorized APIs — 8 endpoints blocked with forbidden code
+[PASS] 15. Branch Manager can access staff read APIs but not Users, Roles, or Settings — reports, stock, purchases, staff GET allowed; users/roles/settings/staff POST blocked
+[PASS] 16. Owner API access remains unrestricted — users, roles, settings, and branches APIs allowed
+[PASS] 17. Server permission helpers align with UI route rules — cashier operations allowed; branch-manager staff allowed; settings owner-only
+[PASS] 18. No hidden cashier menu items remain visible — Hidden: Home, Reports, Stock, Purchasing, Expenses, Branches, Staff, Settings
+[PASS] 19. Verify no runtime errors — Certification completed without uncaught exceptions
+[PASS] 20. Verify no unexpected server errors — No failed API calls during certification

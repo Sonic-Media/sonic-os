@@ -1,7 +1,6 @@
 import { AUDIT_LOG_UPDATED_EVENT } from "@/lib/audit-log/constants";
-import { appendAuditLogRecord } from "@/lib/audit-log/storage";
-import { getSession } from "@/lib/auth-storage";
-import { resolveStaffFromSession } from "@/lib/staff/audit";
+import { createSystemAuditLogEntry } from "@/lib/api/system-audit-log";
+import { getClientSession } from "@/lib/client/session-registry";
 import type { AuditLogInput, AuditLogRecord } from "@/types/audit-log";
 import type { Branch } from "@/types";
 
@@ -13,22 +12,34 @@ function notifyAuditLogUpdated(record: AuditLogRecord): void {
 }
 
 export function recordAuditEntry(input: AuditLogInput): AuditLogRecord | null {
-  const session = getSession();
-  const linkedStaff = resolveStaffFromSession();
+  const session = getClientSession();
 
-  const userId = input.userId ?? linkedStaff?.id ?? session?.userId;
-  const userName =
-    input.userName ?? linkedStaff?.name ?? session?.displayName;
-  const role = input.role ?? linkedStaff?.role ?? session?.role;
-  const branch = (input.branch ??
-    linkedStaff?.branch ??
-    session?.branch) as Branch | undefined;
+  const userId = input.userId ?? session?.userId;
+  const userName = input.userName ?? session?.displayName;
+  const role = input.role ?? session?.role;
+  const branch = (input.branch ?? session?.branch) as Branch | undefined;
 
   if (!userId || !userName || !role || !branch) {
     return null;
   }
 
-  const record: AuditLogRecord = {
+  const payload: AuditLogInput = {
+    ...input,
+    userId,
+    userName,
+    role,
+    branch,
+  };
+
+  void createSystemAuditLogEntry(payload)
+    .then((record) => {
+      notifyAuditLogUpdated(record);
+    })
+    .catch((error) => {
+      console.error("[audit-log] failed to persist entry:", error);
+    });
+
+  return {
     id: crypto.randomUUID(),
     timestamp: new Date().toISOString(),
     userId,
@@ -41,8 +52,4 @@ export function recordAuditEntry(input: AuditLogInput): AuditLogRecord | null {
     oldValues: input.oldValues,
     newValues: input.newValues,
   };
-
-  appendAuditLogRecord(record);
-  notifyAuditLogUpdated(record);
-  return record;
 }

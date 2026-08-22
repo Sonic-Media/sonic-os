@@ -21,11 +21,13 @@ import { useSettings } from "@/context/settings-context";
 import { filterByBranchField } from "@/lib/active-branch/filters";
 import { getTodayISO } from "@/lib/dates";
 import { filterEntriesByDate } from "@/lib/entry-helpers";
+import { getBranchTotals } from "@/lib/aggregations";
 
 export default function DashboardPage() {
   const {
     isLoaded,
     greeting,
+    subtitle,
     date,
     summary,
     progress,
@@ -64,7 +66,12 @@ export default function DashboardPage() {
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_minmax(280px,340px)] lg:items-start">
           <div className="space-y-4">
             <div className="flex flex-wrap items-center gap-3">
-              <DashboardGreeting greeting={greeting} date={date} className="mb-0" />
+              <DashboardGreeting
+                greeting={greeting}
+                subtitle={subtitle}
+                date={date}
+                className="mb-0"
+              />
               <BranchBadge />
             </div>
             <CompactBusinessPulseCard />
@@ -95,7 +102,7 @@ export default function DashboardPage() {
               <BranchCard
                 key={activeBranchConfig.id}
                 name={activeBranchConfig.name}
-                totals={summary.byBranch[activeBranchConfig.id]}
+                totals={getBranchTotals(summary.byBranch, activeBranchConfig.id)}
               />
             ) : null}
           </div>

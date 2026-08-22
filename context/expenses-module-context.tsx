@@ -19,15 +19,15 @@ import {
   updateExpenseApi,
   updateExpenseCategoryApi,
 } from "@/lib/api/expenses";
-import { loadRemoteOrLocal, runRemoteOrLocal, shouldUseRemoteDataSource } from "@/lib/data-source/context-api";
+import {
+  getDataSourceErrorMessage,
+  loadFromApi,
+  runOnApi,
+} from "@/lib/data-source/context-api";
 import { getTodayISO } from "@/lib/dates";
 import {
-  getExpenseCategories,
-  getExpenseRecords,
   normalizeExpenseCategoryList,
   normalizeExpenseRecordList,
-  saveExpenseCategories,
-  saveExpenseRecords,
   sortExpenseCategoriesByName,
   sortExpenseRecordsByDate,
 } from "@/lib/expenses-module-storage";
@@ -50,12 +50,12 @@ import type {
 import type { StaffPaymentInput, StaffPaymentRecord } from "@/types/staff-payment";
 import {
   STAFF_PAYMENT_CATEGORY_ID,
-  STAFF_PAYMENT_CATEGORY_NAME,
-  isStaffPaymentCategory,
 } from "@/lib/expenses-module/constants";
 import {
   DAY_CLOSED_EDIT_MESSAGE,
   isBranchDayClosed,
+  isBranchDayOpened,
+  SHOP_NOT_OPENED_MESSAGE,
 } from "@/lib/day-closing/storage";
 import { isStaffPaymentExpense } from "@/lib/staff-payments/calculations";
 import { AUDIT_ACTIONS } from "@/lib/audit-log/constants";
@@ -68,6 +68,7 @@ interface ExpensesModuleContextValue {
   categories: ExpenseCategory[];
   metrics: ExpensesDashboardMetrics;
   isLoaded: boolean;
+  loadError: string | null;
   getExpenseById: (id: string) => ExpenseRecord | undefined;
   getCategoryById: (id: string) => ExpenseCategory | undefined;
   addExpense: (input: ExpenseRecordInput) => ExpenseValidationResult;
@@ -82,7 +83,9 @@ interface ExpensesModuleContextValue {
     input: ExpenseCategoryUpdateInput
   ) => ExpenseValidationResult;
   deleteCategory: (id: string) => ExpenseValidationResult;
+  /** @deprecated Staff payment expenses are created by the Staff Payments API. */
   upsertStaffPaymentExpense: (expense: ExpenseRecord) => ExpenseValidationResult;
+  /** @deprecated Legacy localStorage linking removed. */
   linkLegacyStaffPaymentExpenses: (payments: StaffPaymentRecord[]) => void;
   addStaffPayment: (input: StaffPaymentInput) => ExpenseValidationResult;
   refreshFromApi: () => Promise<void>;
@@ -106,13 +109,10 @@ export function ExpensesModuleProvider({
 }: {
   children: React.ReactNode;
 }) {
-  const [expenses, setExpenses] = useState<ExpenseRecord[]>(() =>
-    getExpenseRecords()
-  );
-  const [categories, setCategories] = useState<ExpenseCategory[]>(() =>
-    getExpenseCategories()
-  );
+  const [expenses, setExpenses] = useState<ExpenseRecord[]>([]);
+  const [categories, setCategories] = useState<ExpenseCategory[]>([]);
   const [isLoaded, setIsLoaded] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const hasLoaded = useRef(false);
   const expensesRef = useRef(expenses);
   const categoriesRef = useRef(categories);
@@ -125,62 +125,7 @@ export function ExpensesModuleProvider({
     categoriesRef.current = categories;
   }, [categories]);
 
-  useEffect(() => {
-    if (hasLoaded.current) return;
-    hasLoaded.current = true;
-
-    queueMicrotask(() => {
-      void (async () => {
-        const [loadedCategories, loadedExpenses] = await Promise.all([
-          loadRemoteOrLocal({
-            remote: fetchExpenseCategories,
-            local: getExpenseCategories,
-          }),
-          loadRemoteOrLocal({
-            remote: fetchExpenses,
-            local: getExpenseRecords,
-          }),
-        ]);
-
-        const normalizedCategories = sortExpenseCategoriesByName(
-          normalizeExpenseCategoryList(loadedCategories)
-        );
-        const normalizedExpenses = sortExpenseRecordsByDate(
-          normalizeExpenseRecordList(loadedExpenses)
-        );
-
-        categoriesRef.current = normalizedCategories;
-        expensesRef.current = normalizedExpenses;
-        setCategories(normalizedCategories);
-        setExpenses(normalizedExpenses);
-        setIsLoaded(true);
-      })();
-    });
-  }, []);
-
-  const persistExpenses = useCallback((next: ExpenseRecord[]) => {
-    const normalized = sortExpenseRecordsByDate(
-      normalizeExpenseRecordList(next)
-    );
-    saveExpenseRecords(normalized);
-    expensesRef.current = normalized;
-    setExpenses(normalized);
-  }, []);
-
-  const persistCategories = useCallback((next: ExpenseCategory[]) => {
-    const normalized = sortExpenseCategoriesByName(
-      normalizeExpenseCategoryList(next)
-    );
-    saveExpenseCategories(normalized);
-    categoriesRef.current = normalized;
-    setCategories(normalized);
-  }, []);
-
   const refreshFromApi = useCallback(async () => {
-    if (!(await shouldUseRemoteDataSource())) {
-      return;
-    }
-
     const [remoteCategories, remoteExpenses] = await Promise.all([
       fetchExpenseCategories(),
       fetchExpenses(),
@@ -197,6 +142,39 @@ export function ExpensesModuleProvider({
     expensesRef.current = normalizedExpenses;
     setCategories(normalizedCategories);
     setExpenses(normalizedExpenses);
+  }, []);
+
+  useEffect(() => {
+    if (hasLoaded.current) return;
+    hasLoaded.current = true;
+
+    queueMicrotask(() => {
+      void (async () => {
+        try {
+          const [loadedCategories, loadedExpenses] = await Promise.all([
+            loadFromApi(fetchExpenseCategories),
+            loadFromApi(fetchExpenses),
+          ]);
+
+          const normalizedCategories = sortExpenseCategoriesByName(
+            normalizeExpenseCategoryList(loadedCategories)
+          );
+          const normalizedExpenses = sortExpenseRecordsByDate(
+            normalizeExpenseRecordList(loadedExpenses)
+          );
+
+          categoriesRef.current = normalizedCategories;
+          expensesRef.current = normalizedExpenses;
+          setCategories(normalizedCategories);
+          setExpenses(normalizedExpenses);
+          setLoadError(null);
+        } catch (error) {
+          setLoadError(getDataSourceErrorMessage(error));
+        } finally {
+          setIsLoaded(true);
+        }
+      })();
+    });
   }, []);
 
   const expenseLookup = useMemo(
@@ -234,6 +212,9 @@ export function ExpensesModuleProvider({
       if (isBranchDayClosed(input.branch, input.date)) {
         return createValidationResult({ form: DAY_CLOSED_EDIT_MESSAGE });
       }
+      if (!isBranchDayOpened(input.branch, input.date)) {
+        return createValidationResult({ form: SHOP_NOT_OPENED_MESSAGE });
+      }
 
       const category = categoriesRef.current.find(
         (item) => item.id === input.categoryId
@@ -243,40 +224,21 @@ export function ExpensesModuleProvider({
       }
 
       void (async () => {
-        await runRemoteOrLocal({
-          remote: async () => {
-            await createExpenseApi(input);
+        try {
+          await runOnApi(async () => {
+            const created = await createExpenseApi(input);
             await refreshFromApi();
-          },
-          local: () => {
+
             const actor = resolveCurrentStaffAction(input.branch);
-            const now = new Date().toISOString();
-
-            const record: ExpenseRecord = {
-              id: crypto.randomUUID(),
-              date: input.date,
-              categoryId: category.id,
-              categoryName: category.name,
-              description: input.description.trim(),
-              amount: input.amount,
-              paymentMethod: input.paymentMethod,
-              branch: input.branch,
-              createdBy: actor,
-              notes: input.notes?.trim() || undefined,
-              createdAt: now,
-              updatedAt: now,
-            };
-
-            persistExpenses([record, ...expensesRef.current]);
             recordStaffAction({
               staffId: actor?.staffId,
               staffName: actor?.staffName,
               role: actor?.role,
-              branch: record.branch,
+              branch: created.branch,
               action: AUDIT_ACTIONS.EXPENSE_ADDED,
               module: "expenses",
-              recordId: record.id,
-              newValues: pickAuditFields(record, [
+              recordId: created.id,
+              newValues: pickAuditFields(created, [
                 "id",
                 "date",
                 "categoryName",
@@ -286,13 +248,15 @@ export function ExpensesModuleProvider({
                 "paymentMethod",
               ]),
             });
-          },
-        });
+          });
+        } catch (error) {
+          console.error(getDataSourceErrorMessage(error));
+        }
       })();
 
       return createValidationResult({});
     },
-    [persistExpenses, refreshFromApi]
+    [refreshFromApi]
   );
 
   const updateExpense = useCallback(
@@ -324,34 +288,12 @@ export function ExpensesModuleProvider({
       }
 
       void (async () => {
-        await runRemoteOrLocal({
-          remote: async () => {
-            await updateExpenseApi(id, input);
+        try {
+          await runOnApi(async () => {
+            const updated = await updateExpenseApi(id, input);
             await refreshFromApi();
-          },
-          local: () => {
+
             const actor = resolveCurrentStaffAction(input.branch);
-            const now = new Date().toISOString();
-
-            const updated = {
-              ...existing,
-              date: input.date,
-              categoryId: category.id,
-              categoryName: category.name,
-              description: input.description.trim(),
-              amount: input.amount,
-              paymentMethod: input.paymentMethod,
-              branch: input.branch,
-              createdBy: actor ?? existing.createdBy,
-              notes: input.notes?.trim() || undefined,
-              updatedAt: now,
-            };
-
-            const nextExpenses = expensesRef.current.map((expense) =>
-              expense.id === id ? updated : expense
-            );
-
-            persistExpenses(nextExpenses);
             recordStaffAction({
               staffId: actor?.staffId,
               staffName: actor?.staffName,
@@ -377,29 +319,33 @@ export function ExpensesModuleProvider({
                 "paymentMethod",
               ]),
             });
-          },
-        });
+          });
+        } catch (error) {
+          console.error(getDataSourceErrorMessage(error));
+        }
       })();
 
       return createValidationResult({});
     },
-    [persistExpenses, refreshFromApi]
+    [refreshFromApi]
   );
 
   const deleteExpense = useCallback(
     (id: string) => {
       const existing = expensesRef.current.find((expense) => expense.id === id);
-      if (existing?.staffPaymentId || (existing && isStaffPaymentExpense(existing))) {
+      if (
+        existing?.staffPaymentId ||
+        (existing && isStaffPaymentExpense(existing))
+      ) {
         return;
       }
 
       void (async () => {
-        await runRemoteOrLocal({
-          remote: async () => {
+        try {
+          await runOnApi(async () => {
             await deleteExpenseApi(id);
             await refreshFromApi();
-          },
-          local: () => {
+
             if (existing) {
               recordStaffAction({
                 branch: existing.branch,
@@ -415,78 +361,27 @@ export function ExpensesModuleProvider({
                 ]),
               });
             }
-
-            persistExpenses(
-              expensesRef.current.filter((expense) => expense.id !== id)
-            );
-          },
-        });
+          });
+        } catch (error) {
+          console.error(getDataSourceErrorMessage(error));
+        }
       })();
     },
-    [persistExpenses, refreshFromApi]
+    [refreshFromApi]
   );
 
-  const ensureStaffPaymentCategory = useCallback(() => {
-    let category = categoriesRef.current.find(
-      (item) => item.id === STAFF_PAYMENT_CATEGORY_ID
-    );
-    if (!category) {
-      const now = new Date().toISOString();
-      category = {
-        id: STAFF_PAYMENT_CATEGORY_ID,
-        name: STAFF_PAYMENT_CATEGORY_NAME,
-        isDefault: true,
-        createdAt: now,
-        updatedAt: now,
-      };
-      persistCategories([...categoriesRef.current, category]);
-    }
-    return category;
-  }, [persistCategories]);
-
   const upsertStaffPaymentExpense = useCallback(
-    (expense: ExpenseRecord): ExpenseValidationResult => {
-      ensureStaffPaymentCategory();
-      persistExpenses([expense, ...expensesRef.current.filter((item) => item.id !== expense.id)]);
-      return createValidationResult({});
+    (_expense: ExpenseRecord): ExpenseValidationResult => {
+      return createValidationResult({
+        form: "Staff payment expenses are created through the Staff Payments API.",
+      });
     },
-    [ensureStaffPaymentCategory, persistExpenses]
+    []
   );
 
   const linkLegacyStaffPaymentExpenses = useCallback(
-    (payments: StaffPaymentRecord[]) => {
-      const paymentByExpenseId = new Map(
-        payments.map((payment) => [payment.expenseId, payment.id])
-      );
-      let changed = false;
-
-      const nextExpenses = expensesRef.current.map((expense) => {
-        if (!isStaffPaymentExpense(expense) || expense.staffPaymentId) {
-          return expense;
-        }
-
-        const paymentId = paymentByExpenseId.get(expense.id);
-        if (!paymentId) return expense;
-
-        changed = true;
-        return {
-          ...expense,
-          staffPaymentId: paymentId,
-          categoryId: STAFF_PAYMENT_CATEGORY_ID,
-          categoryName: STAFF_PAYMENT_CATEGORY_NAME,
-          staffId: undefined,
-          staffName: undefined,
-          staffRole: undefined,
-          staffPaymentType: undefined,
-          paidBy: undefined,
-        };
-      });
-
-      if (changed) {
-        persistExpenses(nextExpenses);
-      }
-    },
-    [persistExpenses]
+    (_payments: StaffPaymentRecord[]) => {},
+    []
   );
 
   const addStaffPayment = useCallback(
@@ -517,35 +412,25 @@ export function ExpensesModuleProvider({
       }
 
       void (async () => {
-        await runRemoteOrLocal({
-          remote: async () => {
-            await createExpenseCategoryApi(input);
+        try {
+          await runOnApi(async () => {
+            const category = await createExpenseCategoryApi(input);
             await refreshFromApi();
-          },
-          local: () => {
-            const now = new Date().toISOString();
-            const category: ExpenseCategory = {
-              id: crypto.randomUUID(),
-              name: normalizedName,
-              isDefault: false,
-              createdAt: now,
-              updatedAt: now,
-            };
-
-            persistCategories([...categoriesRef.current, category]);
             recordStaffAction({
               action: AUDIT_ACTIONS.CREATE,
               module: "expenses",
               recordId: category.id,
               newValues: pickAuditFields(category, ["id", "name"]),
             });
-          },
-        });
+          });
+        } catch (error) {
+          console.error(getDataSourceErrorMessage(error));
+        }
       })();
 
       return createValidationResult({});
     },
-    [persistCategories, refreshFromApi]
+    [refreshFromApi]
   );
 
   const updateCategory = useCallback(
@@ -584,30 +469,10 @@ export function ExpensesModuleProvider({
       }
 
       void (async () => {
-        await runRemoteOrLocal({
-          remote: async () => {
+        try {
+          await runOnApi(async () => {
             await updateExpenseCategoryApi(id, input);
             await refreshFromApi();
-          },
-          local: () => {
-            const now = new Date().toISOString();
-            const nextCategories = categoriesRef.current.map((category) =>
-              category.id === id
-                ? { ...category, name: normalizedName, updatedAt: now }
-                : category
-            );
-
-            persistCategories(nextCategories);
-
-            if (existing.name !== normalizedName) {
-              const nextExpenses = expensesRef.current.map((expense) =>
-                expense.categoryId === id
-                  ? { ...expense, categoryName: normalizedName }
-                  : expense
-              );
-              persistExpenses(nextExpenses);
-            }
-
             recordStaffAction({
               action: AUDIT_ACTIONS.EDIT,
               module: "expenses",
@@ -615,13 +480,15 @@ export function ExpensesModuleProvider({
               oldValues: pickAuditFields(existing, ["name"]),
               newValues: { name: normalizedName },
             });
-          },
-        });
+          });
+        } catch (error) {
+          console.error(getDataSourceErrorMessage(error));
+        }
       })();
 
       return createValidationResult({});
     },
-    [persistCategories, persistExpenses, refreshFromApi]
+    [refreshFromApi]
   );
 
   const deleteCategory = useCallback(
@@ -647,28 +514,25 @@ export function ExpensesModuleProvider({
       }
 
       void (async () => {
-        await runRemoteOrLocal({
-          remote: async () => {
+        try {
+          await runOnApi(async () => {
             await deleteExpenseCategoryApi(id);
             await refreshFromApi();
-          },
-          local: () => {
-            persistCategories(
-              categoriesRef.current.filter((category) => category.id !== id)
-            );
             recordStaffAction({
               action: AUDIT_ACTIONS.DELETE,
               module: "expenses",
               recordId: existing.id,
               oldValues: pickAuditFields(existing, ["id", "name"]),
             });
-          },
-        });
+          });
+        } catch (error) {
+          console.error(getDataSourceErrorMessage(error));
+        }
       })();
 
       return createValidationResult({});
     },
-    [persistCategories, refreshFromApi]
+    [refreshFromApi]
   );
 
   const value = useMemo(
@@ -677,6 +541,7 @@ export function ExpensesModuleProvider({
       categories,
       metrics,
       isLoaded,
+      loadError,
       getExpenseById,
       getCategoryById,
       addExpense,
@@ -695,6 +560,7 @@ export function ExpensesModuleProvider({
       categories,
       metrics,
       isLoaded,
+      loadError,
       getExpenseById,
       getCategoryById,
       addExpense,

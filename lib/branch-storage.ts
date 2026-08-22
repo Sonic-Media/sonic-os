@@ -1,4 +1,4 @@
-import { BRANCHES_STORAGE_KEY, DEFAULT_BRANCH_CODE } from "@/lib/constants";
+import { DEFAULT_BRANCH_CODE } from "@/lib/constants";
 import type { BranchEntity } from "@/types/branch";
 import type { Branch } from "@/types";
 
@@ -8,19 +8,9 @@ const DEFAULT_CREATED_AT = "2024-01-01T00:00:00.000Z";
 
 export const DEFAULT_BRANCHES: BranchEntity[] = [
   {
-    id: "branch-kansanga",
+    id: "branch-main",
     name: "Kansanga",
-    code: "kansanga",
-    address: "",
-    phone: "",
-    manager: "",
-    active: true,
-    createdAt: DEFAULT_CREATED_AT,
-  },
-  {
-    id: "branch-salaama",
-    name: "Salaama",
-    code: "salaama",
+    code: "main",
     address: "",
     phone: "",
     manager: "",
@@ -73,25 +63,6 @@ export function normalizeBranchList(value: unknown): BranchEntity[] {
   return branches.length > 0
     ? branches
     : DEFAULT_BRANCHES.map((branch) => ({ ...branch }));
-}
-
-export function getBranches(): BranchEntity[] {
-  if (typeof window === "undefined") {
-    return DEFAULT_BRANCHES.map((branch) => ({ ...branch }));
-  }
-
-  try {
-    const raw = localStorage.getItem(BRANCHES_STORAGE_KEY);
-    if (!raw) return DEFAULT_BRANCHES.map((branch) => ({ ...branch }));
-    return normalizeBranchList(JSON.parse(raw) as unknown);
-  } catch {
-    return DEFAULT_BRANCHES.map((branch) => ({ ...branch }));
-  }
-}
-
-export function saveBranches(branches: BranchEntity[]): void {
-  if (typeof window === "undefined") return;
-  localStorage.setItem(BRANCHES_STORAGE_KEY, JSON.stringify(branches));
 }
 
 export function sortBranchesByName(branches: BranchEntity[]): BranchEntity[] {

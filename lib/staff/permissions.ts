@@ -1,6 +1,9 @@
-import type { StaffModule } from "@/types/staff-role";
+import type { StaffModule, StaffRoleId } from "@/types/staff-role";
 import type { UserRole } from "@/types/auth";
-import { getStaffRoleDefinition } from "@/lib/staff/roles";
+import {
+  getStaffRoleDefinition,
+  migrateLegacyAuthRole,
+} from "@/lib/staff/roles";
 
 export function getModuleForPath(pathname: string): StaffModule | null {
   if (pathname === "/") return "home";
@@ -19,27 +22,25 @@ export function getModuleForPath(pathname: string): StaffModule | null {
   return null;
 }
 
+function resolveStaffRole(role: UserRole): StaffRoleId | null {
+  if (role === "owner") return null;
+  return migrateLegacyAuthRole(role);
+}
+
 export function roleHasModuleAccess(role: UserRole, module: StaffModule): boolean {
   if (role === "owner") return true;
 
-  const definition = getStaffRoleDefinition(role);
+  const staffRole = resolveStaffRole(role);
+  if (!staffRole) return false;
+
+  const definition = getStaffRoleDefinition(staffRole);
   return definition?.modules.includes(module) ?? false;
 }
 
 export function getDefaultRouteForStaffRole(role: UserRole): string {
-  if (role === "owner" || role === "ceo" || role === "branch-manager" || role === "administrator") {
+  if (role === "owner" || migrateLegacyAuthRole(role) === "branch-manager") {
     return "/";
   }
-  if (
-    role === "manager" ||
-    role === "cashier" ||
-    role === "salesperson" ||
-    role === "sales-attendant"
-  ) {
-    return "/sales";
-  }
-  if (role === "inventory-officer" || role === "technician") return "/stock";
-  if (role === "accountant") return "/expenses";
-  if (role === "store-attendant") return "/operations/today";
+
   return "/operations/today";
 }

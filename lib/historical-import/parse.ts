@@ -10,6 +10,7 @@ export function parseImportFileContent(content: string): ImportParseResult {
       success: false,
       rows: [],
       errors: ["The file is empty."],
+      blankRowsSkipped: 0,
     };
   }
 
@@ -22,6 +23,7 @@ export function parseImportFileContent(content: string): ImportParseResult {
       success: false,
       rows: [],
       errors: ["Invalid JSON. Upload a valid JSON file."],
+      blankRowsSkipped: 0,
     };
   }
 
@@ -38,6 +40,7 @@ export function parseImportFileContent(content: string): ImportParseResult {
       errors: [
         'JSON must be an array of records or an object with a "records" array.',
       ],
+      blankRowsSkipped: 0,
     };
   }
 
@@ -46,6 +49,7 @@ export function parseImportFileContent(content: string): ImportParseResult {
       success: false,
       rows: [],
       errors: ["No records found in the import file."],
+      blankRowsSkipped: 0,
     };
   }
 
@@ -65,6 +69,7 @@ export function parseImportFileContent(content: string): ImportParseResult {
       success: false,
       rows: [],
       errors: errors.length > 0 ? errors : ["No valid records found."],
+      blankRowsSkipped: 0,
     };
   }
 
@@ -72,5 +77,6 @@ export function parseImportFileContent(content: string): ImportParseResult {
     success: true,
     rows: normalizedRows,
     errors,
+    blankRowsSkipped: 0,
   };
 }

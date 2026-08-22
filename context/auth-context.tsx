@@ -19,22 +19,22 @@ import {
 import {
   createUserApi,
   disableUserApi,
+  deleteUserApi,
   enableUserApi,
   fetchUsers,
   resetUserPasswordApi,
   updateUserApi,
 } from "@/lib/api/users";
-import {
-  loadRemoteOrLocal,
-  runRemoteOrLocal,
-  shouldUseRemoteDataSource,
-} from "@/lib/data-source/context-api";
-import { DEFAULT_BRANCH_CODE } from "@/lib/constants";
+import { ApiError } from "@/lib/api/errors";
+import { getDataSourceErrorMessage } from "@/lib/data-source/context-api";
+import { setClientSession } from "@/lib/client/session-registry";
 import { DEFAULT_OWNER_PASSWORD } from "@/lib/auth/password";
-import { canImportHistoricalData, canManageRoles, canManageUsers, canViewAuditLog } from "@/lib/auth/permissions";
-import { AUDIT_ACTIONS } from "@/lib/audit-log/constants";
-import { recordAuditEntry } from "@/lib/audit-log/record";
-import { pickAuditFields } from "@/lib/audit-log/snapshots";
+import {
+  canImportHistoricalData,
+  canManageRoles,
+  canManageUsers,
+  canViewAuditLog,
+} from "@/lib/auth/permissions";
 import {
   hasValidationErrors,
   validateAppUserInput,
@@ -42,20 +42,12 @@ import {
   validateLoginInput,
   validatePasswordReset,
 } from "@/lib/auth/validation";
-import { recordStaffAction, resolveStaffByUserId } from "@/lib/staff/audit";
 import {
   clearSession,
-  createSessionFromUser,
-  getSession,
-  getUsers,
-  hashUserPassword,
   normalizeUserList,
   recordUserAction,
-  saveSession,
-  saveUsers,
   sortUsersByRole,
 } from "@/lib/auth-storage";
-import { verifyPassword } from "@/lib/auth/password";
 import type {
   AppUser,
   AppUserInput,
@@ -85,6 +77,7 @@ interface AuthContextValue {
   resetUserPassword: (id: string, password: string) => AuthValidationResult;
   disableUser: (id: string) => AuthValidationResult;
   enableUser: (id: string) => void;
+  deleteUser: (id: string) => Promise<AuthValidationResult>;
   getUserById: (id: string) => AppUser | undefined;
 }
 
@@ -101,9 +94,21 @@ function createValidationResult(
   };
 }
 
+function getAuthErrorMessage(error: unknown, fallback: string): string {
+  if (error instanceof ApiError) {
+    return error.message;
+  }
+
+  if (error instanceof Error && error.message.trim()) {
+    return error.message;
+  }
+
+  return fallback;
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [session, setSession] = useState<AuthSession | null>(() => getSession());
-  const [users, setUsers] = useState<AppUser[]>(() => getUsers());
+  const [session, setSession] = useState<AuthSession | null>(null);
+  const [users, setUsers] = useState<AppUser[]>([]);
   const [isLoaded, setIsLoaded] = useState(false);
   const hasLoaded = useRef(false);
   const usersRef = useRef(users);
@@ -117,56 +122,51 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     sessionRef.current = session;
   }, [session]);
 
+  const applySession = useCallback(async (next: AuthSession | null) => {
+    sessionRef.current = next;
+    setSession(next);
+    setClientSession(next);
+    clearSession();
+  }, []);
+
   useEffect(() => {
     if (hasLoaded.current) return;
     hasLoaded.current = true;
 
     queueMicrotask(() => {
       void (async () => {
-        const result = await loadRemoteOrLocal({
-          remote: async () => {
-            const [payload, usersList] = await Promise.all([
-              fetchAuthSession(),
-              fetchUsers(),
-            ]);
-            return {
-              session: payload.session,
-              users: sortUsersByRole(normalizeUserList(usersList)),
-            };
-          },
-          local: () => ({
-            session: getSession(),
-            users: sortUsersByRole(normalizeUserList(getUsers())),
-          }),
-        });
+        try {
+          clearSession();
 
-        setSession(result.session);
-        setUsers(result.users);
-        usersRef.current = result.users;
-        setIsLoaded(true);
+          const payload = await fetchAuthSession();
+          await applySession(payload.session);
+
+          if (payload.session) {
+            const usersList = await fetchUsers();
+            const normalized = sortUsersByRole(
+              normalizeUserList(usersList)
+            );
+            usersRef.current = normalized;
+            setUsers(normalized);
+          } else {
+            usersRef.current = [];
+            setUsers([]);
+          }
+        } catch (error) {
+          console.error("[auth] failed to load session:", error);
+          sessionRef.current = null;
+          setSession(null);
+          usersRef.current = [];
+          setUsers([]);
+        } finally {
+          setIsLoaded(true);
+        }
       })();
     });
-  }, []);
-
-  const persistUsers = useCallback((next: AppUser[]) => {
-    const normalized = sortUsersByRole(normalizeUserList(next));
-    saveUsers(normalized);
-    usersRef.current = normalized;
-    setUsers(normalized);
-  }, []);
-
-  const persistSession = useCallback((next: AuthSession | null) => {
-    if (next) {
-      saveSession(next);
-    } else {
-      clearSession();
-    }
-    sessionRef.current = next;
-    setSession(next);
-  }, []);
+  }, [applySession]);
 
   const refreshUsersFromApi = useCallback(async () => {
-    if (!(await shouldUseRemoteDataSource())) {
+    if (!sessionRef.current) {
       return;
     }
 
@@ -193,105 +193,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       try {
-        const nextSession = await runRemoteOrLocal({
-          remote: () => loginApi(input),
-          local: () => {
-            const username = input.username.trim().toLowerCase();
-            const user = usersRef.current.find(
-              (entry) => entry.username === username && entry.active
-            );
-
-            if (!user || !verifyPassword(input.password, user.passwordHash)) {
-              recordUserAction(
-                "login-failed",
-                `Failed login attempt for ${username}`,
-                {
-                  userId: user?.id ?? "unknown",
-                  username,
-                  branch: user?.branch ?? DEFAULT_BRANCH_CODE,
-                }
-              );
-              throw new Error("Invalid username or password.");
-            }
-
-            const session = createSessionFromUser(user);
-            recordUserAction("login", `${user.displayName} signed in`, session);
-            const linkedStaff = resolveStaffByUserId(user.id);
-            if (linkedStaff) {
-              recordStaffAction({
-                staffId: linkedStaff.id,
-                staffName: linkedStaff.name,
-                role: linkedStaff.role,
-                branch: linkedStaff.branch,
-                action: AUDIT_ACTIONS.LOGIN,
-                module: "auth",
-              });
-            }
-
-            return session;
-          },
-        });
-
-        persistSession(nextSession);
+        const nextSession = await loginApi(input);
+        await applySession(nextSession);
+        await refreshUsersFromApi();
         return createValidationResult({});
       } catch (error) {
         return createValidationResult({
-          form:
-            error instanceof Error
-              ? error.message
-              : "Invalid username or password.",
+          form: getAuthErrorMessage(error, "Invalid username or password."),
         });
       }
     },
-    [persistSession]
+    [applySession, refreshUsersFromApi]
   );
 
   const logout = useCallback(() => {
     void (async () => {
-      const current = sessionRef.current;
-
       try {
-        await runRemoteOrLocal({
-          remote: async () => {
-            await logoutApi();
-          },
-          local: () => {
-            if (current) {
-              recordUserAction("logout", `${current.displayName} signed out`, current);
-              const linkedStaff = resolveStaffByUserId(current.userId);
-              if (linkedStaff) {
-                recordStaffAction({
-                  staffId: linkedStaff.id,
-                  staffName: linkedStaff.name,
-                  role: linkedStaff.role,
-                  branch: linkedStaff.branch,
-                  action: AUDIT_ACTIONS.LOGOUT,
-                  module: "auth",
-                });
-              }
-            }
-          },
-        });
-      } catch {
-        if (current) {
-          recordUserAction("logout", `${current.displayName} signed out`, current);
-          const linkedStaff = resolveStaffByUserId(current.userId);
-          if (linkedStaff) {
-            recordStaffAction({
-              staffId: linkedStaff.id,
-              staffName: linkedStaff.name,
-              role: linkedStaff.role,
-              branch: linkedStaff.branch,
-              action: AUDIT_ACTIONS.LOGOUT,
-              module: "auth",
-            });
-          }
-        }
+        await logoutApi();
+      } catch (error) {
+        console.error("[auth] logout failed:", getDataSourceErrorMessage(error));
       }
 
-      persistSession(null);
+      await applySession(null);
+      usersRef.current = [];
+      setUsers([]);
     })();
-  }, [persistSession]);
+  }, [applySession]);
 
   const lock = useCallback(() => {
     void (async () => {
@@ -299,26 +226,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (!current) return;
 
       try {
-        const nextSession = await runRemoteOrLocal({
-          remote: () => lockSessionApi(),
-          local: () => {
-            recordUserAction(
-              "lock",
-              `${current.displayName} locked the session`,
-              current
-            );
-            return { ...current, locked: true };
-          },
-        });
-
-        persistSession(nextSession);
-      } catch {
-        const nextSession = { ...current, locked: true };
-        persistSession(nextSession);
-        recordUserAction("lock", `${current.displayName} locked the session`, current);
+        const nextSession = await lockSessionApi();
+        await applySession(nextSession);
+      } catch (error) {
+        console.error("[auth] lock failed:", getDataSourceErrorMessage(error));
       }
     })();
-  }, [persistSession]);
+  }, [applySession]);
 
   const unlock = useCallback(
     async (password: string): Promise<AuthValidationResult> => {
@@ -328,19 +242,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       try {
-        const nextSession = await runRemoteOrLocal({
-          remote: () => unlockSessionApi(password),
-          local: () => {
-            const user = usersRef.current.find((entry) => entry.id === current.userId);
-            if (!user || !verifyPassword(password, user.passwordHash)) {
-              throw new Error("Incorrect password.");
-            }
-
-            return { ...current, locked: false };
-          },
-        });
-
-        persistSession(nextSession);
+        const nextSession = await unlockSessionApi(password);
+        await applySession(nextSession);
         recordUserAction(
           "unlock",
           `${current.displayName} unlocked the session`,
@@ -350,12 +253,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return createValidationResult({});
       } catch (error) {
         return createValidationResult({
-          password:
-            error instanceof Error ? error.message : "Incorrect password.",
+          password: getAuthErrorMessage(error, "Incorrect password."),
         });
       }
     },
-    [persistSession]
+    [applySession]
   );
 
   const addUser = useCallback(
@@ -366,58 +268,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       try {
-        const user = await runRemoteOrLocal({
-          remote: () => createUserApi(input),
-          local: () => {
-            const now = new Date().toISOString();
-            const created: AppUser = {
-              id: crypto.randomUUID(),
-              username: input.username.trim().toLowerCase(),
-              displayName: input.displayName.trim(),
-              role: input.role,
-              passwordHash: hashUserPassword(input.password),
-              branch: input.branch,
-              active: true,
-              staffId: input.staffId,
-              createdAt: now,
-              updatedAt: now,
-            };
-
-            persistUsers([...usersRef.current, created]);
-
-            recordAction(
-              "user-created",
-              `Created ${created.displayName} (${created.role})`
-            );
-            recordAuditEntry({
-              action: AUDIT_ACTIONS.CREATE,
-              module: "settings",
-              branch: created.branch,
-              recordId: created.id,
-              newValues: pickAuditFields(created, [
-                "id",
-                "username",
-                "displayName",
-                "role",
-                "branch",
-                "active",
-              ]),
-            });
-
-            return created;
-          },
-        });
-
-        if (await shouldUseRemoteDataSource()) {
-          await refreshUsersFromApi();
-        }
-
+        const user = await createUserApi(input);
+        await refreshUsersFromApi();
         return createValidationResult({}, user);
-      } catch {
-        return createValidationResult({ form: "Failed to create user." });
+      } catch (error) {
+        return createValidationResult({
+          form: getAuthErrorMessage(error, "Failed to create user."),
+        });
       }
     },
-    [persistUsers, recordAction, refreshUsersFromApi]
+    [refreshUsersFromApi]
   );
 
   const updateUser = useCallback(
@@ -433,60 +293,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       void (async () => {
-        await runRemoteOrLocal({
-          remote: async () => {
-            await updateUserApi(id, input);
-            await refreshUsersFromApi();
-          },
-          local: () => {
-            persistUsers(
-              usersRef.current.map((user) =>
-                user.id === id
-                  ? {
-                      ...user,
-                      displayName: input.displayName.trim(),
-                      role: input.role,
-                      branch: input.branch,
-                      updatedAt: new Date().toISOString(),
-                    }
-                  : user
-              )
-            );
-
-            recordAction(
-              "user-updated",
-              `Updated ${input.displayName.trim()} role to ${input.role}`
-            );
-
-            const roleChanged = existing.role !== input.role;
-            recordAuditEntry({
-              action: roleChanged ? AUDIT_ACTIONS.ROLE_CHANGED : AUDIT_ACTIONS.EDIT,
-              module: "settings",
-              branch: input.branch,
-              recordId: existing.id,
-              oldValues: pickAuditFields(existing, [
-                "displayName",
-                "role",
-                "branch",
-                "active",
-              ]),
-              newValues: pickAuditFields(
-                {
-                  displayName: input.displayName.trim(),
-                  role: input.role,
-                  branch: input.branch,
-                  active: existing.active,
-                },
-                ["displayName", "role", "branch", "active"]
-              ),
-            });
-          },
-        });
+        try {
+          await updateUserApi(id, input);
+          await refreshUsersFromApi();
+        } catch (error) {
+          console.error("[auth] update user failed:", getDataSourceErrorMessage(error));
+        }
       })();
 
       return createValidationResult({});
     },
-    [persistUsers, recordAction, refreshUsersFromApi]
+    [refreshUsersFromApi]
   );
 
   const resetUserPassword = useCallback(
@@ -502,35 +319,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       void (async () => {
-        await runRemoteOrLocal({
-          remote: async () => {
-            await resetUserPasswordApi(id, password);
-            await refreshUsersFromApi();
-          },
-          local: () => {
-            persistUsers(
-              usersRef.current.map((user) =>
-                user.id === id
-                  ? {
-                      ...user,
-                      passwordHash: hashUserPassword(password),
-                      updatedAt: new Date().toISOString(),
-                    }
-                  : user
-              )
-            );
-
-            recordAction(
-              "password-reset",
-              `Reset password for ${existing.displayName}`
-            );
-          },
-        });
+        try {
+          await resetUserPasswordApi(id, password);
+          await refreshUsersFromApi();
+        } catch (error) {
+          console.error(
+            "[auth] reset password failed:",
+            getDataSourceErrorMessage(error)
+          );
+        }
       })();
 
       return createValidationResult({});
     },
-    [persistUsers, recordAction, refreshUsersFromApi]
+    [refreshUsersFromApi]
   );
 
   const disableUser = useCallback(
@@ -547,36 +349,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       void (async () => {
-        await runRemoteOrLocal({
-          remote: async () => {
-            await disableUserApi(id);
-            await refreshUsersFromApi();
-          },
-          local: () => {
-            persistUsers(
-              usersRef.current.map((user) =>
-                user.id === id
-                  ? { ...user, active: false, updatedAt: new Date().toISOString() }
-                  : user
-              )
-            );
-
-            recordAction("user-disabled", `Disabled ${existing.displayName}`);
-            recordAuditEntry({
-              action: AUDIT_ACTIONS.DEACTIVATE,
-              module: "settings",
-              branch: existing.branch,
-              recordId: existing.id,
-              oldValues: pickAuditFields(existing, ["displayName", "active"]),
-              newValues: { active: false },
-            });
-          },
-        });
+        try {
+          await disableUserApi(id);
+          await refreshUsersFromApi();
+        } catch (error) {
+          console.error("[auth] disable user failed:", getDataSourceErrorMessage(error));
+        }
       })();
 
       return createValidationResult({});
     },
-    [persistUsers, recordAction, refreshUsersFromApi]
+    [refreshUsersFromApi]
   );
 
   const enableUser = useCallback(
@@ -585,34 +368,41 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (!existing) return;
 
       void (async () => {
-        await runRemoteOrLocal({
-          remote: async () => {
-            await enableUserApi(id);
-            await refreshUsersFromApi();
-          },
-          local: () => {
-            persistUsers(
-              usersRef.current.map((user) =>
-                user.id === id
-                  ? { ...user, active: true, updatedAt: new Date().toISOString() }
-                  : user
-              )
-            );
-
-            recordAction("user-enabled", `Re-enabled ${existing.displayName}`);
-            recordAuditEntry({
-              action: AUDIT_ACTIONS.ACTIVATE,
-              module: "settings",
-              branch: existing.branch,
-              recordId: existing.id,
-              oldValues: pickAuditFields(existing, ["displayName", "active"]),
-              newValues: { active: true },
-            });
-          },
-        });
+        try {
+          await enableUserApi(id);
+          await refreshUsersFromApi();
+        } catch (error) {
+          console.error("[auth] enable user failed:", getDataSourceErrorMessage(error));
+        }
       })();
     },
-    [persistUsers, recordAction, refreshUsersFromApi]
+    [refreshUsersFromApi]
+  );
+
+  const deleteUser = useCallback(
+    async (id: string): Promise<AuthValidationResult> => {
+      const existing = usersRef.current.find((user) => user.id === id);
+      if (!existing) {
+        return createValidationResult({ form: "User not found." });
+      }
+
+      if (existing.role === "owner") {
+        return createValidationResult({
+          form: "The owner account cannot be deleted.",
+        });
+      }
+
+      try {
+        await deleteUserApi(id);
+        await refreshUsersFromApi();
+        return createValidationResult({});
+      } catch (error) {
+        return createValidationResult({
+          form: getAuthErrorMessage(error, "Failed to delete user."),
+        });
+      }
+    },
+    [refreshUsersFromApi]
   );
 
   const value = useMemo(
@@ -638,6 +428,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       resetUserPassword,
       disableUser,
       enableUser,
+      deleteUser,
       getUserById,
     }),
     [
@@ -654,6 +445,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       resetUserPassword,
       disableUser,
       enableUser,
+      deleteUser,
       getUserById,
     ]
   );

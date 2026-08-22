@@ -1,7 +1,27 @@
-import { canAccessCloseDay } from "@/lib/day-closing/permissions";
 import type { UserRole } from "@/types/auth";
-import { getDefaultRouteForStaffRole, getModuleForPath, roleHasModuleAccess } from "@/lib/staff/permissions";
-import { DEFAULT_STAFF_ROLES, getStaffRoleName, STAFF_ROLE_OPTIONS } from "@/lib/staff/roles";
+import {
+  getDefaultRouteForStaffRole,
+  getModuleForPath,
+  roleHasModuleAccess,
+} from "@/lib/staff/permissions";
+import {
+  DEFAULT_STAFF_ROLES,
+  getStaffRoleName,
+  migrateLegacyAuthRole,
+  STAFF_ROLE_OPTIONS,
+} from "@/lib/staff/roles";
+
+const CASHIER_BLOCKED_ROUTE_PREFIXES = [
+  "/expenses",
+  "/staff",
+  "/sales/history",
+  "/sales/reports",
+  "/sales/customers",
+];
+
+export function isCashierRole(role: UserRole): boolean {
+  return role !== "owner" && migrateLegacyAuthRole(role) === "cashier";
+}
 
 export const USER_ROLE_LABELS: Record<UserRole, string> = {
   owner: "Owner",
@@ -17,14 +37,22 @@ export function canAccessRoute(role: UserRole, pathname: string): boolean {
 
   if (pathname === "/login" || pathname === "/lock") return true;
 
+  if (pathname.startsWith("/settings")) return false;
+
   if (pathname.startsWith("/operations/close-day")) {
-    return canAccessCloseDay(role);
+    return false;
   }
 
-  if (pathname.startsWith("/settings/users")) return false;
-  if (pathname.startsWith("/settings/import")) return false;
-  if (pathname.startsWith("/settings/roles")) return false;
-  if (pathname.startsWith("/settings/audit-log")) return false;
+  const staffRole = migrateLegacyAuthRole(role);
+  if (staffRole === "cashier") {
+    if (
+      CASHIER_BLOCKED_ROUTE_PREFIXES.some(
+        (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`)
+      )
+    ) {
+      return false;
+    }
+  }
 
   const module = getModuleForPath(pathname);
   if (!module) return false;
@@ -54,5 +82,5 @@ export function canViewAuditLog(role: UserRole): boolean {
 
 export function getRoleLabel(role: UserRole): string {
   if (role === "owner") return "Owner";
-  return getStaffRoleName(role);
+  return getStaffRoleName(migrateLegacyAuthRole(role));
 }

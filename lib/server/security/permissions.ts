@@ -28,10 +28,7 @@ export function roleHasServerPermission(
     return false;
   }
 
-  if (
-    permission === "manage_branches" &&
-    (role === "ceo" || role === "branch-manager")
-  ) {
+  if (permission === "manage_branches" && role === "branch-manager") {
     return true;
   }
 
@@ -45,6 +42,51 @@ export function roleCanAccessApiModule(
   return roleHasModuleAccess(role, module);
 }
 
+export function roleCanAccessApiPath(
+  role: UserRole,
+  pathname: string,
+  method: string
+): boolean {
+  if (
+    method === "GET" &&
+    (pathname === "/api/stock/products" ||
+      pathname.startsWith("/api/stock/products/"))
+  ) {
+    return (
+      roleHasModuleAccess(role, "stock") ||
+      roleHasModuleAccess(role, "sales") ||
+      roleHasModuleAccess(role, "operations")
+    );
+  }
+
+  if (
+    method === "GET" &&
+    (pathname === "/api/purchases" || pathname.startsWith("/api/purchases/"))
+  ) {
+    return (
+      roleHasModuleAccess(role, "purchasing") ||
+      roleHasModuleAccess(role, "operations")
+    );
+  }
+
+  if (
+    pathname === "/api/expenses" ||
+    pathname.startsWith("/api/expenses/") ||
+    pathname === "/api/expense-categories" ||
+    pathname.startsWith("/api/expense-categories/")
+  ) {
+    return (
+      roleHasModuleAccess(role, "expenses") ||
+      roleHasModuleAccess(role, "operations")
+    );
+  }
+
+  const module = getApiModuleForPath(pathname);
+  if (!module) return true;
+
+  return roleHasModuleAccess(role, module);
+}
+
 const API_MODULE_PREFIXES: Array<[string, StaffModule]> = [
   ["/api/sales", "sales"],
   ["/api/customers", "sales"],
@@ -52,11 +94,16 @@ const API_MODULE_PREFIXES: Array<[string, StaffModule]> = [
   ["/api/suppliers", "purchasing"],
   ["/api/expenses", "expenses"],
   ["/api/expense-categories", "expenses"],
-  ["/api/staff-payments", "staff"],
+  ["/api/staff-payments", "operations"],
   ["/api/staff", "staff"],
   ["/api/stock", "stock"],
   ["/api/branches", "branches"],
   ["/api/daily-operations", "operations"],
+  ["/api/day-closings", "operations"],
+  ["/api/expense-templates", "operations"],
+  ["/api/settings", "settings"],
+  ["/api/system-audit-log", "settings"],
+  ["/api/activity-log", "settings"],
   ["/api/reports", "reports"],
   ["/api/users", "settings"],
   ["/api/roles", "settings"],
@@ -67,6 +114,7 @@ const OWNER_ONLY_PREFIXES = [
   "/api/roles",
   "/api/daily-operations/import",
   "/api/audit-log",
+  "/api/system-audit-log",
 ];
 
 export function getApiModuleForPath(pathname: string): StaffModule | null {

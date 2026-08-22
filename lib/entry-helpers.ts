@@ -5,6 +5,7 @@ import {
   isInPeriod,
 } from "@/lib/dates";
 import { parseAmount } from "@/lib/amounts";
+import { DEFAULT_BRANCH_CODE } from "@/lib/constants";
 import { prepareExpensesForSave } from "@/lib/expenses";
 import {
   legacyStaffFields,
@@ -217,7 +218,6 @@ export function sortEntries(
 
 
 export function parseBranch(value: string | null): Branch {
-  if (value === "kansanga") return "kansanga";
-  if (value === "salaama") return "salaama";
-  return "kansanga";
+  if (value === "main") return "main";
+  return DEFAULT_BRANCH_CODE;
 }

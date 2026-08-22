@@ -13,7 +13,13 @@ export function applyDuplicateDetection(
   const seenCompletedKeys = new Map<string, number>();
 
   return rows.map((row) => {
-    if (row.status === "invalid" || !row.branch || !row.date) {
+    if (
+      row.status === "invalid" ||
+      row.status === "duplicate_existing" ||
+      row.status === "duplicate_file" ||
+      !row.branch ||
+      !row.date
+    ) {
       return row;
     }
 
@@ -62,6 +68,9 @@ export function applyDuplicateDetection(
 
 export function countPreviewRows(rows: ImportPreviewRow[]) {
   const validCount = rows.filter((row) => row.status === "valid").length;
+  const inconsistentCount = rows.filter(
+    (row) => row.status === "inconsistent"
+  ).length;
   const duplicateCount = rows.filter(
     (row) => row.status === "duplicate_existing" || row.status === "duplicate_file"
   ).length;
@@ -69,8 +78,13 @@ export function countPreviewRows(rows: ImportPreviewRow[]) {
 
   return {
     validCount,
+    inconsistentCount,
     duplicateCount,
     invalidCount,
     totalCount: rows.length,
   };
+}
+
+export function isImportablePreviewRow(row: ImportPreviewRow): boolean {
+  return row.status === "valid" || row.status === "inconsistent";
 }

@@ -5,9 +5,9 @@ import {
   listProducts,
 } from "@/lib/server/services/stock-service";
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    const products = await withDatabase(() => listProducts());
+    const products = await withDatabase(() => listProducts(), { request });
     return jsonOk(products);
   } catch (error) {
     return handleRouteError(error);
@@ -17,7 +17,7 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const product = await withDatabase(() => createProduct(body));
+    const product = await withDatabase(() => createProduct(body), { request });
     return jsonCreated(product);
   } catch (error) {
     return handleRouteError(error);

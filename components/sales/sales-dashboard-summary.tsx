@@ -41,7 +41,7 @@ export function SalesDashboardSummary({ metrics }: SalesDashboardSummaryProps) {
         formatValue={() => formatSalesCount(metrics.transactionsToday)}
       />
       <StatCard
-        label="Average Sale Value"
+        label="Average Accessory Sale"
         value={metrics.averageSaleValue ?? 0}
         formatValue={() => formatSalesCurrency(metrics.averageSaleValue)}
       />

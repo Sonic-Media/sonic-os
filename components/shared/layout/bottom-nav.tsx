@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { isNavItemActive, navItems } from "@/components/shared/layout/nav-items";
 import { useAuth } from "@/context/auth-context";
-import { canAccessRoute } from "@/lib/auth/permissions";
+import { isNavVisibleForRole } from "@/lib/auth/nav-visibility";
 import { cn } from "@/lib/utils";
 
 export function BottomNav() {
@@ -12,7 +12,7 @@ export function BottomNav() {
   const { session } = useAuth();
 
   const visibleNavItems = navItems.filter((item) =>
-    session ? canAccessRoute(session.role, item.href) : false
+    session ? isNavVisibleForRole(session.role, item.href) : false
   );
 
   return (

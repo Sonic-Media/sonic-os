@@ -1,8 +1,3 @@
-import {
-  STOCK_MOVEMENTS_STORAGE_KEY,
-  STOCK_PRICE_CHANGES_STORAGE_KEY,
-  STOCK_PRODUCTS_STORAGE_KEY,
-} from "@/lib/constants";
 import { normalizeBranchCode } from "@/lib/branch-storage";
 import { normalizeStaffActionRecord } from "@/lib/staff/session";
 import { withProductStatus } from "@/lib/stock/calculations";
@@ -135,40 +130,6 @@ export function normalizeStockMovementList(value: unknown): StockMovement[] {
     .filter((movement): movement is StockMovement => movement !== null);
 }
 
-export function getStockProducts(): StockProduct[] {
-  if (typeof window === "undefined") return [];
-
-  try {
-    const raw = localStorage.getItem(STOCK_PRODUCTS_STORAGE_KEY);
-    if (!raw) return [];
-    return normalizeStockProductList(JSON.parse(raw) as unknown);
-  } catch {
-    return [];
-  }
-}
-
-export function saveStockProducts(products: StockProduct[]): void {
-  if (typeof window === "undefined") return;
-  localStorage.setItem(STOCK_PRODUCTS_STORAGE_KEY, JSON.stringify(products));
-}
-
-export function getStockMovements(): StockMovement[] {
-  if (typeof window === "undefined") return [];
-
-  try {
-    const raw = localStorage.getItem(STOCK_MOVEMENTS_STORAGE_KEY);
-    if (!raw) return [];
-    return normalizeStockMovementList(JSON.parse(raw) as unknown);
-  } catch {
-    return [];
-  }
-}
-
-export function saveStockMovements(movements: StockMovement[]): void {
-  if (typeof window === "undefined") return;
-  localStorage.setItem(STOCK_MOVEMENTS_STORAGE_KEY, JSON.stringify(movements));
-}
-
 export function sortProductsByName(products: StockProduct[]): StockProduct[] {
   return [...products].sort((left, right) =>
     left.name.localeCompare(right.name)
@@ -215,26 +176,6 @@ export function normalizeStockPriceChangeList(
   return value
     .map(normalizeStockPriceChange)
     .filter((change): change is StockPriceChange => change !== null);
-}
-
-export function getStockPriceChanges(): StockPriceChange[] {
-  if (typeof window === "undefined") return [];
-
-  try {
-    const raw = localStorage.getItem(STOCK_PRICE_CHANGES_STORAGE_KEY);
-    if (!raw) return [];
-    return normalizeStockPriceChangeList(JSON.parse(raw) as unknown);
-  } catch {
-    return [];
-  }
-}
-
-export function saveStockPriceChanges(changes: StockPriceChange[]): void {
-  if (typeof window === "undefined") return;
-  localStorage.setItem(
-    STOCK_PRICE_CHANGES_STORAGE_KEY,
-    JSON.stringify(changes)
-  );
 }
 
 export function sortPriceChangesByDate(

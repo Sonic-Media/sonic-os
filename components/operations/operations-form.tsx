@@ -5,7 +5,8 @@ import { Input } from "@/components/shared/ui/input";
 import { Textarea } from "@/components/shared/ui/textarea";
 import { EntryStatusBadge } from "@/components/entry/entry-status-badge";
 import { ExpenseList } from "@/components/entry/expense-list";
-import { CashSummary } from "@/components/operations/cash-summary";
+import { AccessorySalesSection } from "@/components/operations/accessory-sales-section";
+import { OperationsClosingPanel } from "@/components/operations/operations-closing-panel";
 import type { EntryFormData, EntryStatus } from "@/types";
 
 export type OperationsMode = "today" | "historical";
@@ -14,10 +15,11 @@ interface OperationsFormProps {
   mode: OperationsMode;
   form: EntryFormData;
   isSaving: boolean;
-  sales: number;
-  totalExpenses: number;
+  movieRevenue?: number;
+  accessorySales?: number;
+  totalExpenses?: number;
   staffPayouts?: number;
-  netCash: number;
+  netCash?: number;
   status?: EntryStatus;
   lockDate?: boolean;
   seedCommonExpenses?: boolean;
@@ -26,23 +28,26 @@ interface OperationsFormProps {
     value: EntryFormData[K]
   ) => void;
   onSubmit: () => void;
+  onCloseDay?: () => void;
 }
 
 export function OperationsForm({
   mode,
   form,
   isSaving,
-  sales,
-  totalExpenses,
+  movieRevenue = 0,
+  accessorySales = 0,
+  totalExpenses = 0,
   staffPayouts = 0,
-  netCash,
+  netCash = 0,
   status,
   lockDate = false,
   seedCommonExpenses = false,
   updateField,
   onSubmit,
+  onCloseDay,
 }: OperationsFormProps) {
-  const submitLabel = mode === "today" ? "Close Day" : "Save Record";
+  const submitLabel = mode === "today" ? "Save Progress" : "Save Record";
 
   return (
     <form
@@ -67,30 +72,12 @@ export function OperationsForm({
         hint={lockDate ? "Locked to today" : "Select a historical date"}
       />
 
-      <Input
-        label="Sales"
-        type="number"
-        inputMode="numeric"
-        placeholder="0"
-        value={form.sales}
-        onChange={(event) => updateField("sales", event.target.value)}
-      />
+      <AccessorySalesSection date={form.date} />
 
       <ExpenseList
         expenses={form.expenses}
         onChange={(expenses) => updateField("expenses", expenses)}
         seedFromTemplates={seedCommonExpenses}
-      />
-
-      <CashSummary
-        sales={sales}
-        totalExpenses={totalExpenses}
-        staffPayouts={staffPayouts}
-        netCash={netCash}
-        savingsAllocation={form.savingsAllocation}
-        onSavingsAllocationChange={(value) =>
-          updateField("savingsAllocation", value)
-        }
       />
 
       <Textarea
@@ -100,9 +87,33 @@ export function OperationsForm({
         onChange={(event) => updateField("notes", event.target.value)}
       />
 
-      <Button type="submit" size="lg" className="w-full" disabled={isSaving}>
-        {isSaving ? "Saving..." : submitLabel}
-      </Button>
+      {mode === "historical" && (
+        <OperationsClosingPanel
+          form={form}
+          movieRevenue={movieRevenue}
+          accessorySales={accessorySales}
+          totalExpenses={totalExpenses}
+          staffPayouts={staffPayouts}
+          netCash={netCash}
+          updateField={updateField}
+        />
+      )}
+
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <Button type="submit" size="lg" disabled={isSaving}>
+          {isSaving ? "Saving..." : submitLabel}
+        </Button>
+        {mode === "today" && onCloseDay && (
+          <Button
+            type="button"
+            size="lg"
+            variant="secondary"
+            onClick={onCloseDay}
+          >
+            Close Day
+          </Button>
+        )}
+      </div>
     </form>
   );
 }

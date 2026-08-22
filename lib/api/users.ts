@@ -1,4 +1,4 @@
-import { apiGet, apiPatch, apiPost } from "@/lib/api/client";
+import { apiDelete, apiGet, apiPatch, apiPost } from "@/lib/api/client";
 import type {
   AppUser,
   AppUserInput,
@@ -33,4 +33,8 @@ export async function disableUserApi(id: string): Promise<AppUser> {
 
 export async function enableUserApi(id: string): Promise<AppUser> {
   return apiPost<AppUser>(`/api/users/${id}/enable`, {});
+}
+
+export async function deleteUserApi(id: string): Promise<void> {
+  await apiDelete<{ id: string }>(`/api/users/${id}`);
 }

@@ -33,7 +33,7 @@ export function computeTodayRevenueByBranch(
     .filter(
       (entry) =>
         entry.date === today &&
-        entry.status === "completed" &&
+        (entry.status === "completed" || entry.status === "draft") &&
         entry.branch === branch.code
     )
     .reduce((sum, entry) => sum + entry.sales, 0);

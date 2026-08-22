@@ -1,13 +1,27 @@
-import { DAY_CLOSINGS_STORAGE_KEY } from "@/lib/constants";
-import { normalizeBranchCode } from "@/lib/branch-storage";
 import type { Branch } from "@/types";
 import type { DayClosingRecord, DayClosingStatus } from "@/types/day-closing";
+
+let cachedClosings: DayClosingRecord[] = [];
+
+export function setDayClosingsCache(records: DayClosingRecord[]): void {
+  cachedClosings = records;
+}
+
+export function getDayClosings(): DayClosingRecord[] {
+  return cachedClosings;
+}
+
+function normalizeBranchCode(value: unknown): Branch {
+  return typeof value === "string" && value.trim()
+    ? (value.trim().toLowerCase() as Branch)
+    : ("main" as Branch);
+}
 
 function normalizeStatus(value: unknown): DayClosingStatus {
   return value === "closed" ? "closed" : "open";
 }
 
-function normalizeDayClosingRecord(value: unknown): DayClosingRecord | null {
+export function normalizeDayClosingRecord(value: unknown): DayClosingRecord | null {
   if (!value || typeof value !== "object") return null;
 
   const raw = value as Record<string, unknown>;
@@ -23,32 +37,10 @@ function normalizeDayClosingRecord(value: unknown): DayClosingRecord | null {
   return raw as unknown as DayClosingRecord;
 }
 
-export function getDayClosings(): DayClosingRecord[] {
-  if (typeof window === "undefined") return [];
-
-  try {
-    const stored = localStorage.getItem(DAY_CLOSINGS_STORAGE_KEY);
-    if (!stored) return [];
-    const parsed = JSON.parse(stored) as unknown;
-    if (!Array.isArray(parsed)) return [];
-
-    return parsed
-      .map(normalizeDayClosingRecord)
-      .filter((record): record is DayClosingRecord => record !== null);
-  } catch {
-    return [];
-  }
-}
-
-export function saveDayClosings(records: DayClosingRecord[]): void {
-  if (typeof window === "undefined") return;
-  localStorage.setItem(DAY_CLOSINGS_STORAGE_KEY, JSON.stringify(records));
-}
-
 export function getClosedDayRecord(
   branch: Branch,
   date: string,
-  records: DayClosingRecord[] = getDayClosings()
+  records: DayClosingRecord[] = cachedClosings
 ): DayClosingRecord | undefined {
   return records.find(
     (record) =>
@@ -58,22 +50,68 @@ export function getClosedDayRecord(
   );
 }
 
+export function getOpenDayRecord(
+  branch: Branch,
+  date: string,
+  records: DayClosingRecord[] = cachedClosings
+): DayClosingRecord | undefined {
+  return records.find(
+    (record) =>
+      record.branch === branch &&
+      record.date === date &&
+      record.status === "open"
+  );
+}
+
+export function isBranchDayOpened(
+  branch: Branch,
+  date: string,
+  records: DayClosingRecord[] = cachedClosings
+): boolean {
+  const record = getOpenDayRecord(branch, date, records);
+  if (!record) return false;
+  return !!(record.openedAt || record.reopenedAt);
+}
+
+export function needsShopOpening(
+  branch: Branch,
+  date: string,
+  records: DayClosingRecord[] = cachedClosings
+): boolean {
+  return (
+    !isBranchDayClosed(branch, date, records) &&
+    !isBranchDayOpened(branch, date, records)
+  );
+}
+
+export function canRecordTodaysActivity(
+  branch: Branch,
+  date: string,
+  records: DayClosingRecord[] = cachedClosings
+): boolean {
+  return (
+    isBranchDayOpened(branch, date, records) &&
+    !isBranchDayClosed(branch, date, records)
+  );
+}
+
 export function isBranchDayClosed(
   branch: Branch,
   date: string,
-  records: DayClosingRecord[] = getDayClosings()
+  records: DayClosingRecord[] = cachedClosings
 ): boolean {
   return !!getClosedDayRecord(branch, date, records);
 }
 
-export function upsertDayClosingRecord(record: DayClosingRecord): DayClosingRecord[] {
-  const next = [
-    record,
-    ...getDayClosings().filter((item) => item.id !== record.id),
-  ];
-  saveDayClosings(next);
-  return next;
+export function upsertDayClosingRecord(
+  record: DayClosingRecord,
+  records: DayClosingRecord[] = cachedClosings
+): DayClosingRecord[] {
+  return [record, ...records.filter((item) => item.id !== record.id)];
 }
 
 export const DAY_CLOSED_EDIT_MESSAGE =
-  "This branch day is closed. Owner or CEO must reopen before editing today's records.";
+  "This branch day is closed. Owner or Branch Manager must reopen before editing today's records.";
+
+export const SHOP_NOT_OPENED_MESSAGE =
+  "Start today's shift before recording today's activity.";

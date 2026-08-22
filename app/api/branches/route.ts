@@ -5,9 +5,9 @@ import {
 } from "@/lib/server/services/branches-service";
 import { handleRouteError, withDatabase } from "@/lib/server/route-handler";
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    const branches = await withDatabase(() => listBranches());
+    const branches = await withDatabase(() => listBranches(), { request });
     return jsonOk(branches);
   } catch (error) {
     return handleRouteError(error);
@@ -19,6 +19,7 @@ export async function POST(request: Request) {
     const body = await request.json();
     const branch = await withDatabase(() => createBranch(body), {
       permission: "manage_branches",
+      request,
     });
     return jsonCreated(branch);
   } catch (error) {

@@ -47,6 +47,8 @@ export function useStockDialogs(
   const [openingStockProduct, setOpeningStockProduct] =
     useState<StockProduct | null>(null);
   const [movementProductId, setMovementProductId] = useState<string | undefined>();
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | undefined>();
 
   function closeDialog() {
     setActiveDialog(null);
@@ -68,6 +70,7 @@ export function useStockDialogs(
 
   function openDeleteProduct(product: StockProduct) {
     setSelectedProduct(product);
+    setDeleteError(undefined);
     setActiveDialog("delete-product");
   }
 
@@ -90,7 +93,10 @@ export function useStockDialogs(
             mode="add"
             onClose={closeDialog}
             onSuccess={(product) => {
-              if (!product) return;
+              if (!product) {
+                closeDialog();
+                return;
+              }
               setOpeningStockProduct(product);
               setActiveDialog("opening-stock");
             }}
@@ -119,9 +125,21 @@ export function useStockDialogs(
         {activeDialog === "delete-product" && selectedProduct && (
           <StockDeleteDialog
             product={selectedProduct}
+            isDeleting={isDeleting}
+            errorMessage={deleteError}
             onClose={closeDialog}
-            onConfirm={() => {
-              deleteProduct(selectedProduct.id);
+            onConfirm={async () => {
+              setIsDeleting(true);
+              setDeleteError(undefined);
+
+              const result = await deleteProduct(selectedProduct.id);
+              setIsDeleting(false);
+
+              if (!result.success) {
+                setDeleteError(result.errors.form ?? "Failed to delete item.");
+                return;
+              }
+
               closeDialog();
               options?.onProductDeleted?.();
             }}

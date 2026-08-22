@@ -38,16 +38,16 @@ export const STOCK_LAST_MOVEMENT_BRANCH_STORAGE_KEY =
   "sonic-os-stock-last-movement-branch";
 export const ACTIVE_BRANCH_STORAGE_KEY = "sonic-os-active-branch";
 
-export const DEFAULT_BRANCH_CODE = "kansanga";
+export const DEFAULT_BRANCH_CODE = "main";
+export const DEFAULT_BRANCH_NAME = "Kansanga";
 
-export const BRANCH_IDS: Branch[] = ["salaama", "kansanga"];
+export const BRANCH_IDS: Branch[] = [DEFAULT_BRANCH_CODE];
 
 export const DEFAULT_APP_SETTINGS: AppSettings = {
   businessName: "Sonic",
   ownerName: "Kevin",
   branchNames: {
-    salaama: "Salaama",
-    kansanga: "Kansanga",
+    [DEFAULT_BRANCH_CODE]: DEFAULT_BRANCH_NAME,
   },
   defaultLunchAmount: 3000,
 };
@@ -57,7 +57,7 @@ export const EXPENSE_BREAKDOWN_ITEMS: {
   label: string;
 }[] = [
   { key: "rent", label: "Rent" },
-  { key: "staff-payments", label: "Staff" },
+  { key: "staff-payments", label: "Payroll" },
   { key: "lunch", label: "Lunch" },
   { key: "electricity", label: "Electricity" },
   { key: "internet", label: "Internet" },
@@ -80,12 +80,6 @@ export const DEFAULT_EXPENSE_TEMPLATES: ExpenseTemplate[] = [
     id: "common-rent",
     name: "Rent",
     category: "rent",
-    active: true,
-  },
-  {
-    id: "common-staff-payments",
-    name: "Staff",
-    category: "staff-payments",
     active: true,
   },
   {
@@ -175,7 +169,7 @@ export const DEFAULT_STAFF: Staff[] = [
     id: "staff-p",
     name: "Staff P",
     branch: "salaama",
-    role: "salesperson",
+    role: "cashier",
     loginEnabled: false,
     status: "active",
     active: true,
@@ -185,7 +179,7 @@ export const DEFAULT_STAFF: Staff[] = [
     id: "staff-f",
     name: "Staff F",
     branch: "salaama",
-    role: "store-attendant",
+    role: "cashier",
     loginEnabled: false,
     status: "active",
     active: true,
@@ -195,7 +189,7 @@ export const DEFAULT_STAFF: Staff[] = [
     id: "staff-k",
     name: "Staff K",
     branch: "kansanga",
-    role: "technician",
+    role: "branch-manager",
     loginEnabled: false,
     status: "active",
     active: true,

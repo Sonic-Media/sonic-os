@@ -6,10 +6,10 @@ export const SALES_NAV_ITEMS: {
   exact?: boolean;
 }[] = [
   { href: "/sales", label: "Dashboard", exact: true },
-  { href: "/sales/new", label: "New Sale" },
-  { href: "/sales/history", label: "Sales History" },
+  { href: "/sales/new", label: "New Accessory Sale" },
+  { href: "/sales/history", label: "Accessory Sales History" },
   { href: "/sales/customers", label: "Customers" },
-  { href: "/sales/reports", label: "Reports" },
+  { href: "/sales/reports", label: "Accessory Sales Reports" },
 ];
 
 export const SALE_PAYMENT_METHODS: {

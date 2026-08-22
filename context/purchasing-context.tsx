@@ -18,26 +18,20 @@ import {
   updateSupplierApi,
 } from "@/lib/api/suppliers";
 import {
-  loadRemoteOrLocal,
-  runRemoteOrLocal,
-  shouldUseRemoteDataSource,
+  getDataSourceErrorMessage,
+  loadFromApi,
+  runOnApi,
 } from "@/lib/data-source/context-api";
 import { getTodayISO } from "@/lib/dates";
 import {
-  getPurchases,
-  getSuppliers,
   normalizePurchaseList,
   normalizeSupplierList,
-  savePurchases,
-  saveSuppliers,
   sortPurchasesByDate,
   sortSuppliersByName,
 } from "@/lib/purchasing-storage";
 import {
   computeLineSubtotal,
   computePurchasingDashboardMetrics,
-  computeWeightedAverageBuyingPrice,
-  generatePurchaseInvoiceNumber,
   mergePurchaseLineItems,
 } from "@/lib/purchasing/calculations";
 import {
@@ -48,13 +42,13 @@ import {
 import { AUDIT_ACTIONS } from "@/lib/audit-log/constants";
 import { pickAuditFields } from "@/lib/audit-log/snapshots";
 import { recordStaffAction } from "@/lib/staff/audit";
-import {
-  legacyStaffFields,
-  resolveCurrentStaffAction,
-} from "@/lib/staff/session";
+import { resolveCurrentStaffAction } from "@/lib/staff/session";
+import { useAuth } from "@/context/auth-context";
 import {
   DAY_CLOSED_EDIT_MESSAGE,
   isBranchDayClosed,
+  isBranchDayOpened,
+  SHOP_NOT_OPENED_MESSAGE,
 } from "@/lib/day-closing/storage";
 import type {
   Purchase,
@@ -71,6 +65,7 @@ interface PurchasingContextValue {
   suppliers: Supplier[];
   metrics: PurchasingDashboardMetrics;
   isLoaded: boolean;
+  loadError: string | null;
   getPurchaseById: (id: string) => Purchase | undefined;
   getSupplierById: (id: string) => Supplier | undefined;
   addSupplier: (input: SupplierInput) => PurchaseValidationResult;
@@ -79,7 +74,7 @@ interface PurchasingContextValue {
     input: SupplierUpdateInput
   ) => PurchaseValidationResult;
   deleteSupplier: (id: string) => PurchaseValidationResult;
-  completePurchase: (input: PurchaseInput) => PurchaseValidationResult;
+  completePurchase: (input: PurchaseInput) => Promise<PurchaseValidationResult>;
 }
 
 const PurchasingContext = createContext<PurchasingContextValue | null>(null);
@@ -98,19 +93,15 @@ export function PurchasingProvider({
 }: {
   children: React.ReactNode;
 }) {
-  const {
-    getProductById,
-    recordMovement,
-    updateProduct,
-    getStockSnapshot,
-    restoreStockSnapshot,
-    refreshStockFromApi,
-  } = useStock();
+  const { isAuthenticated, isLoaded: authLoaded } = useAuth();
+  const { getProductById, refreshStockFromApi } = useStock();
 
-  const [purchases, setPurchases] = useState<Purchase[]>(() => getPurchases());
-  const [suppliers, setSuppliers] = useState<Supplier[]>(() => getSuppliers());
+  const [purchases, setPurchases] = useState<Purchase[]>([]);
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [isLoaded, setIsLoaded] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const hasLoaded = useRef(false);
+  const purchaseInFlight = useRef(false);
   const purchasesRef = useRef(purchases);
   const suppliersRef = useRef(suppliers);
 
@@ -122,58 +113,7 @@ export function PurchasingProvider({
     suppliersRef.current = suppliers;
   }, [suppliers]);
 
-  useEffect(() => {
-    if (hasLoaded.current) return;
-    hasLoaded.current = true;
-
-    queueMicrotask(() => {
-      void (async () => {
-        const loaded = await loadRemoteOrLocal({
-          remote: async () => {
-            const [remotePurchases, remoteSuppliers] = await Promise.all([
-              fetchPurchases(),
-              fetchSuppliers(),
-            ]);
-
-            return {
-              purchases: sortPurchasesByDate(remotePurchases),
-              suppliers: sortSuppliersByName(remoteSuppliers),
-            };
-          },
-          local: () => ({
-            purchases: getPurchases(),
-            suppliers: getSuppliers(),
-          }),
-        });
-
-        purchasesRef.current = normalizePurchaseList(loaded.purchases);
-        suppliersRef.current = normalizeSupplierList(loaded.suppliers);
-        setPurchases(purchasesRef.current);
-        setSuppliers(suppliersRef.current);
-        setIsLoaded(true);
-      })();
-    });
-  }, []);
-
-  const persistPurchases = useCallback((next: Purchase[]) => {
-    const normalized = sortPurchasesByDate(normalizePurchaseList(next));
-    savePurchases(normalized);
-    purchasesRef.current = normalized;
-    setPurchases(normalized);
-  }, []);
-
-  const persistSuppliers = useCallback((next: Supplier[]) => {
-    const normalized = sortSuppliersByName(normalizeSupplierList(next));
-    saveSuppliers(normalized);
-    suppliersRef.current = normalized;
-    setSuppliers(normalized);
-  }, []);
-
   const refreshPurchasesFromApi = useCallback(async () => {
-    if (!(await shouldUseRemoteDataSource())) {
-      return;
-    }
-
     const [remotePurchases, remoteSuppliers] = await Promise.all([
       fetchPurchases(),
       fetchSuppliers(),
@@ -184,6 +124,52 @@ export function PurchasingProvider({
     setPurchases(purchasesRef.current);
     setSuppliers(suppliersRef.current);
   }, []);
+
+  useEffect(() => {
+    if (!authLoaded) return;
+
+    if (!isAuthenticated) {
+      purchasesRef.current = [];
+      suppliersRef.current = [];
+      setPurchases([]);
+      setSuppliers([]);
+      setLoadError(null);
+      hasLoaded.current = false;
+      setIsLoaded(true);
+      return;
+    }
+
+    if (hasLoaded.current) return;
+    hasLoaded.current = true;
+
+    queueMicrotask(() => {
+      void (async () => {
+        try {
+          const loaded = await loadFromApi(async () => {
+            const [remotePurchases, remoteSuppliers] = await Promise.all([
+              fetchPurchases(),
+              fetchSuppliers(),
+            ]);
+
+            return {
+              purchases: sortPurchasesByDate(remotePurchases),
+              suppliers: sortSuppliersByName(remoteSuppliers),
+            };
+          });
+
+          purchasesRef.current = normalizePurchaseList(loaded.purchases);
+          suppliersRef.current = normalizeSupplierList(loaded.suppliers);
+          setPurchases(purchasesRef.current);
+          setSuppliers(suppliersRef.current);
+          setLoadError(null);
+        } catch (error) {
+          setLoadError(getDataSourceErrorMessage(error));
+        } finally {
+          setIsLoaded(true);
+        }
+      })();
+    });
+  }, [authLoaded, isAuthenticated]);
 
   const purchaseLookup = useMemo(
     () => new Map(purchases.map((purchase) => [purchase.id, purchase])),
@@ -218,38 +204,19 @@ export function PurchasingProvider({
       }
 
       void (async () => {
-        await runRemoteOrLocal({
-          remote: async () => {
+        try {
+          await runOnApi(async () => {
             await createSupplierApi(input);
             await refreshPurchasesFromApi();
-          },
-          local: () => {
-            const now = new Date().toISOString();
-            const supplier: Supplier = {
-              id: crypto.randomUUID(),
-              name: input.name.trim(),
-              phone: input.phone?.trim() || undefined,
-              email: input.email?.trim() || undefined,
-              address: input.address?.trim() || undefined,
-              notes: input.notes?.trim() || undefined,
-              createdAt: now,
-              updatedAt: now,
-            };
-
-            persistSuppliers([...suppliersRef.current, supplier]);
-            recordStaffAction({
-              action: AUDIT_ACTIONS.CREATE,
-              module: "purchasing",
-              recordId: supplier.id,
-              newValues: pickAuditFields(supplier, ["id", "name", "phone", "email"]),
-            });
-          },
-        });
+          });
+        } catch (error) {
+          console.error(getDataSourceErrorMessage(error));
+        }
       })();
 
       return createValidationResult({});
     },
-    [persistSuppliers, refreshPurchasesFromApi]
+    [refreshPurchasesFromApi]
   );
 
   const updateSupplier = useCallback(
@@ -267,60 +234,19 @@ export function PurchasingProvider({
       }
 
       void (async () => {
-        await runRemoteOrLocal({
-          remote: async () => {
+        try {
+          await runOnApi(async () => {
             await updateSupplierApi(id, input);
             await refreshPurchasesFromApi();
-          },
-          local: () => {
-            const now = new Date().toISOString();
-            const nextSuppliers = suppliersRef.current.map((supplier) =>
-              supplier.id === id
-                ? {
-                    ...supplier,
-                    name: input.name.trim(),
-                    phone: input.phone?.trim() || undefined,
-                    email: input.email?.trim() || undefined,
-                    address: input.address?.trim() || undefined,
-                    notes: input.notes?.trim() || undefined,
-                    updatedAt: now,
-                  }
-                : supplier
-            );
-
-            persistSuppliers(nextSuppliers);
-
-            const renamed = existing.name !== input.name.trim();
-            if (renamed) {
-              const nextPurchases = purchasesRef.current.map((purchase) =>
-                purchase.supplierId === id
-                  ? { ...purchase, supplierName: input.name.trim() }
-                  : purchase
-              );
-              persistPurchases(nextPurchases);
-            }
-
-            recordStaffAction({
-              action: AUDIT_ACTIONS.EDIT,
-              module: "purchasing",
-              recordId: existing.id,
-              oldValues: pickAuditFields(existing, ["name", "phone", "email"]),
-              newValues: pickAuditFields(
-                {
-                  name: input.name.trim(),
-                  phone: input.phone?.trim(),
-                  email: input.email?.trim(),
-                },
-                ["name", "phone", "email"]
-              ),
-            });
-          },
-        });
+          });
+        } catch (error) {
+          console.error(getDataSourceErrorMessage(error));
+        }
       })();
 
       return createValidationResult({});
     },
-    [persistSuppliers, persistPurchases, refreshPurchasesFromApi]
+    [refreshPurchasesFromApi]
   );
 
   const deleteSupplier = useCallback(
@@ -335,38 +261,29 @@ export function PurchasingProvider({
       }
 
       void (async () => {
-        await runRemoteOrLocal({
-          remote: async () => {
+        try {
+          await runOnApi(async () => {
             await deleteSupplierApi(id);
             await refreshPurchasesFromApi();
-          },
-          local: () => {
-            const existing = suppliersRef.current.find(
-              (supplier) => supplier.id === id
-            );
-            if (existing) {
-              recordStaffAction({
-                action: AUDIT_ACTIONS.DELETE,
-                module: "purchasing",
-                recordId: existing.id,
-                oldValues: pickAuditFields(existing, ["id", "name"]),
-              });
-            }
-
-            persistSuppliers(
-              suppliersRef.current.filter((supplier) => supplier.id !== id)
-            );
-          },
-        });
+          });
+        } catch (error) {
+          console.error(getDataSourceErrorMessage(error));
+        }
       })();
 
       return createValidationResult({});
     },
-    [persistSuppliers, refreshPurchasesFromApi]
+    [refreshPurchasesFromApi]
   );
 
   const completePurchase = useCallback(
-    (input: PurchaseInput): PurchaseValidationResult => {
+    async (input: PurchaseInput): Promise<PurchaseValidationResult> => {
+      if (purchaseInFlight.current) {
+        return createValidationResult({
+          form: "A purchase is already being processed. Please wait.",
+        });
+      }
+
       const supplier = getSupplierById(input.supplierId);
       if (!supplier) {
         return createValidationResult({ supplierId: "Supplier not found." });
@@ -382,6 +299,9 @@ export function PurchasingProvider({
       const dateISO = input.date ?? getTodayISO();
       if (isBranchDayClosed(input.branch, dateISO)) {
         return createValidationResult({ form: DAY_CLOSED_EDIT_MESSAGE });
+      }
+      if (!isBranchDayOpened(input.branch, dateISO)) {
+        return createValidationResult({ form: SHOP_NOT_OPENED_MESSAGE });
       }
 
       const lineItems = mergedItems.map((item) => {
@@ -401,136 +321,47 @@ export function PurchasingProvider({
         return createValidationResult({ items: "One or more items not found." });
       }
 
-      const resolvedItems = lineItems.filter(
-        (
-          entry
-        ): entry is {
-          item: (typeof mergedItems)[number];
-          product: NonNullable<ReturnType<typeof getProductById>>;
-          lineTotal: number;
-        } => entry !== null
-      );
-
       const actor = resolveCurrentStaffAction(input.branch);
 
-      void (async () => {
-        await runRemoteOrLocal({
-          remote: async () => {
-            await createPurchaseApi({
-              ...normalizedInput,
-              createdBy: actor,
-            } as PurchaseInput);
-            await refreshPurchasesFromApi();
-            await refreshStockFromApi();
-          },
-          local: () => {
-            const invoiceNumber = generatePurchaseInvoiceNumber(
-              purchasesRef.current,
-              dateISO
-            );
-            const stockSnapshot = getStockSnapshot();
+      purchaseInFlight.current = true;
 
-            for (const { item, product } of resolvedItems) {
-              const movementResult = recordMovement({
-                productId: product.id,
-                movement: "in",
-                quantity: item.quantity,
-                reason: "Purchase",
-                notes: `Purchase ${invoiceNumber}`,
-                date: dateISO,
-                branch: input.branch,
-              });
+      try {
+        await runOnApi(async () => {
+          const created = await createPurchaseApi({
+            ...normalizedInput,
+            createdBy: actor,
+          } as PurchaseInput);
+          await refreshPurchasesFromApi();
+          await refreshStockFromApi();
 
-              if (!movementResult.success) {
-                restoreStockSnapshot(stockSnapshot);
-                return;
-              }
-
-              const newBuyingPrice = computeWeightedAverageBuyingPrice(
-                product.currentStock,
-                product.buyingPrice,
-                item.quantity,
-                item.buyingPrice
-              );
-
-              const updateResult = updateProduct(product.id, {
-                name: product.name,
-                category: product.category,
-                sku: product.sku,
-                buyingPrice: newBuyingPrice,
-                sellingPrice: product.sellingPrice,
-                minimumStockLevel: product.minimumStockLevel,
-                notes: product.notes,
-              });
-
-              if (!updateResult.success) {
-                restoreStockSnapshot(stockSnapshot);
-                return;
-              }
-            }
-
-            const legacy = legacyStaffFields(actor);
-            const totalCost = resolvedItems.reduce(
-              (sum, entry) => sum + entry.lineTotal,
-              0
-            );
-
-            const purchase: Purchase = {
-              id: crypto.randomUUID(),
-              invoiceNumber,
-              date: dateISO,
-              supplierId: supplier.id,
-              supplierName: supplier.name,
-              items: resolvedItems.map(({ item, product, lineTotal }) => ({
-                productId: product.id,
-                productName: product.name,
-                quantity: item.quantity,
-                buyingPrice: item.buyingPrice,
-                lineTotal,
-              })),
-              totalCost,
-              branch: input.branch,
-              staffId: legacy.staffId,
-              staffName: legacy.staffName,
-              createdBy: actor,
-              notes: input.notes?.trim() || undefined,
-              createdAt: new Date().toISOString(),
-            };
-
-            persistPurchases([purchase, ...purchasesRef.current]);
-            recordStaffAction({
-              staffId: actor?.staffId,
-              staffName: actor?.staffName,
-              role: actor?.role,
-              branch: input.branch,
-              action: AUDIT_ACTIONS.COMPLETE_PURCHASE,
-              module: "purchasing",
-              recordId: purchase.id,
-              newValues: pickAuditFields(purchase, [
-                "id",
-                "invoiceNumber",
-                "totalCost",
-                "branch",
-                "supplierName",
-              ]),
-            });
-          },
+          recordStaffAction({
+            staffId: actor?.staffId,
+            staffName: actor?.staffName,
+            role: actor?.role,
+            branch: input.branch,
+            action: AUDIT_ACTIONS.COMPLETE_PURCHASE,
+            module: "purchasing",
+            recordId: created.id,
+            newValues: pickAuditFields(created, [
+              "id",
+              "invoiceNumber",
+              "totalCost",
+              "branch",
+              "supplierName",
+            ]),
+          });
         });
-      })();
 
-      return createValidationResult({});
+        return createValidationResult({});
+      } catch (error) {
+        return createValidationResult({
+          form: getDataSourceErrorMessage(error),
+        });
+      } finally {
+        purchaseInFlight.current = false;
+      }
     },
-    [
-      getSupplierById,
-      getProductById,
-      recordMovement,
-      updateProduct,
-      getStockSnapshot,
-      restoreStockSnapshot,
-      persistPurchases,
-      refreshPurchasesFromApi,
-      refreshStockFromApi,
-    ]
+    [getSupplierById, getProductById, refreshPurchasesFromApi, refreshStockFromApi]
   );
 
   const value = useMemo(
@@ -539,6 +370,7 @@ export function PurchasingProvider({
       suppliers,
       metrics,
       isLoaded,
+      loadError,
       getPurchaseById,
       getSupplierById,
       addSupplier,
@@ -551,6 +383,7 @@ export function PurchasingProvider({
       suppliers,
       metrics,
       isLoaded,
+      loadError,
       getPurchaseById,
       getSupplierById,
       addSupplier,

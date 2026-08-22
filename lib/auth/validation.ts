@@ -5,7 +5,7 @@ import type {
   LoginInput,
   UserRole,
 } from "@/types/auth";
-import { isStaffRoleId } from "@/lib/staff/roles";
+import { isStaffRoleId, migrateLegacyAuthRole } from "@/lib/staff/roles";
 
 export function hasValidationErrors(
   errors: Record<string, string | undefined>
@@ -124,8 +124,5 @@ export function isUserRole(value: unknown): value is UserRole {
 export function normalizeUserRole(value: unknown): UserRole {
   if (value === "owner") return "owner";
   if (isStaffRoleId(value)) return value;
-  if (value === "staff") return "store-attendant";
-  if (value === "manager") return "manager";
-  if (value === "cashier") return "cashier";
-  return "store-attendant";
+  return migrateLegacyAuthRole(value);
 }

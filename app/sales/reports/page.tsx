@@ -9,8 +9,8 @@ export default function SalesReportsPage() {
   return (
     <PageContainer>
       <PageHeader
-        title="Sales Reports"
-        subtitle="Analytics and performance insights"
+        title="Accessory Sales Reports"
+        subtitle="Accessory sales analytics and performance insights"
       />
 
       <SalesSubnav />

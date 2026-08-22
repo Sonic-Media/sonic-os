@@ -2,17 +2,18 @@ import { headers } from "next/headers";
 import { jsonError } from "@/lib/api/response";
 import { ApiError } from "@/lib/api/errors";
 import { isDatabaseConfigured } from "@/lib/db";
+import { ensureApplicationInitialized } from "@/lib/server/bootstrap";
 import {
-  requireModuleAccess,
   requireOwner,
   requirePermission,
 } from "@/lib/server/security/authorization";
 import { assertCsrfProtection, assertCsrfProtectionFromHeaders } from "@/lib/server/security/csrf";
 import {
-  getApiModuleForPath,
   isOwnerOnlyApiPath,
+  roleCanAccessApiPath,
   type ServerPermission,
 } from "@/lib/server/security/permissions";
+import { roleHasModuleAccess } from "@/lib/staff/permissions";
 import {
   createRequestId,
   logRequestComplete,
@@ -69,9 +70,23 @@ function enforceAccessControl(
     requirePermission(session, options.permission);
   }
 
-  const module = options?.module ?? (pathname ? getApiModuleForPath(pathname) : null);
-  if (module) {
-    requireModuleAccess(session, module);
+  const method = options?.request?.method ?? "GET";
+
+  if (options?.module) {
+    if (!roleHasModuleAccess(session.role, options.module)) {
+      throw new ApiError("You do not have access to this module.", {
+        status: 403,
+        code: "forbidden",
+      });
+    }
+    return;
+  }
+
+  if (pathname.startsWith("/api/") && !roleCanAccessApiPath(session.role, pathname, method)) {
+    throw new ApiError("You do not have access to this module.", {
+      status: 403,
+      code: "forbidden",
+    });
   }
 }
 
@@ -80,6 +95,7 @@ export async function withDatabase<T>(
   options?: SecureRouteOptions
 ): Promise<T> {
   ensureDatabaseConfigured();
+  await ensureApplicationInitialized();
 
   const pathname = await resolveRequestPathFromContext(options?.request);
 

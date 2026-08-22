@@ -1,0 +1,35 @@
+SONIC OS — STAFF MODULE PRODUCTION CERTIFICATION
+================================================
+
+Date: 2026-08-22T12:45:08.103Z
+Result: CERTIFIED
+Checks passed: 11/11
+
+FEATURE ADDED
+-------------
+Hardened owner-only DELETE /api/staff/:id with linked-record protection, linked login cleanup, and async UI error handling.
+
+CHECKLIST
+---------
+[PASS] 1. Owner can list staff
+    Authenticated owner session established
+[PASS] 2. Staff table loads from PostgreSQL
+    4 staff members returned via /api/staff
+[PASS] 3. Create certification staff member
+    cert-staff-1787402706479 Member (51cdaa20-7aaa-41ef-9e2f-6e922dbe9211)
+[PASS] 4. Deleted staff disappears from Staff table
+    cert-staff-1787402706479 Member removed from /api/staff immediately
+[PASS] 5. Verify PostgreSQL reflects deletion
+    Staff row 51cdaa20-7aaa-41ef-9e2f-6e922dbe9211 no longer exists
+[PASS] 6. Block delete when linked business records exist
+    This staff member has linked business records and cannot be deleted. Deactivate the staff member instead.
+[PASS] 7. Verify no orphaned login records
+    Linked user account removed with deleted staff
+[PASS] 8. Existing deactivate and activate still work
+    Fazil deactivated then reactivated
+[PASS] 9. Owner staff profile remains after certification
+    Bootstrap owner staff verification passed
+[PASS] 10. Verify no runtime errors
+    Certification completed without uncaught exceptions
+[PASS] 11. Verify no server errors
+    No failed API calls during certification

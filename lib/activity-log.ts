@@ -1,4 +1,4 @@
-import { ACTIVITY_LOG_STORAGE_KEY } from "@/lib/constants";
+import { createActivityLogApi } from "@/lib/api/activity-log";
 
 export type ActivityType =
   | "staff-added"
@@ -13,32 +13,14 @@ export interface ActivityRecord {
   timestamp: string;
 }
 
-const MAX_ACTIVITY_RECORDS = 50;
+let activityCache: ActivityRecord[] = [];
 
-function isActivityRecord(value: unknown): value is ActivityRecord {
-  if (!value || typeof value !== "object") return false;
-  const record = value as ActivityRecord;
-  return (
-    typeof record.id === "string" &&
-    typeof record.type === "string" &&
-    typeof record.title === "string" &&
-    typeof record.description === "string" &&
-    typeof record.timestamp === "string"
-  );
+export function setActivityRecordsCache(records: ActivityRecord[]): void {
+  activityCache = records;
 }
 
 export function getActivityRecords(): ActivityRecord[] {
-  if (typeof window === "undefined") return [];
-
-  try {
-    const raw = localStorage.getItem(ACTIVITY_LOG_STORAGE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    return parsed.filter(isActivityRecord);
-  } catch {
-    return [];
-  }
+  return activityCache;
 }
 
 export function recordActivity(
@@ -50,15 +32,14 @@ export function recordActivity(
     ...input,
   };
 
-  if (typeof window !== "undefined") {
-    const next = [record, ...getActivityRecords()].slice(0, MAX_ACTIVITY_RECORDS);
-    localStorage.setItem(ACTIVITY_LOG_STORAGE_KEY, JSON.stringify(next));
-  }
+  void createActivityLogApi(input).catch((error) => {
+    console.error("[activity-log] failed to persist entry:", error);
+  });
 
   return record;
 }
 
-export function clearActivityRecords(): void {
-  if (typeof window === "undefined") return;
-  localStorage.removeItem(ACTIVITY_LOG_STORAGE_KEY);
+export async function fetchActivityRecords(): Promise<ActivityRecord[]> {
+  const { fetchActivityLogs } = await import("@/lib/api/activity-log");
+  return fetchActivityLogs();
 }

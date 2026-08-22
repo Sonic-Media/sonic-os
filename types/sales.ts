@@ -103,6 +103,7 @@ export interface SaleFilterCriteria {
 export interface SaleValidationResult {
   success: boolean;
   errors: Record<string, string | undefined>;
+  sale?: Sale;
 }
 
 export interface SaleCalculationPreview {

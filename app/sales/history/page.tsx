@@ -26,12 +26,12 @@ export default function SalesHistoryPage() {
   return (
     <PageContainer>
       <PageHeader
-        title="Sales History"
-        subtitle="All completed transactions"
+        title="Accessory Sales History"
+        subtitle="All completed accessory sales"
       />
 
       <div className="mb-6 flex justify-end">
-        <Button href="/sales/new">New Sale</Button>
+        <Button href="/sales/new">New Accessory Sale</Button>
       </div>
 
       <SalesSubnav />

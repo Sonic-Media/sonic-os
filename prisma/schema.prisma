@@ -40,6 +40,7 @@ model Branch {
   expenseRecords ExpenseRecord[]
   stockMovements StockMovement[]
   staffPayments  StaffPayment[]
+  dayClosings    DayClosing[]
 
   @@index([active])
   @@index([name])
@@ -439,6 +440,73 @@ model ExpenseRecord {
   @@index([branchId, date])
   @@index([createdAt])
   @@index([branchId, date, createdAt])
+}
+
+model DayClosing {
+  id                  String    @id @default(uuid()) @db.Uuid
+  date                String
+  branchId            String    @db.Uuid
+  branch              Branch    @relation(fields: [branchId], references: [id], onUpdate: Cascade, onDelete: Restrict)
+  status              String    @default("open")
+  metrics             Json
+  staffPayouts        Json
+  expectedCash        Int       @default(0)
+  actualCashCounted   Int       @default(0)
+  cashDifference      Int       @default(0)
+  cashStatus          String    @default("balanced")
+  reconciliationNotes String?
+  summary             Json
+  closedBy            String?
+  closedByName        String?
+  closedAt            DateTime?
+  openedBy            String?
+  openedByName        String?
+  openedAt            DateTime?
+  reopenedBy          String?
+  reopenedByName      String?
+  reopenedAt          DateTime?
+  closingNotes        String?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  @@unique([branchId, date])
+  @@index([branchId])
+  @@index([date])
+  @@index([status])
+}
+
+model AuditLogEntry {
+  id         String   @id @default(uuid()) @db.Uuid
+  timestamp  DateTime @default(now())
+  userId     String
+  userName   String
+  role       String
+  branchCode String
+  action     String
+  module     String
+  recordId   String?
+  detail     String?
+  oldValues  Json?
+  newValues  Json?
+  createdAt  DateTime @default(now())
+
+  @@index([branchCode])
+  @@index([module])
+  @@index([action])
+  @@index([timestamp])
+  @@index([userId])
+  @@index([branchCode, timestamp])
+}
+
+model ActivityLog {
+  id          String   @id @default(uuid()) @db.Uuid
+  type        String
+  title       String
+  description String
+  createdAt   DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([type])
 }
 
 model StaffPayment {

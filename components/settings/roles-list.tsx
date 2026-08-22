@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { Card } from "@/components/shared/ui/card";
 import { fetchRoles } from "@/lib/api/roles";
-import { loadRemoteOrLocal } from "@/lib/data-source/context-api";
+import { loadFromApi } from "@/lib/data-source/context-api";
 import {
   DEFAULT_STAFF_ROLES,
   STAFF_MODULE_LABELS,
@@ -15,10 +15,7 @@ export function RolesList() {
   const [isLoaded, setIsLoaded] = useState(false);
 
   useEffect(() => {
-    void loadRemoteOrLocal({
-      remote: () => fetchRoles(),
-      local: () => DEFAULT_STAFF_ROLES,
-    }).then((loaded) => {
+    void loadFromApi(() => fetchRoles()).then((loaded) => {
       setRoles(loaded.length > 0 ? loaded : DEFAULT_STAFF_ROLES);
       setIsLoaded(true);
     });

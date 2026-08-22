@@ -155,32 +155,41 @@ export function buildKpiDetailSnapshot(
     staffFilter: options.staffFilter,
   });
 
+  const branchIds = Object.keys(options.branchNames) as Branch[];
+  const aggregateOptions = { branchIds };
+
   const { previousEntries } = resolvePeriodEntries(
     filteredEntries,
     options.timeFilter,
     options.customRange
   );
-  const previousSummary = aggregateEntries(previousEntries);
+  const previousSummary = aggregateEntries(previousEntries, aggregateOptions);
   const previousMargin = calculateProfitMargin(
     previousSummary.totalSales,
     previousSummary.totalSavings
   );
 
   const todaySales = aggregateEntries(
-    filterEntriesByPeriod(filteredEntries, "daily")
+    filterEntriesByPeriod(filteredEntries, "daily"),
+    aggregateOptions
   ).totalSales;
   const yesterdaySales = aggregateEntries(
-    filterEntriesByPreviousPeriod(filteredEntries, "daily")
+    filterEntriesByPreviousPeriod(filteredEntries, "daily"),
+    aggregateOptions
   ).totalSales;
   const weekSales = aggregateEntries(
-    filterEntriesByPeriod(filteredEntries, "weekly")
+    filterEntriesByPeriod(filteredEntries, "weekly"),
+    aggregateOptions
   ).totalSales;
   const lastWeekSales = aggregateEntries(
-    filterEntriesByPreviousPeriod(filteredEntries, "weekly")
+    filterEntriesByPreviousPeriod(filteredEntries, "weekly"),
+    aggregateOptions
   ).totalSales;
 
-  const bestPerformingBranch = aggregateEntries(filteredEntries).insights
-    .bestPerformingBranch;
+  const bestPerformingBranch = aggregateEntries(
+    filteredEntries,
+    aggregateOptions
+  ).insights.bestPerformingBranch;
   const bestPerformingBranchName = bestPerformingBranch
     ? options.branchNames[bestPerformingBranch]
     : null;

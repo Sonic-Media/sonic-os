@@ -1,4 +1,4 @@
-import { BRANCH_IDS, DEFAULT_STAFF, STAFF_STORAGE_KEY } from "@/lib/constants";
+import { BRANCH_IDS } from "@/lib/constants";
 import { normalizeBranchCode } from "@/lib/branch-storage";
 import { getTodayISO } from "@/lib/dates";
 import { isStaffRoleId } from "@/lib/staff/roles";
@@ -32,7 +32,7 @@ function normalizeStaffMember(value: unknown): Staff | null {
   const branch = normalizeBranchCode(raw.branch);
   const active = raw.active !== false;
   const status = normalizeStaffStatus(raw.status, active);
-  const role = isStaffRoleId(raw.role) ? raw.role : "store-attendant";
+  const role = isStaffRoleId(raw.role) ? raw.role : "cashier";
   const dateJoined =
     typeof raw.dateJoined === "string" && raw.dateJoined.trim()
       ? raw.dateJoined.trim()
@@ -65,69 +65,12 @@ function normalizeStaffMember(value: unknown): Staff | null {
 
 export function normalizeStaffList(value: unknown): Staff[] {
   if (!Array.isArray(value)) {
-    return DEFAULT_STAFF.map((member) => ({ ...member }));
+    return [];
   }
 
-  const staff = value
+  return value
     .map(normalizeStaffMember)
     .filter((member): member is Staff => member !== null);
-
-  return staff.length > 0
-    ? staff
-    : DEFAULT_STAFF.map((member) => ({ ...member }));
-}
-
-export function getStaffList(): Staff[] {
-  if (typeof window === "undefined") {
-    return DEFAULT_STAFF.map((member) => ({ ...member }));
-  }
-
-  try {
-    const raw = localStorage.getItem(STAFF_STORAGE_KEY);
-    if (!raw) return DEFAULT_STAFF.map((member) => ({ ...member }));
-    return normalizeStaffList(JSON.parse(raw) as unknown);
-  } catch {
-    return DEFAULT_STAFF.map((member) => ({ ...member }));
-  }
-}
-
-export function saveStaffList(staff: Staff[]): void {
-  if (typeof window === "undefined") return;
-  localStorage.setItem(STAFF_STORAGE_KEY, JSON.stringify(staff));
-}
-
-export function linkStaffToUser(
-  staffId: string,
-  userId: string,
-  username?: string
-): Staff[] {
-  const next = getStaffList().map((member) =>
-    member.id === staffId
-      ? {
-          ...member,
-          userId,
-          loginEnabled: true,
-          username: username?.trim() || member.username,
-        }
-      : member
-  );
-  saveStaffList(next);
-  return next;
-}
-
-export function unlinkStaffUser(staffId: string): Staff[] {
-  const next = getStaffList().map((member) =>
-    member.id === staffId
-      ? {
-          ...member,
-          userId: undefined,
-          loginEnabled: false,
-          username: undefined,
-        }
-      : member
-  );
-  saveStaffList(next);
-  return next;
 }
 
 export function buildStaffLookup(staff: Staff[]): Map<string, Staff> {

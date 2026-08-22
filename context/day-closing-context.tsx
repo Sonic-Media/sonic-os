@@ -11,6 +11,7 @@ import {
 } from "react";
 import { useAuth } from "@/context/auth-context";
 import { useEntriesContext } from "@/context/entries-context";
+import { useSettings } from "@/context/settings-context";
 import { useStaffPaymentsModule } from "@/context/staff-payments-context";
 import {
   computeCashDifference,
@@ -20,20 +21,28 @@ import {
   resolveCashStatus,
 } from "@/lib/day-closing/calculations";
 import { canReopenDay } from "@/lib/day-closing/permissions";
+import { closeDayApi, fetchDayClosings, openDayApi, reopenDayApi } from "@/lib/api/day-closings";
 import {
-  getClosedDayRecord,
-  getDayClosings,
-  isBranchDayClosed,
-  saveDayClosings,
+  getDataSourceErrorMessage,
+  loadFromApi,
+  runOnApi,
+} from "@/lib/data-source/context-api";
+import {
+  getClosedDayRecord as findClosedDayRecord,
+  getOpenDayRecord as findOpenDayRecord,
+  isBranchDayClosed as checkBranchDayClosed,
+  isBranchDayOpened as checkBranchDayOpened,
+  needsShopOpening as checkNeedsShopOpening,
+  setDayClosingsCache,
   upsertDayClosingRecord,
 } from "@/lib/day-closing/storage";
-import { formToEntry, findDraftForBranchDate } from "@/lib/entry-helpers";
+import { buildClosedDayDailyOperationEntry } from "@/lib/day-closing/entry-sync";
+import { findDraftForBranchDate } from "@/lib/entry-helpers";
 import { getTodayISO } from "@/lib/dates";
-import { createDefaultExpenses } from "@/lib/expenses";
+import { toStaffFacingError } from "@/lib/ux/staff-messages";
 import { AUDIT_ACTIONS } from "@/lib/audit-log/constants";
 import { pickAuditFields } from "@/lib/audit-log/snapshots";
 import { recordStaffAction, resolveStaffByUserId } from "@/lib/staff/audit";
-import { getEntries } from "@/lib/storage";
 import type { Branch } from "@/types";
 import type {
   DayClosingRecord,
@@ -63,13 +72,23 @@ interface DayClosingContextValue {
   closings: DayClosingRecord[];
   isLoaded: boolean;
   isBranchDayClosed: (branch: Branch, date?: string) => boolean;
+  isBranchDayOpened: (branch: Branch, date?: string) => boolean;
+  needsShopOpening: (branch: Branch, date?: string) => boolean;
   getClosedRecord: (branch: Branch, date?: string) => DayClosingRecord | undefined;
+  getOpenRecord: (branch: Branch, date?: string) => DayClosingRecord | undefined;
   getBranchStatusInfo: (
     branch: BranchEntity,
     date?: string
   ) => DayClosingStatusInfo;
-  closeDay: (input: CloseDayInput) => DayClosingValidationResult;
-  reopenDay: (branch: Branch, date?: string) => DayClosingValidationResult;
+  openDay: (
+    branch: Branch,
+    date?: string
+  ) => Promise<DayClosingValidationResult>;
+  closeDay: (input: CloseDayInput) => Promise<DayClosingValidationResult>;
+  reopenDay: (
+    branch: Branch,
+    date?: string
+  ) => Promise<DayClosingValidationResult>;
 }
 
 const DayClosingContext = createContext<DayClosingContextValue | null>(null);
@@ -89,48 +108,93 @@ export function DayClosingProvider({ children }: { children: React.ReactNode }) 
   const [closings, setClosings] = useState<DayClosingRecord[]>([]);
   const [isLoaded, setIsLoaded] = useState(false);
   const closingsRef = useRef(closings);
-  const { session } = useAuth();
+  const { session, isAuthenticated, isLoaded: authLoaded } = useAuth();
+  const { settings } = useSettings();
   const { recordStaffPayment } = useStaffPaymentsModule();
-  const { upsertEntry } = useEntriesContext();
+  const { upsertEntry, entries, refreshEntries } = useEntriesContext();
 
   useEffect(() => {
     closingsRef.current = closings;
   }, [closings]);
 
-  useEffect(() => {
-    queueMicrotask(() => {
-      setClosings(getDayClosings());
-      setIsLoaded(true);
-    });
+  const refreshClosingsFromApi = useCallback(async () => {
+    const remoteClosings = await fetchDayClosings();
+    closingsRef.current = remoteClosings;
+    setDayClosingsCache(remoteClosings);
+    setClosings(remoteClosings);
   }, []);
 
+  useEffect(() => {
+    if (!authLoaded) return;
+    if (!isAuthenticated) {
+      closingsRef.current = [];
+      setDayClosingsCache([]);
+      setClosings([]);
+      setIsLoaded(true);
+      return;
+    }
+
+    queueMicrotask(() => {
+      void (async () => {
+        try {
+          await loadFromApi(() => refreshClosingsFromApi());
+        } catch (error) {
+          console.error(getDataSourceErrorMessage(error));
+        } finally {
+          setIsLoaded(true);
+        }
+      })();
+    });
+  }, [authLoaded, isAuthenticated, refreshClosingsFromApi]);
+
   const persistClosings = useCallback((next: DayClosingRecord[]) => {
-    saveDayClosings(next);
     closingsRef.current = next;
+    setDayClosingsCache(next);
     setClosings(next);
   }, []);
 
   const isBranchDayClosedFn = useCallback(
     (branch: Branch, date = getTodayISO()) =>
-      isBranchDayClosed(branch, date, closingsRef.current),
+      checkBranchDayClosed(branch, date, closingsRef.current),
+    []
+  );
+
+  const isBranchDayOpenedFn = useCallback(
+    (branch: Branch, date = getTodayISO()) =>
+      checkBranchDayOpened(branch, date, closingsRef.current),
+    []
+  );
+
+  const needsShopOpeningFn = useCallback(
+    (branch: Branch, date = getTodayISO()) =>
+      checkNeedsShopOpening(branch, date, closingsRef.current),
     []
   );
 
   const getClosedRecord = useCallback(
     (branch: Branch, date = getTodayISO()) =>
-      getClosedDayRecord(branch, date, closingsRef.current),
+      findClosedDayRecord(branch, date, closingsRef.current),
+    []
+  );
+
+  const getOpenRecord = useCallback(
+    (branch: Branch, date = getTodayISO()) =>
+      findOpenDayRecord(branch, date, closingsRef.current),
     []
   );
 
   const getBranchStatusInfo = useCallback(
     (branch: BranchEntity, date = getTodayISO()): DayClosingStatusInfo => {
-      const closed = getClosedDayRecord(branch.code, date, closingsRef.current);
+      const closed = findClosedDayRecord(branch.code, date, closingsRef.current);
+      const open = findOpenDayRecord(branch.code, date, closingsRef.current);
 
       return {
         branch: branch.code,
         branchName: branch.name,
         date,
         status: closed ? "closed" : "open",
+        openedByName: open?.openedByName,
+        openedAt: open?.openedAt,
         closedByName: closed?.closedByName,
         closedAt: closed?.closedAt,
       };
@@ -138,12 +202,84 @@ export function DayClosingProvider({ children }: { children: React.ReactNode }) 
     []
   );
 
-  const closeDay = useCallback(
-    (input: CloseDayInput): DayClosingValidationResult => {
+  const openDay = useCallback(
+    async (
+      branch: Branch,
+      date = getTodayISO()
+    ): Promise<DayClosingValidationResult> => {
+      if (!session) {
+        return createValidationResult({
+          form: "You must be signed in to start today's shift.",
+        });
+      }
+
+      if (checkBranchDayClosed(branch, date, closingsRef.current)) {
+        return createValidationResult({
+          form: "Today's shift has already been completed.",
+        });
+      }
+
+      if (checkBranchDayOpened(branch, date, closingsRef.current)) {
+        return createValidationResult({
+          form: "Today's shift has already been started.",
+        });
+      }
+
+      try {
+        const saved = await runOnApi(() =>
+          openDayApi({
+            branch,
+            date,
+            openedBy: session.userId,
+            openedByName: session.displayName,
+          })
+        );
+
+        persistClosings(
+          upsertDayClosingRecord(saved, closingsRef.current)
+        );
+
+        const linkedStaff = resolveStaffByUserId(session.userId);
+
+        recordStaffAction({
+          staffId: linkedStaff?.id,
+          staffName: linkedStaff?.name ?? session.displayName,
+          role: linkedStaff?.role,
+          branch,
+          action: AUDIT_ACTIONS.OPEN_DAY,
+          module: "operations",
+          recordId: saved.id,
+          newValues: pickAuditFields(saved, [
+            "id",
+            "date",
+            "branch",
+            "openedAt",
+          ]),
+        });
+
+        await refreshEntries();
+
+        return createValidationResult({}, saved);
+      } catch (error) {
+        return createValidationResult({
+          form: toStaffFacingError(getDataSourceErrorMessage(error), {
+            ownerName: settings.ownerName,
+            context: "start-shift",
+          }),
+        });
+      }
+    },
+    [persistClosings, refreshEntries, session, settings.ownerName]
+  );
+    async (input: CloseDayInput): Promise<DayClosingValidationResult> => {
       const errors: Record<string, string | undefined> = {};
 
-      if (isBranchDayClosed(input.branch, input.date, closingsRef.current)) {
-        errors.form = "This branch day is already closed.";
+      if (checkBranchDayClosed(input.branch, input.date, closingsRef.current)) {
+        errors.form = "Today's shift has already been completed.";
+      }
+
+      if (!checkBranchDayOpened(input.branch, input.date, closingsRef.current)) {
+        errors.form = "Start today's shift before closing the day.";
       }
 
       if (!session) {
@@ -205,73 +341,62 @@ export function DayClosingProvider({ children }: { children: React.ReactNode }) 
         (record) => record.branch === input.branch && record.date === input.date
       );
 
-      const record: DayClosingRecord = {
-        id: existing?.id ?? crypto.randomUUID(),
-        date: input.date,
-        branch: input.branch,
-        status: "closed",
-        metrics: input.metrics,
-        staffPayouts: input.staffPayouts,
-        expectedCash: input.expectedCash,
-        actualCashCounted: input.actualCashCounted,
-        cashDifference: difference,
-        cashStatus,
-        reconciliationNotes: input.reconciliationNotes?.trim() || undefined,
-        summary,
-        closedBy: session?.userId,
-        closedByName: session?.displayName,
-        closedAt: now,
-        closingNotes: input.closingNotes?.trim() || undefined,
-        createdAt: existing?.createdAt ?? now,
-        updatedAt: now,
-      };
-
-      persistClosings(upsertDayClosingRecord(record));
-
-      const linkedStaff = session?.userId
-        ? resolveStaffByUserId(session.userId)
-        : undefined;
-
-      recordStaffAction({
-        staffId: linkedStaff?.id,
-        staffName: linkedStaff?.name ?? session?.displayName,
-        role: linkedStaff?.role,
-        branch: input.branch,
-        action: AUDIT_ACTIONS.CLOSE_DAY,
-        module: "operations",
-        recordId: record.id,
-        newValues: pickAuditFields(record, [
-          "id",
-          "date",
-          "branch",
-          "cashStatus",
-          "actualCashCounted",
-        ]),
-      });
-
-      const draftEntry = findDraftForBranchDate(
-        getEntries(),
-        input.branch,
-        input.date
-      );
-
-      upsertEntry(
-        formToEntry(
-          {
+      try {
+        const saved = await runOnApi(() =>
+          closeDayApi({
             date: input.date,
             branch: input.branch,
-            sales: String(summary.sales),
-            expenses: draftEntry?.expenses ?? createDefaultExpenses([]),
-            staffId: "",
-            notes:
-              input.closingNotes?.trim() ||
-              draftEntry?.notes ||
-              "Closed via Close Day",
-            savingsAllocation: String(summary.operatingFund),
-          },
-          {
-            id: draftEntry?.id,
-            status: "completed",
+            metrics: input.metrics,
+            staffPayouts: input.staffPayouts,
+            expectedCash: input.expectedCash,
+            actualCashCounted: input.actualCashCounted,
+            cashDifference: difference,
+            cashStatus,
+            reconciliationNotes: input.reconciliationNotes,
+            closingNotes: input.closingNotes,
+            summary,
+            closedBy: session?.userId,
+            closedByName: session?.displayName,
+          })
+        );
+
+        persistClosings(
+          upsertDayClosingRecord(saved, closingsRef.current)
+        );
+
+        const linkedStaff = session?.userId
+          ? resolveStaffByUserId(session.userId)
+          : undefined;
+
+        recordStaffAction({
+          staffId: linkedStaff?.id,
+          staffName: linkedStaff?.name ?? session?.displayName,
+          role: linkedStaff?.role,
+          branch: input.branch,
+          action: AUDIT_ACTIONS.CLOSE_DAY,
+          module: "operations",
+          recordId: saved.id,
+          newValues: pickAuditFields(saved, [
+            "id",
+            "date",
+            "branch",
+            "cashStatus",
+            "actualCashCounted",
+          ]),
+        });
+
+        const draftEntry = findDraftForBranchDate(
+          entries,
+          input.branch,
+          input.date
+        );
+
+        upsertEntry(
+          buildClosedDayDailyOperationEntry({
+            branch: input.branch,
+            date: input.date,
+            summary,
+            closingNotes: input.closingNotes,
             existing: draftEntry,
             createdBy: linkedStaff
               ? {
@@ -282,52 +407,72 @@ export function DayClosingProvider({ children }: { children: React.ReactNode }) 
                   timestamp: now,
                 }
               : undefined,
-          }
-        )
-      );
+          })
+        );
 
-      return createValidationResult({}, record);
+        return createValidationResult({}, saved);
+      } catch (error) {
+        return createValidationResult({
+          form: toStaffFacingError(getDataSourceErrorMessage(error), {
+            ownerName: settings.ownerName,
+            context: "close-day",
+          }),
+        });
+      }
     },
-    [recordStaffPayment, persistClosings, session, upsertEntry]
+    [recordStaffPayment, persistClosings, session, upsertEntry, entries, settings.ownerName]
   );
 
   const reopenDay = useCallback(
-    (branch: Branch, date = getTodayISO()): DayClosingValidationResult => {
+    async (
+      branch: Branch,
+      date = getTodayISO()
+    ): Promise<DayClosingValidationResult> => {
       if (!session || !canReopenDay(session.role)) {
         return createValidationResult({
-          form: "Only Owner or CEO can reopen a closed day.",
+          form: "Only Owner or Branch Manager can reopen a closed day.",
         });
       }
 
-      const existing = getClosedDayRecord(branch, date, closingsRef.current);
+      const existing = findClosedDayRecord(branch, date, closingsRef.current);
       if (!existing) {
         return createValidationResult({ form: "This branch day is not closed." });
       }
 
-      const now = new Date().toISOString();
-      const nextRecord: DayClosingRecord = {
-        ...existing,
-        status: "open",
-        reopenedBy: session.userId,
-        reopenedByName: session.displayName,
-        reopenedAt: now,
-        updatedAt: now,
-      };
+      try {
+        const saved = await runOnApi(() =>
+          reopenDayApi({
+            branch,
+            date,
+            reopenedBy: session.userId,
+            reopenedByName: session.displayName,
+          })
+        );
 
-      persistClosings(upsertDayClosingRecord(nextRecord));
+        persistClosings(
+          upsertDayClosingRecord(saved, closingsRef.current)
+        );
 
-      recordStaffAction({
-        action: AUDIT_ACTIONS.REOPEN_DAY,
-        module: "operations",
-        branch,
-        recordId: nextRecord.id,
-        oldValues: pickAuditFields(existing, ["status"]),
-        newValues: pickAuditFields(nextRecord, ["status"]),
-      });
+        recordStaffAction({
+          action: AUDIT_ACTIONS.REOPEN_DAY,
+          module: "operations",
+          branch,
+          recordId: saved.id,
+          oldValues: pickAuditFields(existing, ["status"]),
+          newValues: pickAuditFields(saved, ["status"]),
+        });
 
-      return createValidationResult({}, nextRecord);
+        return createValidationResult({}, saved);
+      } catch (error) {
+        return createValidationResult({
+          form: toStaffFacingError(getDataSourceErrorMessage(error), {
+            ownerName: settings.ownerName,
+            context: "general",
+          }),
+        });
+      }
     },
-    [persistClosings, session]
+    [persistClosings, session, settings.ownerName]
   );
 
   const value = useMemo(
@@ -335,8 +480,12 @@ export function DayClosingProvider({ children }: { children: React.ReactNode }) 
       closings,
       isLoaded,
       isBranchDayClosed: isBranchDayClosedFn,
+      isBranchDayOpened: isBranchDayOpenedFn,
+      needsShopOpening: needsShopOpeningFn,
       getClosedRecord,
+      getOpenRecord,
       getBranchStatusInfo,
+      openDay,
       closeDay,
       reopenDay,
     }),
@@ -344,8 +493,12 @@ export function DayClosingProvider({ children }: { children: React.ReactNode }) 
       closings,
       isLoaded,
       isBranchDayClosedFn,
+      isBranchDayOpenedFn,
+      needsShopOpeningFn,
       getClosedRecord,
+      getOpenRecord,
       getBranchStatusInfo,
+      openDay,
       closeDay,
       reopenDay,
     ]

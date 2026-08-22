@@ -9,6 +9,7 @@ import { useAuth } from "@/context/auth-context";
 import { useSettings } from "@/context/settings-context";
 import { useStaff } from "@/context/staff-context";
 import { useBranches } from "@/context/branches-context";
+import { useFormBranch } from "@/hooks/use-form-branch";
 import { STAFF_ROLE_OPTIONS, getStaffRoleName } from "@/lib/staff/roles";
 import type { Branch, Staff } from "@/types";
 import type { StaffRoleId } from "@/types/staff-role";
@@ -17,6 +18,7 @@ import { cn } from "@/lib/utils";
 function StaffRow({ member }: { member: Staff }) {
   const { getBranchName } = useSettings();
   const { activeBranches } = useBranches();
+  const { canManageUsers } = useAuth();
   const { updateStaff, deactivateStaff, deleteStaff } = useStaff();
   const [isEditing, setIsEditing] = useState(false);
   const [name, setName] = useState(member.name);
@@ -78,13 +80,13 @@ function StaffRow({ member }: { member: Staff }) {
     setIsEditing(false);
   }
 
-  function handleDelete() {
+  async function handleDelete() {
     const confirmed = window.confirm(
-      `Delete ${member.name}? Entries linked to this staff member will keep their saved name.`
+      `Permanently delete ${member.name}? This cannot be undone.`
     );
     if (!confirmed) return;
 
-    const result = deleteStaff(member.id);
+    const result = await deleteStaff(member.id);
     if (!result.success) {
       window.alert(result.errors.form ?? "Unable to delete this staff member.");
     }
@@ -206,13 +208,15 @@ function StaffRow({ member }: { member: Staff }) {
             Activate
           </button>
         )}
-        <button
-          type="button"
-          onClick={handleDelete}
-          className="px-2 py-1 text-xs font-medium text-zinc-400 hover:text-red-400 transition-colors"
-        >
-          Delete
-        </button>
+        {canManageUsers && (
+          <button
+            type="button"
+            onClick={handleDelete}
+            className="px-2 py-1 text-xs font-medium text-zinc-400 hover:text-red-400 transition-colors"
+          >
+            Delete
+          </button>
+        )}
       </div>
     </div>
   );
@@ -224,10 +228,8 @@ export function StaffSection() {
   const { activeBranches } = useBranches();
 
   const [name, setName] = useState("");
-  const [branch, setBranch] = useState<Branch>(
-    activeBranches[0]?.code ?? "kansanga"
-  );
-  const [role, setRole] = useState<StaffRoleId>("sales-attendant");
+  const { branch, setBranch, isReady: branchReady } = useFormBranch();
+  const [role, setRole] = useState<StaffRoleId>("cashier");
   const [loginEnabled, setLoginEnabled] = useState(false);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -387,7 +389,12 @@ export function StaffSection() {
 
         <StockFieldError message={errors.form} />
 
-        <Button type="button" className="w-full" onClick={handleAddStaff}>
+        <Button
+          type="button"
+          className="w-full"
+          onClick={handleAddStaff}
+          disabled={!branchReady}
+        >
           Add Staff
         </Button>
       </div>

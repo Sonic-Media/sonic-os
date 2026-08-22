@@ -1,4 +1,4 @@
-import type { ChartDataPoint, Entry, ReportSummary } from "@/types";
+import type { Branch, BranchTotals, ChartDataPoint, Entry, ReportSummary } from "@/types";
 import {
   calculateExpenses,
   calculateSavingsFromTotals,
@@ -6,28 +6,53 @@ import {
 import { formatChartLabel } from "@/lib/dates";
 import { filterCompletedEntries } from "@/lib/entry-helpers";
 import { buildReportInsights } from "@/lib/report-insights";
+import {
+  createInitialByBranch,
+  normalizeBranchId,
+  resolveReportBranchIds,
+} from "@/lib/reports/branch-totals";
+import { BRANCH_IDS } from "@/lib/constants";
 
-export function aggregateEntries(entries: Entry[]): ReportSummary {
-  const byBranch: ReportSummary["byBranch"] = {
-    kansanga: { sales: 0, expenses: 0, savings: 0 },
-    salaama: { sales: 0, expenses: 0, savings: 0 },
-  };
+export interface AggregateEntriesOptions {
+  branchIds?: Branch[];
+}
+
+export function aggregateEntries(
+  entries: Entry[],
+  options: AggregateEntriesOptions = {}
+): ReportSummary {
+  const completedEntries = filterCompletedEntries(entries);
+  const branchIds = resolveReportBranchIds(
+    options.branchIds ?? BRANCH_IDS,
+    completedEntries
+  );
+  const byBranch = createInitialByBranch(branchIds);
 
   let totalSales = 0;
   let totalExpenses = 0;
 
-  const completedEntries = filterCompletedEntries(entries);
-
   for (const entry of completedEntries) {
+    const branch = normalizeBranchId(entry.branch);
+    if (!branch) {
+      continue;
+    }
+
+    const branchTotals = byBranch[branch];
+    if (!branchTotals) {
+      throw new Error(
+        `Report aggregation encountered branch "${entry.branch}" before initialization.`
+      );
+    }
+
     const expenses = calculateExpenses(entry);
     const savings = calculateSavingsFromTotals(entry.sales, expenses);
 
     totalSales += entry.sales;
     totalExpenses += expenses;
 
-    byBranch[entry.branch].sales += entry.sales;
-    byBranch[entry.branch].expenses += expenses;
-    byBranch[entry.branch].savings += savings;
+    branchTotals.sales += entry.sales;
+    branchTotals.expenses += expenses;
+    branchTotals.savings += savings;
   }
 
   const chartData = buildChartData(completedEntries);
@@ -64,4 +89,23 @@ function buildChartData(entries: Entry[]): ChartDataPoint[] {
       expenses: data.expenses,
       savings: calculateSavingsFromTotals(data.sales, data.expenses),
     }));
+}
+
+export function getBranchTotals(
+  byBranch: Record<Branch, BranchTotals>,
+  branchId: Branch
+): BranchTotals {
+  const normalized = normalizeBranchId(branchId);
+  if (!normalized) {
+    throw new Error(`Invalid branch id "${branchId}".`);
+  }
+
+  const totals = byBranch[normalized];
+  if (!totals) {
+    throw new Error(
+      `Branch "${normalized}" is missing from report aggregation output.`
+    );
+  }
+
+  return totals;
 }

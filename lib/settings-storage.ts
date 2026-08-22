@@ -1,7 +1,6 @@
 import {
   BRANCH_IDS,
   DEFAULT_APP_SETTINGS,
-  SETTINGS_STORAGE_KEY,
 } from "@/lib/constants";
 import { parseAmount } from "@/lib/amounts";
 import type { AppSettings, Branch, BranchConfig } from "@/types";
@@ -56,23 +55,4 @@ export function normalizeSettings(value: unknown): AppSettings {
       parseAmount(raw.defaultLunchAmount ?? DEFAULT_APP_SETTINGS.defaultLunchAmount)
     ),
   };
-}
-
-export function getSettings(): AppSettings {
-  if (typeof window === "undefined") {
-    return DEFAULT_APP_SETTINGS;
-  }
-
-  try {
-    const raw = localStorage.getItem(SETTINGS_STORAGE_KEY);
-    if (!raw) return DEFAULT_APP_SETTINGS;
-    return normalizeSettings(JSON.parse(raw) as unknown);
-  } catch {
-    return DEFAULT_APP_SETTINGS;
-  }
-}
-
-export function saveSettings(settings: AppSettings): void {
-  if (typeof window === "undefined") return;
-  localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(settings));
 }

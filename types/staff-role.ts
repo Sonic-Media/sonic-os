@@ -1,15 +1,4 @@
-export type StaffRoleId =
-  | "ceo"
-  | "branch-manager"
-  | "manager"
-  | "cashier"
-  | "sales-attendant"
-  | "salesperson"
-  | "inventory-officer"
-  | "technician"
-  | "store-attendant"
-  | "accountant"
-  | "administrator";
+export type StaffRoleId = "branch-manager" | "cashier";
 
 export type StaffStatus = "active" | "inactive";
 

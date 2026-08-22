@@ -52,7 +52,7 @@ export function StockMovementDialog({
 
   const selectedProduct = products.find((product) => product.id === productId);
 
-  function handleSubmit(event: React.FormEvent) {
+  async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
 
     const parsedQuantity = parsePositiveInteger(quantity);
@@ -84,7 +84,7 @@ export function StockMovementDialog({
       return;
     }
 
-    const result = recordMovement({
+    const result = await recordMovement({
       productId,
       movement: movementType,
       quantity: parsedQuantity!,
@@ -166,7 +166,9 @@ export function StockMovementDialog({
                 }}
                 placeholder="0"
               />
-              <StockFieldError message={errors.quantity} />
+              <StockFieldError
+                message={errors.form ?? errors.productId ?? errors.quantity}
+              />
               {selectedProduct && (
                 <p className="mt-1 text-xs text-zinc-500">
                   Available: {selectedProduct.currentStock.toLocaleString("en-UG")}

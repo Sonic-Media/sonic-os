@@ -37,14 +37,17 @@ export function CompactBusinessPulseCard({
   const pulse = useMemo(() => {
     const currentEntries = filterEntriesByDate(entries, today);
     const previousEntries = filterEntriesByPreviousPeriod(entries, "daily");
+    const branchIds = branches.map((branch) => branch.id);
     const analytics = getDashboardAnalytics(entries, "daily", {
+      branchIds,
       branchNames: settings.branchNames,
       staff: [],
     });
     const chartData = getDashboardChartData(
       entries,
       "daily",
-      settings.branchNames
+      settings.branchNames,
+      branchIds
     );
     const todayProgress = getTodayBranchProgress(entries, today, branches);
 

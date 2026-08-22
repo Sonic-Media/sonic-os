@@ -4,7 +4,8 @@ import { Input } from "@/components/shared/ui/input";
 import { cn } from "@/lib/utils";
 
 interface CashSummaryProps {
-  sales: number;
+  movieRevenue: number;
+  accessorySales?: number;
   totalExpenses: number;
   staffPayouts?: number;
   netCash: number;
@@ -33,7 +34,8 @@ function SummaryRow({
 }
 
 export function CashSummary({
-  sales,
+  movieRevenue,
+  accessorySales = 0,
   totalExpenses,
   staffPayouts = 0,
   netCash,
@@ -43,6 +45,7 @@ export function CashSummary({
 }: CashSummaryProps) {
   const allocation = Number(savingsAllocation) || 0;
   const remainingCash = netCash - allocation;
+  const totalRevenue = movieRevenue + accessorySales;
 
   return (
     <Card variant="elevated" className="space-y-4">
@@ -50,11 +53,20 @@ export function CashSummary({
         Cash Summary
       </h3>
 
-      <SummaryRow label="Sales" value={formatCurrency(sales)} />
+      <SummaryRow label="Movie Revenue" value={formatCurrency(movieRevenue)} />
+      <SummaryRow
+        label="Accessory Sales"
+        value={formatCurrency(accessorySales)}
+      />
+      <SummaryRow
+        label="Total Revenue"
+        value={formatCurrency(totalRevenue)}
+        valueClassName="text-emerald-400"
+      />
       <SummaryRow label="Total Expenses" value={formatCurrency(totalExpenses)} />
       {staffPayouts > 0 && (
         <SummaryRow
-          label="Staff Payouts"
+          label="Payroll"
           value={formatCurrency(staffPayouts)}
         />
       )}

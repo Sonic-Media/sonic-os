@@ -2,7 +2,7 @@ import { ApiError } from "@/lib/api/errors";
 import type { Prisma } from "@/lib/prisma";
 import { computeWeightedAverageBuyingPrice } from "@/lib/purchasing/calculations";
 import { toJsonField } from "@/lib/server/json-fields";
-import { computeProductStatus } from "@/lib/stock/calculations";
+import { computeProductStatus } from "@/lib/stock/product-status";
 import type { StaffActionRecord } from "@/types/staff-session";
 
 type CachedProduct = {

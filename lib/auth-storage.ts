@@ -1,18 +1,10 @@
 import {
-  AUTH_AUDIT_STORAGE_KEY,
-  DEFAULT_BRANCH_CODE,
-  SESSION_STORAGE_KEY,
-  USERS_STORAGE_KEY,
-} from "@/lib/constants";
-import {
   DEFAULT_OWNER_PASSWORD_HASH,
   hashPassword,
 } from "@/lib/auth/password";
 import { isUserRole, normalizeUserRole } from "@/lib/auth/validation";
-import type { AppUser, AuthSession } from "@/types/auth";
+import type { AppUser, AuthAuditRecord, AuthSession } from "@/types/auth";
 import type { Branch } from "@/types";
-
-const MAX_AUDIT_RECORDS = 200;
 
 const DEFAULT_CREATED_AT = "2024-01-01T00:00:00.000Z";
 
@@ -22,7 +14,7 @@ export const DEFAULT_OWNER_USER: AppUser = {
   displayName: "Owner",
   role: "owner",
   passwordHash: DEFAULT_OWNER_PASSWORD_HASH,
-  branch: DEFAULT_BRANCH_CODE,
+  branch: "main",
   active: true,
   createdAt: DEFAULT_CREATED_AT,
   updatedAt: DEFAULT_CREATED_AT,
@@ -33,7 +25,7 @@ function normalizeBranch(value: unknown): Branch {
     return value.trim().toLowerCase();
   }
 
-  return DEFAULT_BRANCH_CODE;
+  return "main";
 }
 
 function normalizeAppUser(value: unknown): AppUser | null {
@@ -80,59 +72,16 @@ function normalizeAppUser(value: unknown): AppUser | null {
 
 export function normalizeUserList(value: unknown): AppUser[] {
   if (!Array.isArray(value)) {
-    return [{ ...DEFAULT_OWNER_USER }];
+    return [];
   }
 
-  const users = value
+  return value
     .map(normalizeAppUser)
     .filter((user): user is AppUser => user !== null);
-
-  if (users.length === 0) {
-    return [{ ...DEFAULT_OWNER_USER }];
-  }
-
-  if (!users.some((user) => user.role === "owner")) {
-    return [{ ...DEFAULT_OWNER_USER }, ...users];
-  }
-
-  return users;
-}
-
-export function getUsers(): AppUser[] {
-  if (typeof window === "undefined") {
-    return [{ ...DEFAULT_OWNER_USER }];
-  }
-
-  try {
-    const raw = localStorage.getItem(USERS_STORAGE_KEY);
-    if (!raw) {
-      const defaults = [{ ...DEFAULT_OWNER_USER }];
-      saveUsers(defaults);
-      return defaults;
-    }
-
-    return normalizeUserList(JSON.parse(raw) as unknown);
-  } catch {
-    return [{ ...DEFAULT_OWNER_USER }];
-  }
-}
-
-export function saveUsers(users: AppUser[]): void {
-  if (typeof window === "undefined") return;
-  localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(users));
 }
 
 export function sortUsersByRole(users: AppUser[]): AppUser[] {
-  const order: AppUser["role"][] = [
-    "owner",
-    "ceo",
-    "manager",
-    "accountant",
-    "cashier",
-    "salesperson",
-    "technician",
-    "store-attendant",
-  ];
+  const order: AppUser["role"][] = ["owner", "branch-manager", "cashier"];
 
   return [...users].sort((left, right) => {
     const leftIndex = order.indexOf(left.role);
@@ -174,26 +123,24 @@ function normalizeAuthSession(value: unknown): AuthSession | null {
   };
 }
 
-export function getSession(): AuthSession | null {
-  if (typeof window === "undefined") return null;
-
-  try {
-    const raw = localStorage.getItem(SESSION_STORAGE_KEY);
-    if (!raw) return null;
-    return normalizeAuthSession(JSON.parse(raw) as unknown);
-  } catch {
-    return null;
-  }
-}
-
-export function saveSession(session: AuthSession): void {
-  if (typeof window === "undefined") return;
-  localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(session));
-}
-
 export function clearSession(): void {
   if (typeof window === "undefined") return;
-  localStorage.removeItem(SESSION_STORAGE_KEY);
+
+  for (const key of [
+    "sonic-os-session",
+    "sonic-os-users",
+    "sonic-os-auth-audit",
+    "sonic-os-staff",
+    "sonic-os-settings",
+    "sonic-os-expense-templates",
+    "sonic-os-day-closings",
+    "sonic-os-audit-log",
+    "sonic-os-staff-audit",
+    "sonic-os-branches",
+    "sonic-os-activity-log",
+  ]) {
+    localStorage.removeItem(key);
+  }
 }
 
 export function createSessionFromUser(user: AppUser): AuthSession {
@@ -212,53 +159,22 @@ export function hashUserPassword(password: string): string {
   return hashPassword(password);
 }
 
-export function getAuthAuditRecords(): import("@/types/auth").AuthAuditRecord[] {
-  if (typeof window === "undefined") return [];
-
-  try {
-    const raw = localStorage.getItem(AUTH_AUDIT_STORAGE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw) as unknown;
-    if (!Array.isArray(parsed)) return [];
-
-    return parsed.filter((record): record is import("@/types/auth").AuthAuditRecord => {
-      if (!record || typeof record !== "object") return false;
-      const item = record as import("@/types/auth").AuthAuditRecord;
-      return (
-        typeof item.id === "string" &&
-        typeof item.userId === "string" &&
-        typeof item.username === "string" &&
-        typeof item.branch === "string" &&
-        typeof item.action === "string" &&
-        typeof item.detail === "string" &&
-        typeof item.timestamp === "string"
-      );
-    });
-  } catch {
-    return [];
-  }
+export function getAuthAuditRecords(): AuthAuditRecord[] {
+  return [];
 }
 
 export function recordUserAction(
   action: string,
   detail: string,
   context?: Pick<AuthSession, "userId" | "username" | "branch">
-): import("@/types/auth").AuthAuditRecord {
-  const session = context ?? getSession();
-  const record: import("@/types/auth").AuthAuditRecord = {
+): AuthAuditRecord {
+  return {
     id: crypto.randomUUID(),
-    userId: session?.userId ?? "system",
-    username: session?.username ?? "system",
-    branch: session?.branch ?? DEFAULT_BRANCH_CODE,
+    userId: context?.userId ?? "system",
+    username: context?.username ?? "system",
+    branch: context?.branch ?? "main",
     action,
     detail,
     timestamp: new Date().toISOString(),
   };
-
-  if (typeof window !== "undefined") {
-    const next = [record, ...getAuthAuditRecords()].slice(0, MAX_AUDIT_RECORDS);
-    localStorage.setItem(AUTH_AUDIT_STORAGE_KEY, JSON.stringify(next));
-  }
-
-  return record;
 }

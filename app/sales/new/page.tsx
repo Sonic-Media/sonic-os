@@ -9,8 +9,8 @@ export default function NewSalePage() {
   return (
     <PageContainer>
       <PageHeader
-        title="New Sale"
-        subtitle="Record a sale and update inventory automatically"
+        title="New Accessory Sale"
+        subtitle="Record an accessory sale and update inventory automatically"
       />
 
       <SalesSubnav />

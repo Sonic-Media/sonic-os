@@ -48,7 +48,7 @@ export function SalesHistoryTable({ sales }: SalesHistoryTableProps) {
   const { pageItems } = pagination;
 
   if (sales.length === 0) {
-    return <SalesEmptyState message="No sales match your filters." />;
+    return <SalesEmptyState message="No accessory sales match your filters." />;
   }
 
   return (

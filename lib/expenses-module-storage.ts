@@ -1,7 +1,3 @@
-import {
-  EXPENSES_CATEGORIES_STORAGE_KEY,
-  EXPENSES_RECORDS_STORAGE_KEY,
-} from "@/lib/constants";
 import { normalizeBranchCode } from "@/lib/branch-storage";
 import { normalizeStaffActionRecord } from "@/lib/staff/session";
 import { DEFAULT_EXPENSE_CATEGORIES, STAFF_PAYMENT_CATEGORY_ID, STAFF_PAYMENT_CATEGORY_NAME } from "@/lib/expenses-module/constants";
@@ -196,49 +192,6 @@ function ensureStaffPaymentCategory(
       updatedAt: now,
     },
   ];
-}
-
-export function getExpenseRecords(): ExpenseRecord[] {
-  if (typeof window === "undefined") return [];
-
-  try {
-    const raw = localStorage.getItem(EXPENSES_RECORDS_STORAGE_KEY);
-    if (!raw) return [];
-    return normalizeExpenseRecordList(JSON.parse(raw) as unknown);
-  } catch {
-    return [];
-  }
-}
-
-export function saveExpenseRecords(records: ExpenseRecord[]): void {
-  if (typeof window === "undefined") return;
-  localStorage.setItem(
-    EXPENSES_RECORDS_STORAGE_KEY,
-    JSON.stringify(records)
-  );
-}
-
-export function getExpenseCategories(): ExpenseCategory[] {
-  if (typeof window === "undefined") return createDefaultExpenseCategories();
-
-  try {
-    const raw = localStorage.getItem(EXPENSES_CATEGORIES_STORAGE_KEY);
-    if (!raw) return createDefaultExpenseCategories();
-    const categories = normalizeExpenseCategoryList(JSON.parse(raw) as unknown);
-    const loaded =
-      categories.length > 0 ? categories : createDefaultExpenseCategories();
-    return ensureStaffPaymentCategory(loaded);
-  } catch {
-    return createDefaultExpenseCategories();
-  }
-}
-
-export function saveExpenseCategories(categories: ExpenseCategory[]): void {
-  if (typeof window === "undefined") return;
-  localStorage.setItem(
-    EXPENSES_CATEGORIES_STORAGE_KEY,
-    JSON.stringify(categories)
-  );
 }
 
 export function sortExpenseRecordsByDate(

@@ -31,7 +31,7 @@ export function OpeningStockDialog({
     onClose();
   }
 
-  function handleSubmit(event: React.FormEvent) {
+  async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
 
     const parsedQuantity = parsePositiveInteger(quantity);
@@ -45,7 +45,7 @@ export function OpeningStockDialog({
       return;
     }
 
-    const result = recordMovement({
+    const result = await recordMovement({
       productId: product.id,
       movement: "in",
       quantity: parsedQuantity,
@@ -94,7 +94,9 @@ export function OpeningStockDialog({
             }}
             hint="Enter 0 or skip if this item has no opening stock yet."
           />
-          <StockFieldError message={errors.quantity} />
+          <StockFieldError
+            message={errors.form ?? errors.productId ?? errors.quantity}
+          />
         </div>
 
       </form>

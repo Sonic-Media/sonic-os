@@ -1,5 +1,5 @@
 import { aggregateEntries } from "@/lib/aggregations";
-import { BRANCH_IDS, EXPENSE_BREAKDOWN_ITEMS } from "@/lib/constants";
+import { EXPENSE_BREAKDOWN_ITEMS } from "@/lib/constants";
 import {
   filterCompletedEntries,
   filterEntriesByPeriod,
@@ -46,8 +46,10 @@ function findBestPerformingBranch(
   let bestPerformingBranch: Branch | undefined;
   let bestPerformingBranchSavings = 0;
 
-  for (const branch of BRANCH_IDS) {
-    const savings = byBranch[branch].savings;
+  for (const [branch, totals] of Object.entries(byBranch) as Array<
+    [Branch, BranchTotals]
+  >) {
+    const savings = totals.savings;
     if (bestPerformingBranch === undefined || savings > bestPerformingBranchSavings) {
       bestPerformingBranch = branch;
       bestPerformingBranchSavings = savings;
@@ -180,11 +182,12 @@ export function getBestBranch(
   let bestBranch: Branch | undefined;
   let bestSales = 0;
 
-  for (const branch of BRANCH_IDS) {
-    const sales = byBranch[branch].sales;
-    if (sales > bestSales) {
+  for (const [branch, totals] of Object.entries(byBranch) as Array<
+    [Branch, BranchTotals]
+  >) {
+    if (totals.sales > bestSales) {
       bestBranch = branch;
-      bestSales = sales;
+      bestSales = totals.sales;
     }
   }
 
@@ -192,7 +195,7 @@ export function getBestBranch(
 
   return {
     branch: bestBranch,
-    name: branchNames[bestBranch],
+    name: branchNames[bestBranch] ?? bestBranch,
     totalSales: bestSales,
     revenuePercentage: (bestSales / totalSales) * 100,
   };
@@ -259,12 +262,17 @@ export function getDashboardAnalyticsFromEntries(
   previousEntries: Entry[],
   period: DashboardPeriod,
   options: {
+    branchIds: Branch[];
     branchNames: Record<Branch, string>;
     staff: Staff[];
   }
 ): DashboardAnalytics {
-  const current = aggregateEntries(currentEntries);
-  const previous = aggregateEntries(previousEntries);
+  const current = aggregateEntries(currentEntries, {
+    branchIds: options.branchIds,
+  });
+  const previous = aggregateEntries(previousEntries, {
+    branchIds: options.branchIds,
+  });
 
   const currentMargin = calculateProfitMargin(
     current.totalSales,
@@ -297,6 +305,7 @@ export function getDashboardAnalytics(
   entries: Entry[],
   period: DashboardPeriod,
   options: {
+    branchIds: Branch[];
     branchNames: Record<Branch, string>;
     staff: Staff[];
     ref?: Date;
@@ -311,6 +320,7 @@ export function getDashboardAnalytics(
     previousEntries,
     period,
     {
+      branchIds: options.branchIds,
       branchNames: options.branchNames,
       staff: options.staff,
     }

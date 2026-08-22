@@ -9,20 +9,23 @@ import {
   useRef,
   useState,
 } from "react";
-import { APP_VERSION } from "@/lib/constants";
-import {
-  buildBranchConfigs,
-  getSettings,
-  normalizeSettings,
-  saveSettings,
-} from "@/lib/settings-storage";
+import { fetchSettings, updateSettingsApi } from "@/lib/api/settings";
+import { useAuth } from "@/context/auth-context";
 import { recordActivity } from "@/lib/activity-log";
+import {
+  getDataSourceErrorMessage,
+  loadFromApi,
+  runOnApi,
+} from "@/lib/data-source/context-api";
+import { APP_VERSION, DEFAULT_APP_SETTINGS } from "@/lib/constants";
+import { buildBranchConfigs } from "@/lib/settings-storage";
 import type { AppSettings, Branch, BranchConfig } from "@/types";
 
 interface SettingsContextValue {
   settings: AppSettings;
   branches: BranchConfig[];
   isLoaded: boolean;
+  loadError: string | null;
   version: string;
   updateSettings: (patch: Partial<AppSettings>) => void;
   getBranchName: (branch: Branch) => string;
@@ -31,40 +34,71 @@ interface SettingsContextValue {
 const SettingsContext = createContext<SettingsContextValue | null>(null);
 
 export function SettingsProvider({ children }: { children: React.ReactNode }) {
-  const [settings, setSettings] = useState<AppSettings>(() => getSettings());
+  const { isAuthenticated, isLoaded: authLoaded } = useAuth();
+  const [settings, setSettings] = useState<AppSettings>(DEFAULT_APP_SETTINGS);
   const [isLoaded, setIsLoaded] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const hasLoaded = useRef(false);
 
+  const refreshSettingsFromApi = useCallback(async () => {
+    const remoteSettings = await fetchSettings();
+    setSettings(remoteSettings);
+    setLoadError(null);
+  }, []);
+
   useEffect(() => {
+    if (!authLoaded) return;
+    if (hasLoaded.current && !isAuthenticated) {
+      setSettings(DEFAULT_APP_SETTINGS);
+      setLoadError(null);
+      setIsLoaded(true);
+      return;
+    }
+    if (!isAuthenticated) {
+      setSettings(DEFAULT_APP_SETTINGS);
+      setLoadError(null);
+      setIsLoaded(true);
+      return;
+    }
     if (hasLoaded.current) return;
     hasLoaded.current = true;
 
     queueMicrotask(() => {
-      setSettings(getSettings());
-      setIsLoaded(true);
+      void (async () => {
+        try {
+          await loadFromApi(() => refreshSettingsFromApi());
+        } catch (error) {
+          setLoadError(getDataSourceErrorMessage(error));
+        } finally {
+          setIsLoaded(true);
+        }
+      })();
     });
-  }, []);
+  }, [authLoaded, isAuthenticated, refreshSettingsFromApi]);
 
   const updateSettings = useCallback((patch: Partial<AppSettings>) => {
-    setSettings((prev) => {
-      const next = normalizeSettings({ ...prev, ...patch });
-      saveSettings(next);
+    void (async () => {
+      try {
+        const next = await runOnApi(() => updateSettingsApi(patch));
+        setSettings(next);
+        setLoadError(null);
 
-      const changedKeys = Object.keys(patch);
-      const isSignificant = changedKeys.some((key) =>
-        ["businessName", "ownerName", "defaultLunchAmount"].includes(key)
-      );
+        const changedKeys = Object.keys(patch);
+        const isSignificant = changedKeys.some((key) =>
+          ["businessName", "ownerName", "defaultLunchAmount"].includes(key)
+        );
 
-      if (isSignificant) {
-        recordActivity({
-          type: "settings-changed",
-          title: "Settings changed",
-          description: "Business or account settings were updated.",
-        });
+        if (isSignificant) {
+          recordActivity({
+            type: "settings-changed",
+            title: "Settings changed",
+            description: "Business or account settings were updated.",
+          });
+        }
+      } catch (error) {
+        console.error(getDataSourceErrorMessage(error));
       }
-
-      return next;
-    });
+    })();
   }, []);
 
   const branches = useMemo(
@@ -82,11 +116,12 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
       settings,
       branches,
       isLoaded,
+      loadError,
       version: APP_VERSION,
       updateSettings,
       getBranchName,
     }),
-    [settings, branches, isLoaded, updateSettings, getBranchName]
+    [settings, branches, isLoaded, loadError, updateSettings, getBranchName]
   );
 
   return (

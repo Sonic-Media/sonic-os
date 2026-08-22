@@ -72,14 +72,17 @@ export function generateBusinessNotifications(options: {
 }): BusinessNotification[] {
   const today = options.today ?? getTodayISO();
   const notifications: BusinessNotification[] = [];
+  const branchIds = options.branches.map((branch) => branch.id);
   const analytics = getDashboardAnalytics(options.entries, "daily", {
+    branchIds,
     branchNames: options.branchNames,
     staff: [],
   });
   const chartData = getDashboardChartData(
     options.entries,
     "daily",
-    options.branchNames
+    options.branchNames,
+    branchIds
   );
   const todayEntries = filterEntriesByDate(options.entries, today);
   const todayProgress = getTodayBranchProgress(

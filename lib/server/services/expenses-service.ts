@@ -1,13 +1,14 @@
 import { randomUUID } from "crypto";
 import { ApiError } from "@/lib/api/errors";
 import { prisma } from "@/lib/db";
-import { getBranchIdByCode } from "@/lib/server/branch-lookup";
+import { Prisma } from "@/lib/prisma";
+import { getBranchIdForSession } from "@/lib/server/branch-lookup";
 import { toJsonField } from "@/lib/server/json-fields";
 import {
   mapExpenseCategoryToEntity,
   mapExpenseRecordToEntity,
 } from "@/lib/server/mappers/entities";
-import { getSessionFromRequest } from "@/lib/server/session";
+import { requireSession } from "@/lib/server/session";
 import { recordTransactionAudit } from "@/lib/server/transaction-audit";
 import { AUDIT_ACTIONS } from "@/lib/audit-log/constants";
 import {
@@ -15,6 +16,11 @@ import {
   isStaffPaymentCategory,
 } from "@/lib/expenses-module/constants";
 import { isStaffPaymentExpense } from "@/lib/staff-payments/calculations";
+import {
+  hasValidationErrors,
+  validateExpenseRecordInput,
+} from "@/lib/expenses-module/validation";
+import type { AuthSession } from "@/types/auth";
 import type {
   ExpenseCategory,
   ExpenseCategoryInput,
@@ -26,6 +32,58 @@ import type {
 import type { StaffActionRecord } from "@/types/staff-session";
 
 const expenseInclude = { branch: true } as const;
+
+async function resolveExpenseStaff(
+  tx: Prisma.TransactionClient,
+  createdBy: StaffActionRecord | undefined,
+  session: AuthSession
+): Promise<{
+  staffId: string | null;
+  staffName: string | null;
+  staffRole: string | null;
+}> {
+  let staffId = createdBy?.staffId ?? null;
+  let staffName = createdBy?.staffName ?? null;
+  let staffRole = createdBy?.role ?? null;
+
+  if (!staffId) {
+    const user = await tx.user.findUnique({
+      where: { id: session.userId },
+      include: { staff: true },
+    });
+    if (user?.staffId) {
+      staffId = user.staffId;
+      staffName = user.staff?.name ?? null;
+      staffRole = user.staff?.role ?? null;
+    }
+  }
+
+  if (staffId && !staffName) {
+    const staffMember = await tx.staff.findUnique({
+      where: { id: staffId },
+      select: { name: true, role: true },
+    });
+    staffName = staffMember?.name ?? null;
+    staffRole = staffRole ?? staffMember?.role ?? null;
+  }
+
+  return { staffId, staffName, staffRole };
+}
+
+function assertValidExpenseInput(
+  input: ExpenseRecordInput | ExpenseRecordUpdateInput
+): void {
+  const errors = validateExpenseRecordInput(input);
+  if (hasValidationErrors(errors)) {
+    const message =
+      Object.values(errors).find((value) => typeof value === "string" && value) ??
+      "Invalid expense input.";
+    throw new ApiError(message, {
+      status: 400,
+      code: "validation_error",
+    });
+  }
+}
 
 export async function listCategories(): Promise<ExpenseCategory[]> {
   const categories = await prisma.expenseCategory.findMany({
@@ -166,6 +224,8 @@ export async function createExpense(
   input: ExpenseRecordInput,
   createdBy?: StaffActionRecord
 ): Promise<ExpenseRecord> {
+  assertValidExpenseInput(input);
+
   if (isStaffPaymentCategory(input.categoryId)) {
     throw new ApiError(
       "Staff payment expenses are managed in Staff Payments.",
@@ -184,17 +244,16 @@ export async function createExpense(
     });
   }
 
-  if (input.amount <= 0) {
-    throw new ApiError("Amount must be greater than zero.", {
-      status: 400,
-      code: "validation_error",
-    });
-  }
-
-  const branchId = await getBranchIdByCode(input.branch);
-  const session = await getSessionFromRequest();
+  const session = await requireSession();
+  const branchId = await getBranchIdForSession(session, input.branch);
 
   const record = await prisma.$transaction(async (tx) => {
+    const { staffId, staffName, staffRole } = await resolveExpenseStaff(
+      tx,
+      createdBy,
+      session
+    );
+
     const created = await tx.expenseRecord.create({
       data: {
         date: input.date,
@@ -204,9 +263,9 @@ export async function createExpense(
         amount: input.amount,
         paymentMethod: input.paymentMethod,
         branchId,
-        staffId: createdBy?.staffId ?? null,
-        staffName: createdBy?.staffName ?? null,
-        staffRole: createdBy?.role ?? null,
+        staffId,
+        staffName,
+        staffRole,
         createdBy: toJsonField(createdBy),
         notes: input.notes?.trim() || null,
       },
@@ -259,6 +318,8 @@ export async function updateExpense(
     );
   }
 
+  assertValidExpenseInput(input);
+
   const category = await prisma.expenseCategory.findUnique({
     where: { id: input.categoryId },
   });
@@ -270,15 +331,8 @@ export async function updateExpense(
     });
   }
 
-  if (input.amount <= 0) {
-    throw new ApiError("Amount must be greater than zero.", {
-      status: 400,
-      code: "validation_error",
-    });
-  }
-
-  const branchId = await getBranchIdByCode(input.branch);
-  const session = await getSessionFromRequest();
+  const session = await requireSession();
+  const branchId = await getBranchIdForSession(session, input.branch);
 
   const record = await prisma.$transaction(async (tx) => {
     const updated = await tx.expenseRecord.update({
@@ -334,7 +388,8 @@ export async function deleteExpense(id: string): Promise<void> {
 export async function upsertStaffPaymentExpense(
   expense: ExpenseRecord
 ): Promise<ExpenseRecord> {
-  const branchId = await getBranchIdByCode(expense.branch);
+  const session = await requireSession();
+  const branchId = await getBranchIdForSession(session, expense.branch);
 
   const record = await prisma.expenseRecord.upsert({
     where: { id: expense.id },

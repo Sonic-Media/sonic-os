@@ -3,11 +3,14 @@
 import { useMemo } from "react";
 import { formatCurrency } from "@/lib/format";
 import { EntryStatusBadge } from "@/components/entry/entry-status-badge";
-import { CashSummary } from "@/components/operations/cash-summary";
+import { AccessorySalesSection } from "@/components/operations/accessory-sales-section";
+import { OperationsClosingPanel } from "@/components/operations/operations-closing-panel";
 import { formatEntryDisplayDate } from "@/lib/dates";
-import { calculateExpenses } from "@/lib/amounts";
+import { calculateOperatingExpenses } from "@/lib/amounts";
+import { isPayrollEntryExpense } from "@/lib/expenses";
 import { getEntryActorName } from "@/lib/staff/session";
 import { useStaffPaymentsModule } from "@/context/staff-payments-context";
+import { useSales } from "@/context/sales-context";
 import { computeStaffPayoutTotalForBranchDate } from "@/lib/staff-payments/calculations";
 import { useSettings } from "@/context/settings-context";
 import type { Entry } from "@/types";
@@ -19,7 +22,23 @@ interface OperationsReadOnlyViewProps {
 export function OperationsReadOnlyView({ entry }: OperationsReadOnlyViewProps) {
   const { getBranchName } = useSettings();
   const { payments } = useStaffPaymentsModule();
-  const totalExpenses = calculateExpenses(entry);
+  const { sales } = useSales();
+  const totalExpenses = calculateOperatingExpenses(entry);
+  const operatingExpenses = entry.expenses.filter(
+    (expense) => !isPayrollEntryExpense(expense)
+  );
+  const accessorySales = useMemo(
+    () =>
+      sales
+        .filter(
+          (sale) =>
+            sale.date === entry.date &&
+            sale.branch === entry.branch &&
+            sale.status === "completed"
+        )
+        .reduce((sum, sale) => sum + sale.total, 0),
+    [sales, entry.date, entry.branch]
+  );
   const staffPayouts = useMemo(
     () =>
       computeStaffPayoutTotalForBranchDate(
@@ -29,7 +48,9 @@ export function OperationsReadOnlyView({ entry }: OperationsReadOnlyViewProps) {
       ),
     [payments, entry.branch, entry.date]
   );
-  const netCash = entry.sales - totalExpenses - staffPayouts;
+  const movieRevenue = entry.sales;
+  const netCash =
+    movieRevenue + accessorySales - totalExpenses - staffPayouts;
   const allocation = entry.savingsAllocation ?? netCash;
 
   const staffName = getEntryActorName(entry);
@@ -53,19 +74,12 @@ export function OperationsReadOnlyView({ entry }: OperationsReadOnlyViewProps) {
         </p>
       </div>
 
-      <div className="rounded-2xl border border-zinc-800/80 bg-zinc-900/40 px-4 py-3">
-        <p className="text-sm text-zinc-500">Sales</p>
-        <p className="text-2xl font-semibold text-white">
-          {formatCurrency(entry.sales)}
-        </p>
-      </div>
-
       <div className="space-y-3">
         <h3 className="text-sm font-medium uppercase tracking-wide text-zinc-500">
           Expenses
         </h3>
         <div className="space-y-2">
-          {entry.expenses.map((expense) => (
+          {operatingExpenses.map((expense) => (
             <div
               key={expense.id}
               className="flex items-center justify-between rounded-xl border border-zinc-800/80 bg-zinc-900/40 px-4 py-3"
@@ -79,13 +93,23 @@ export function OperationsReadOnlyView({ entry }: OperationsReadOnlyViewProps) {
         </div>
       </div>
 
-      <CashSummary
-        sales={entry.sales}
+      <OperationsClosingPanel
+        form={{
+          date: entry.date,
+          branch: entry.branch,
+          sales: String(movieRevenue),
+          expenses: entry.expenses,
+          staffId: entry.staffId ?? "",
+          notes: entry.notes,
+          savingsAllocation: String(allocation),
+        }}
+        movieRevenue={movieRevenue}
+        accessorySales={accessorySales}
         totalExpenses={totalExpenses}
         staffPayouts={staffPayouts}
         netCash={netCash}
-        savingsAllocation={String(allocation)}
         readOnly
+        updateField={() => undefined}
       />
 
       {entry.notes.trim() ? (

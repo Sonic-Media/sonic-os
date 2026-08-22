@@ -1,5 +1,4 @@
-import { aggregateEntries } from "@/lib/aggregations";
-import { BRANCH_IDS } from "@/lib/constants";
+import { aggregateEntries, getBranchTotals } from "@/lib/aggregations";
 import {
   filterCompletedEntries,
   filterEntriesByPeriod,
@@ -101,37 +100,52 @@ function buildChartExpenseBreakdown(entries: Entry[]): ChartExpenseSlice[] {
 
 function buildBranchComparison(
   byBranch: ReturnType<typeof aggregateEntries>["byBranch"],
-  branchNames: Record<Branch, string>
+  branchNames: Record<Branch, string>,
+  branchIds: Branch[]
 ): BranchComparisonPoint[] {
-  return BRANCH_IDS.map((branch) => ({
-    branch: branchNames[branch],
-    sales: byBranch[branch].sales,
-    expenses: byBranch[branch].expenses,
-    savings: byBranch[branch].savings,
-  }));
+  return branchIds.map((branch) => {
+    const totals = getBranchTotals(byBranch, branch);
+
+    return {
+      branch: branchNames[branch] ?? branch,
+      sales: totals.sales,
+      expenses: totals.expenses,
+      savings: totals.savings,
+    };
+  });
 }
 
 export function getDashboardChartDataFromEntries(
   entries: Entry[],
-  branchNames: Record<Branch, string>
+  branchNames: Record<Branch, string>,
+  branchIds: Branch[]
 ): DashboardChartData {
   const completedEntries = filterCompletedEntries(entries);
-  const summary = aggregateEntries(entries);
+  const summary = aggregateEntries(entries, { branchIds });
 
   return {
     hasData: completedEntries.length > 0,
     salesTrend: summary.chartData,
     savingsTrend: summary.chartData,
     expenseBreakdown: buildChartExpenseBreakdown(entries),
-    branchComparison: buildBranchComparison(summary.byBranch, branchNames),
+    branchComparison: buildBranchComparison(
+      summary.byBranch,
+      branchNames,
+      branchIds
+    ),
   };
 }
 
 export function getDashboardChartData(
   entries: Entry[],
   period: DashboardPeriod,
-  branchNames: Record<Branch, string>
+  branchNames: Record<Branch, string>,
+  branchIds: Branch[]
 ): DashboardChartData {
   const filteredEntries = filterEntriesByPeriod(entries, period);
-  return getDashboardChartDataFromEntries(filteredEntries, branchNames);
+  return getDashboardChartDataFromEntries(
+    filteredEntries,
+    branchNames,
+    branchIds
+  );
 }

@@ -19,21 +19,15 @@ import {
   updateStockProductApi,
 } from "@/lib/api/stock";
 import {
-  loadRemoteOrLocal,
-  runRemoteOrLocal,
-  shouldUseRemoteDataSource,
+  getDataSourceErrorMessage,
+  loadFromApi,
+  runOnApi,
 } from "@/lib/data-source/context-api";
 import { getTodayISO } from "@/lib/dates";
 import {
-  getStockMovements,
-  getStockPriceChanges,
-  getStockProducts,
   normalizeStockMovementList,
   normalizeStockPriceChangeList,
   normalizeStockProductList,
-  saveStockMovements,
-  saveStockPriceChanges,
-  saveStockProducts,
   sortMovementsByDate,
   sortPriceChangesByDate,
   sortProductsByName,
@@ -49,9 +43,12 @@ import { AUDIT_ACTIONS } from "@/lib/audit-log/constants";
 import { pickAuditFields } from "@/lib/audit-log/snapshots";
 import { recordStaffAction } from "@/lib/staff/audit";
 import { resolveCurrentStaffAction } from "@/lib/staff/session";
+import { useAuth } from "@/context/auth-context";
 import {
   DAY_CLOSED_EDIT_MESSAGE,
   isBranchDayClosed,
+  isBranchDayOpened,
+  SHOP_NOT_OPENED_MESSAGE,
 } from "@/lib/day-closing/storage";
 import type {
   StockDashboardMetrics,
@@ -70,22 +67,15 @@ interface StockContextValue {
   priceChanges: StockPriceChange[];
   metrics: StockDashboardMetrics;
   isLoaded: boolean;
+  loadError: string | null;
   getProductById: (id: string) => StockProduct | undefined;
-  addProduct: (input: StockProductInput) => StockValidationResult;
+  addProduct: (input: StockProductInput) => Promise<StockValidationResult>;
   updateProduct: (
     id: string,
     input: StockProductUpdateInput
-  ) => StockValidationResult;
-  deleteProduct: (id: string) => void;
-  recordMovement: (input: StockMovementInput) => StockValidationResult;
-  getStockSnapshot: () => {
-    products: StockProduct[];
-    movements: StockMovement[];
-  };
-  restoreStockSnapshot: (snapshot: {
-    products: StockProduct[];
-    movements: StockMovement[];
-  }) => void;
+  ) => Promise<StockValidationResult>;
+  deleteProduct: (id: string) => Promise<StockValidationResult>;
+  recordMovement: (input: StockMovementInput) => Promise<StockValidationResult>;
   refreshStockFromApi: () => Promise<void>;
 }
 
@@ -103,16 +93,12 @@ function createValidationResult(
 }
 
 export function StockProvider({ children }: { children: React.ReactNode }) {
-  const [products, setProducts] = useState<StockProduct[]>(() =>
-    getStockProducts()
-  );
-  const [movements, setMovements] = useState<StockMovement[]>(() =>
-    getStockMovements()
-  );
-  const [priceChanges, setPriceChanges] = useState<StockPriceChange[]>(() =>
-    getStockPriceChanges()
-  );
+  const { isAuthenticated, isLoaded: authLoaded } = useAuth();
+  const [products, setProducts] = useState<StockProduct[]>([]);
+  const [movements, setMovements] = useState<StockMovement[]>([]);
+  const [priceChanges, setPriceChanges] = useState<StockPriceChange[]>([]);
   const [isLoaded, setIsLoaded] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const hasLoaded = useRef(false);
   const productsRef = useRef(products);
   const movementsRef = useRef(movements);
@@ -130,14 +116,45 @@ export function StockProvider({ children }: { children: React.ReactNode }) {
     priceChangesRef.current = priceChanges;
   }, [priceChanges]);
 
+  const refreshStockFromApi = useCallback(async () => {
+    const [remoteProducts, remoteMovements, remotePriceChanges] =
+      await Promise.all([
+        fetchStockProducts(),
+        fetchStockMovements(),
+        fetchStockPriceChanges(),
+      ]);
+
+    productsRef.current = normalizeStockProductList(remoteProducts);
+    movementsRef.current = normalizeStockMovementList(remoteMovements);
+    priceChangesRef.current = normalizeStockPriceChangeList(remotePriceChanges);
+    setProducts(productsRef.current);
+    setMovements(movementsRef.current);
+    setPriceChanges(priceChangesRef.current);
+  }, []);
+
   useEffect(() => {
+    if (!authLoaded) return;
+
+    if (!isAuthenticated) {
+      productsRef.current = [];
+      movementsRef.current = [];
+      priceChangesRef.current = [];
+      setProducts([]);
+      setMovements([]);
+      setPriceChanges([]);
+      setLoadError(null);
+      hasLoaded.current = false;
+      setIsLoaded(true);
+      return;
+    }
+
     if (hasLoaded.current) return;
     hasLoaded.current = true;
 
     queueMicrotask(() => {
       void (async () => {
-        const loaded = await loadRemoteOrLocal({
-          remote: async () => {
+        try {
+          const loaded = await loadFromApi(async () => {
             const [remoteProducts, remoteMovements, remotePriceChanges] =
               await Promise.all([
                 fetchStockProducts(),
@@ -150,69 +167,25 @@ export function StockProvider({ children }: { children: React.ReactNode }) {
               movements: sortMovementsByDate(remoteMovements),
               priceChanges: sortPriceChangesByDate(remotePriceChanges),
             };
-          },
-          local: () => ({
-            products: getStockProducts(),
-            movements: getStockMovements(),
-            priceChanges: getStockPriceChanges(),
-          }),
-        });
+          });
 
-        productsRef.current = normalizeStockProductList(loaded.products);
-        movementsRef.current = normalizeStockMovementList(loaded.movements);
-        priceChangesRef.current = normalizeStockPriceChangeList(
-          loaded.priceChanges
-        );
-        setProducts(productsRef.current);
-        setMovements(movementsRef.current);
-        setPriceChanges(priceChangesRef.current);
-        setIsLoaded(true);
+          productsRef.current = normalizeStockProductList(loaded.products);
+          movementsRef.current = normalizeStockMovementList(loaded.movements);
+          priceChangesRef.current = normalizeStockPriceChangeList(
+            loaded.priceChanges
+          );
+          setProducts(productsRef.current);
+          setMovements(movementsRef.current);
+          setPriceChanges(priceChangesRef.current);
+          setLoadError(null);
+        } catch (error) {
+          setLoadError(getDataSourceErrorMessage(error));
+        } finally {
+          setIsLoaded(true);
+        }
       })();
     });
-  }, []);
-
-  const persistProducts = useCallback((next: StockProduct[]) => {
-    const normalized = sortProductsByName(normalizeStockProductList(next));
-    saveStockProducts(normalized);
-    productsRef.current = normalized;
-    setProducts(normalized);
-  }, []);
-
-  const persistMovements = useCallback((next: StockMovement[]) => {
-    const normalized = sortMovementsByDate(normalizeStockMovementList(next));
-    saveStockMovements(normalized);
-    movementsRef.current = normalized;
-    setMovements(normalized);
-  }, []);
-
-  const persistPriceChanges = useCallback((next: StockPriceChange[]) => {
-    const normalized = sortPriceChangesByDate(
-      normalizeStockPriceChangeList(next)
-    );
-    saveStockPriceChanges(normalized);
-    priceChangesRef.current = normalized;
-    setPriceChanges(normalized);
-  }, []);
-
-  const refreshStockFromApi = useCallback(async () => {
-    if (!(await shouldUseRemoteDataSource())) {
-      return;
-    }
-
-    const [remoteProducts, remoteMovements, remotePriceChanges] =
-      await Promise.all([
-        fetchStockProducts(),
-        fetchStockMovements(),
-        fetchStockPriceChanges(),
-      ]);
-
-    productsRef.current = sortProductsByName(remoteProducts);
-    movementsRef.current = sortMovementsByDate(remoteMovements);
-    priceChangesRef.current = sortPriceChangesByDate(remotePriceChanges);
-    setProducts(productsRef.current);
-    setMovements(movementsRef.current);
-    setPriceChanges(priceChangesRef.current);
-  }, []);
+  }, [authLoaded, isAuthenticated]);
 
   const lookup = useMemo(
     () => new Map(products.map((product) => [product.id, product])),
@@ -230,60 +203,40 @@ export function StockProvider({ children }: { children: React.ReactNode }) {
   );
 
   const addProduct = useCallback(
-    (input: StockProductInput): StockValidationResult => {
+    async (input: StockProductInput): Promise<StockValidationResult> => {
+      if (!isAuthenticated) {
+        return createValidationResult({
+          form: "Authentication required.",
+        });
+      }
+
       const errors = validateStockProductInput(input);
       if (hasValidationErrors(errors)) {
         return createValidationResult(errors);
       }
 
-      const now = new Date().toISOString();
-      const product: StockProduct = {
-        id: crypto.randomUUID(),
-        name: input.name.trim(),
-        category: input.category,
-        sku: input.sku?.trim() || undefined,
-        buyingPrice: input.buyingPrice,
-        sellingPrice: input.sellingPrice,
-        currentStock: 0,
-        minimumStockLevel: input.minimumStockLevel,
-        notes: input.notes?.trim() || undefined,
-        status: "out-of-stock",
-        createdAt: now,
-        updatedAt: now,
-      };
-
-      void (async () => {
-        await runRemoteOrLocal({
-          remote: async () => {
-            await createStockProductApi(input);
-            await refreshStockFromApi();
-          },
-          local: () => {
-            persistProducts([...productsRef.current, product]);
-
-            recordStaffAction({
-              action: AUDIT_ACTIONS.CREATE,
-              module: "stock",
-              recordId: product.id,
-              newValues: pickAuditFields(product, [
-                "id",
-                "name",
-                "category",
-                "buyingPrice",
-                "sellingPrice",
-              ]),
-            });
-          },
+      try {
+        const product = await runOnApi(async () => {
+          const created = await createStockProductApi(input);
+          await refreshStockFromApi();
+          return created;
         });
-      })();
 
-      return createValidationResult({}, product);
+        return createValidationResult({}, product);
+      } catch (error) {
+        return createValidationResult({
+          form: getDataSourceErrorMessage(error),
+        });
+      }
     },
-    [persistProducts, refreshStockFromApi]
+    [isAuthenticated, refreshStockFromApi]
   );
 
   const updateProduct = useCallback(
-    (id: string, input: StockProductUpdateInput): StockValidationResult => {
+    async (
+      id: string,
+      input: StockProductUpdateInput
+    ): Promise<StockValidationResult> => {
       const existing = productsRef.current.find((product) => product.id === id);
       if (!existing) {
         return createValidationResult({ form: "Item not found." });
@@ -294,134 +247,48 @@ export function StockProvider({ children }: { children: React.ReactNode }) {
         return createValidationResult(errors);
       }
 
-      void (async () => {
-        await runRemoteOrLocal({
-          remote: async () => {
-            await updateStockProductApi(id, input);
-            await refreshStockFromApi();
-          },
-          local: () => {
-            const now = new Date().toISOString();
-            const nextProducts = productsRef.current.map((product) =>
-              product.id === id
-                ? {
-                    ...product,
-                    name: input.name.trim(),
-                    category: input.category,
-                    sku: input.sku?.trim() || undefined,
-                    buyingPrice: input.buyingPrice,
-                    sellingPrice: input.sellingPrice,
-                    minimumStockLevel: input.minimumStockLevel,
-                    notes: input.notes?.trim() || undefined,
-                    updatedAt: now,
-                  }
-                : product
-            );
-
-            persistProducts(nextProducts);
-
-            const buyingPriceChanged =
-              existing.buyingPrice !== input.buyingPrice;
-            const sellingPriceChanged =
-              existing.sellingPrice !== input.sellingPrice;
-
-            if (buyingPriceChanged || sellingPriceChanged) {
-              const priceChange: StockPriceChange = {
-                id: crypto.randomUUID(),
-                productId: id,
-                previousBuyingPrice: existing.buyingPrice,
-                previousSellingPrice: existing.sellingPrice,
-                newBuyingPrice: input.buyingPrice,
-                newSellingPrice: input.sellingPrice,
-                createdAt: now,
-              };
-              persistPriceChanges([priceChange, ...priceChangesRef.current]);
-            }
-
-            const renamed = existing.name !== input.name.trim();
-            if (renamed) {
-              const nextMovements = movementsRef.current.map((movement) =>
-                movement.productId === id
-                  ? { ...movement, productName: input.name.trim() }
-                  : movement
-              );
-              persistMovements(nextMovements);
-            }
-
-            recordStaffAction({
-              action: AUDIT_ACTIONS.EDIT,
-              module: "stock",
-              recordId: id,
-              oldValues: pickAuditFields(existing, [
-                "name",
-                "category",
-                "buyingPrice",
-                "sellingPrice",
-                "currentStock",
-              ]),
-              newValues: pickAuditFields(
-                {
-                  name: input.name.trim(),
-                  category: input.category,
-                  buyingPrice: input.buyingPrice,
-                  sellingPrice: input.sellingPrice,
-                  currentStock: existing.currentStock,
-                },
-                ["name", "category", "buyingPrice", "sellingPrice", "currentStock"]
-              ),
-            });
-          },
+      try {
+        const product = await runOnApi(async () => {
+          const updated = await updateStockProductApi(id, input);
+          await refreshStockFromApi();
+          return updated;
         });
-      })();
 
-      return createValidationResult({});
+        return createValidationResult({}, product);
+      } catch (error) {
+        return createValidationResult({
+          form: getDataSourceErrorMessage(error),
+        });
+      }
     },
-    [persistProducts, persistMovements, persistPriceChanges, refreshStockFromApi]
+    [refreshStockFromApi]
   );
 
   const deleteProduct = useCallback(
-    (id: string) => {
-      void (async () => {
-        await runRemoteOrLocal({
-          remote: async () => {
-            await deleteStockProductApi(id);
-            await refreshStockFromApi();
-          },
-          local: () => {
-            const existing = productsRef.current.find(
-              (product) => product.id === id
-            );
-            if (existing) {
-              recordStaffAction({
-                action: AUDIT_ACTIONS.DELETE,
-                module: "stock",
-                recordId: existing.id,
-                oldValues: pickAuditFields(existing, [
-                  "id",
-                  "name",
-                  "currentStock",
-                ]),
-              });
-            }
+    async (id: string): Promise<StockValidationResult> => {
+      const existing = productsRef.current.find((product) => product.id === id);
+      if (!existing) {
+        return createValidationResult({ form: "Item not found." });
+      }
 
-            persistProducts(
-              productsRef.current.filter((product) => product.id !== id)
-            );
-            persistMovements(
-              movementsRef.current.filter((movement) => movement.productId !== id)
-            );
-            persistPriceChanges(
-              priceChangesRef.current.filter((change) => change.productId !== id)
-            );
-          },
+      try {
+        await runOnApi(async () => {
+          await deleteStockProductApi(id);
+          await refreshStockFromApi();
         });
-      })();
+
+        return createValidationResult({});
+      } catch (error) {
+        return createValidationResult({
+          form: getDataSourceErrorMessage(error),
+        });
+      }
     },
-    [persistProducts, persistMovements, persistPriceChanges, refreshStockFromApi]
+    [refreshStockFromApi]
   );
 
   const recordMovement = useCallback(
-    (input: StockMovementInput): StockValidationResult => {
+    async (input: StockMovementInput): Promise<StockValidationResult> => {
       const product = productsRef.current.find(
         (item) => item.id === input.productId
       );
@@ -439,99 +306,28 @@ export function StockProvider({ children }: { children: React.ReactNode }) {
       if (isBranchDayClosed(input.branch, movementDate)) {
         return createValidationResult({ form: DAY_CLOSED_EDIT_MESSAGE });
       }
+      if (!isBranchDayOpened(input.branch, movementDate)) {
+        return createValidationResult({ form: SHOP_NOT_OPENED_MESSAGE });
+      }
 
-      void (async () => {
-        await runRemoteOrLocal({
-          remote: async () => {
-            const actor = resolveCurrentStaffAction(input.branch);
-            await createStockMovementApi({
-              ...input,
-              createdBy: actor,
-            } as StockMovementInput);
-            await refreshStockFromApi();
-          },
-          local: () => {
-            const now = new Date().toISOString();
-            const actor = resolveCurrentStaffAction(input.branch);
-            const nextStock =
-              input.movement === "in"
-                ? product.currentStock + input.quantity
-                : product.currentStock - input.quantity;
-
-            if (nextStock < 0) {
-              return;
-            }
-
-            const movement: StockMovement = {
-              id: crypto.randomUUID(),
-              date: input.date ?? getTodayISO(),
-              productId: product.id,
-              productName: product.name,
-              movement: input.movement,
-              quantity: input.quantity,
-              reason: input.reason.trim(),
-              branch: input.branch,
-              notes: input.notes?.trim() || undefined,
-              createdBy: actor,
-              createdAt: now,
-            };
-
-            const nextProducts = productsRef.current.map((item) =>
-              item.id === product.id
-                ? {
-                    ...item,
-                    currentStock: nextStock,
-                    updatedAt: now,
-                  }
-                : item
-            );
-
-            persistProducts(nextProducts);
-            persistMovements([movement, ...movementsRef.current]);
-
-            recordStaffAction({
-              staffId: actor?.staffId,
-              staffName: actor?.staffName,
-              role: actor?.role,
-              action:
-                input.movement === "in"
-                  ? AUDIT_ACTIONS.STOCK_IN
-                  : AUDIT_ACTIONS.STOCK_OUT,
-              module: "stock",
-              recordId: movement.id,
-              branch: input.branch,
-              newValues: pickAuditFields(movement, [
-                "id",
-                "productName",
-                "movement",
-                "quantity",
-                "reason",
-                "branch",
-              ]),
-            });
-          },
+      try {
+        await runOnApi(async () => {
+          const actor = resolveCurrentStaffAction(input.branch);
+          await createStockMovementApi({
+            ...input,
+            createdBy: actor,
+          } as StockMovementInput);
+          await refreshStockFromApi();
         });
-      })();
 
-      return createValidationResult({});
+        return createValidationResult({});
+      } catch (error) {
+        return createValidationResult({
+          form: getDataSourceErrorMessage(error),
+        });
+      }
     },
-    [persistProducts, persistMovements, refreshStockFromApi]
-  );
-
-  const getStockSnapshot = useCallback(
-    () => ({
-      products: productsRef.current.map((product) => ({ ...product })),
-      movements: [...movementsRef.current],
-    }),
-    []
-  );
-
-  const restoreStockSnapshot = useCallback(
-    (snapshot: { products: StockProduct[]; movements: StockMovement[] }) => {
-      persistProducts(snapshot.products);
-      persistMovements(snapshot.movements);
-    },
-    [persistProducts, persistMovements]
+    [refreshStockFromApi]
   );
 
   const value = useMemo(
@@ -541,13 +337,12 @@ export function StockProvider({ children }: { children: React.ReactNode }) {
       priceChanges,
       metrics,
       isLoaded,
+      loadError,
       getProductById,
       addProduct,
       updateProduct,
       deleteProduct,
       recordMovement,
-      getStockSnapshot,
-      restoreStockSnapshot,
       refreshStockFromApi,
     }),
     [
@@ -556,13 +351,12 @@ export function StockProvider({ children }: { children: React.ReactNode }) {
       priceChanges,
       metrics,
       isLoaded,
+      loadError,
       getProductById,
       addProduct,
       updateProduct,
       deleteProduct,
       recordMovement,
-      getStockSnapshot,
-      restoreStockSnapshot,
       refreshStockFromApi,
     ]
   );

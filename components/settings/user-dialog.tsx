@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useFormBranch } from "@/hooks/use-form-branch";
 import { StockDialog, StockFieldError } from "@/components/stock/stock-dialog";
 import { BranchPicker } from "@/components/entry/branch-picker";
 import { Button } from "@/components/shared/ui/button";
@@ -11,7 +12,6 @@ import { useStaff } from "@/context/staff-context";
 import { USER_ROLE_OPTIONS } from "@/lib/auth/permissions";
 import { getStaffRoleName } from "@/lib/staff/roles";
 import type { AppUser, UserRole } from "@/types/auth";
-import type { Branch } from "@/types";
 
 interface UserDialogProps {
   mode: "add" | "edit";
@@ -24,8 +24,8 @@ export function UserDialog({ mode, user, onClose }: UserDialogProps) {
   const { staff, linkStaffAccount } = useStaff();
   const [username, setUsername] = useState(user?.username ?? "");
   const [displayName, setDisplayName] = useState(user?.displayName ?? "");
-  const [role, setRole] = useState<UserRole>(user?.role ?? "sales-attendant");
-  const [branch, setBranch] = useState<Branch>(user?.branch ?? "kansanga");
+  const [role, setRole] = useState<UserRole>(user?.role ?? "cashier");
+  const { branch, setBranch } = useFormBranch(user?.branch);
   const [staffId, setStaffId] = useState(user?.staffId ?? "");
   const [password, setPassword] = useState("");
   const [errors, setErrors] = useState<Record<string, string | undefined>>({});

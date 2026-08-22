@@ -4,7 +4,7 @@ import { createStaff, listStaff } from "@/lib/server/services/staff-service";
 
 export async function GET() {
   try {
-    const staff = await withDatabase(() => listStaff());
+    const staff = await withDatabase(() => listStaff(), { module: "operations" });
     return jsonOk(staff);
   } catch (error) {
     return handleRouteError(error);
@@ -14,7 +14,10 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const staff = await withDatabase(() => createStaff(body));
+    const staff = await withDatabase(() => createStaff(body), {
+      request,
+      ownerOnly: true,
+    });
     return jsonCreated(staff);
   } catch (error) {
     return handleRouteError(error);

@@ -160,7 +160,7 @@ export function ExpensesReportsPlaceholders({
 
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
         <Card className="min-h-[220px]">
-          <h3 className="text-sm font-medium text-white">Staff Payments</h3>
+          <h3 className="text-sm font-medium text-white">Payroll</h3>
           <p className="mt-2 text-2xl font-semibold text-white">
             {formatCurrency(staffPaymentReport.totalStaffPayments)}
           </p>
@@ -169,7 +169,7 @@ export function ExpensesReportsPlaceholders({
 
         <Card className="min-h-[220px]">
           <h3 className="text-sm font-medium text-white">
-            Staff Payments by Branch
+            Payroll by Branch
           </h3>
           {staffPaymentReport.byBranch.length === 0 ? (
             <p className="mt-3 text-xs text-zinc-500">No staff payments yet.</p>
@@ -192,7 +192,7 @@ export function ExpensesReportsPlaceholders({
 
         <Card className="min-h-[220px]">
           <h3 className="text-sm font-medium text-white">
-            Staff Payments by Staff Member
+            Payroll by Staff Member
           </h3>
           {staffPaymentReport.byStaff.length === 0 ? (
             <p className="mt-3 text-xs text-zinc-500">No staff payments yet.</p>
@@ -215,7 +215,7 @@ export function ExpensesReportsPlaceholders({
 
         <Card className="min-h-[220px]">
           <h3 className="text-sm font-medium text-white">
-            Monthly Staff Payment Totals
+            Monthly Payroll Totals
           </h3>
           {staffPaymentReport.monthlyTotals.length === 0 ? (
             <p className="mt-3 text-xs text-zinc-500">No staff payments yet.</p>

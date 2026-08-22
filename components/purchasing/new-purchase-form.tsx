@@ -123,11 +123,14 @@ export function NewPurchaseForm() {
     );
   }
 
-  function handleSubmit(event: React.FormEvent) {
+  async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
-    setIsSubmitting(true);
+    if (isSubmitting) return;
 
-    const result = completePurchase({
+    setIsSubmitting(true);
+    setErrors({});
+
+    const result = await completePurchase({
       supplierId,
       items: parsedItems,
       branch: activeBranch,
@@ -300,6 +303,10 @@ export function NewPurchaseForm() {
             value={formatCurrency(totals.grandTotal)}
             size="lg"
           />
+
+          {errors.form && (
+            <p className="mt-4 text-xs text-red-400">{errors.form}</p>
+          )}
 
           <Button
             type="submit"

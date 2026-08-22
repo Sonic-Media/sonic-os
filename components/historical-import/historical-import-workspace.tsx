@@ -7,8 +7,10 @@ import { ImportProgress } from "@/components/historical-import/import-progress";
 import { Button } from "@/components/shared/ui/button";
 import { Card } from "@/components/shared/ui/card";
 import { useHistoricalImport } from "@/hooks/use-historical-import";
+import { useBranches } from "@/context/branches-context";
 
 export function HistoricalImportWorkspace() {
+  const { getBranchName } = useBranches();
   const {
     preview,
     fileName,
@@ -17,10 +19,15 @@ export function HistoricalImportWorkspace() {
     lastImportResult,
     undoSnapshot,
     errorReport,
+    selectedRowNumbers,
+    selectedCount,
+    activeBranch,
     loadFile,
     runImport,
     undoLastImport,
     resetImportState,
+    toggleRowSelection,
+    setAllRowsSelected,
   } = useHistoricalImport();
 
   async function handleImport() {
@@ -41,12 +48,20 @@ export function HistoricalImportWorkspace() {
     <div className="space-y-6">
       <ImportFileUpload
         fileName={fileName}
+        branchName={getBranchName(activeBranch)}
         onFileSelected={loadFile}
         onReset={resetImportState}
         disabled={isImporting}
       />
 
-      {preview && <ImportPreviewTable preview={preview} />}
+      {preview && (
+        <ImportPreviewTable
+          preview={preview}
+          selectedRowNumbers={selectedRowNumbers}
+          onToggleRow={toggleRowSelection}
+          onSelectAll={setAllRowsSelected}
+        />
+      )}
 
       <ImportProgress progress={progress} isImporting={isImporting} />
 
@@ -60,9 +75,9 @@ export function HistoricalImportWorkspace() {
           <Button
             type="button"
             onClick={handleImport}
-            disabled={!preview || preview.validCount === 0 || isImporting}
+            disabled={!preview || selectedCount === 0 || isImporting}
           >
-            Import Valid Records
+            Import Selected Rows ({selectedCount})
           </Button>
           <Button
             type="button"

@@ -16,83 +16,42 @@ const ALL_MODULES: StaffModule[] = [
 
 export const DEFAULT_STAFF_ROLES: StaffRoleDefinition[] = [
   {
-    id: "ceo",
-    name: "CEO",
-    description: "Full business visibility across all modules.",
-    modules: ALL_MODULES,
-    isDefault: true,
-  },
-  {
     id: "branch-manager",
     name: "Branch Manager",
-    description: "Manage branch sales, stock, and staff.",
-    modules: ["sales", "purchasing", "expenses", "stock", "staff", "reports"],
-    isDefault: true,
-  },
-  {
-    id: "manager",
-    name: "Manager",
-    description: "Manage sales, purchasing, expenses, and stock.",
-    modules: ["sales", "purchasing", "expenses", "stock"],
+    description: "Manage branch stock, purchasing, reports, and daily operations.",
+    modules: [
+      "home",
+      "operations",
+      "sales",
+      "purchasing",
+      "expenses",
+      "stock",
+      "reports",
+      "staff",
+    ],
     isDefault: true,
   },
   {
     id: "cashier",
     name: "Cashier",
-    description: "Process sales at the counter.",
-    modules: ["sales"],
+    description: "Run the full daily workflow from Today's Operations.",
+    modules: ["operations", "sales"],
     isDefault: true,
-  },
-  {
-    id: "sales-attendant",
-    name: "Sales Attendant",
-    description: "Handle sales and daily customer activity.",
-    modules: ["sales", "operations"],
-    isDefault: true,
-  },
-  {
-    id: "inventory-officer",
-    name: "Inventory Officer",
-    description: "Manage stock levels and purchasing.",
-    modules: ["stock", "purchasing"],
-    isDefault: true,
-  },
-  {
-    id: "technician",
-    name: "Technician",
-    description: "Manage stock and operational repairs.",
-    modules: ["stock", "operations"],
-    isDefault: true,
-  },
-  {
-    id: "accountant",
-    name: "Accountant",
-    description: "Track expenses and financial reports.",
-    modules: ["expenses", "reports"],
-    isDefault: true,
-  },
-  {
-    id: "administrator",
-    name: "Administrator",
-    description: "Configure users, branches, and settings.",
-    modules: ["settings", "staff", "branches", "reports"],
-    isDefault: true,
-  },
-  {
-    id: "salesperson",
-    name: "Sales Attendant",
-    description: "Legacy sales role.",
-    modules: ["sales", "operations"],
-    isDefault: false,
-  },
-  {
-    id: "store-attendant",
-    name: "Store Attendant",
-    description: "Legacy operations role.",
-    modules: ["operations"],
-    isDefault: false,
   },
 ];
+
+export const LEGACY_ROLE_MIGRATIONS: Record<string, StaffRoleId> = {
+  "sales-attendant": "cashier",
+  salesperson: "cashier",
+  "store-attendant": "cashier",
+  ceo: "branch-manager",
+  manager: "branch-manager",
+  administrator: "branch-manager",
+  admin: "branch-manager",
+  accountant: "branch-manager",
+  "inventory-officer": "branch-manager",
+  technician: "branch-manager",
+};
 
 export const STAFF_ROLE_OPTIONS = DEFAULT_STAFF_ROLES.filter(
   (role) => role.isDefault
@@ -102,9 +61,9 @@ export const STAFF_ROLE_OPTIONS = DEFAULT_STAFF_ROLES.filter(
 }));
 
 export const STAFF_MODULE_LABELS: Record<StaffModule, string> = {
-  home: "Home",
-  operations: "Daily Operations",
-  sales: "Sales",
+  home: "Dashboard",
+  operations: "Today's Operations",
+  sales: "Accessory Sales",
   purchasing: "Purchasing",
   expenses: "Expenses",
   stock: "Stock",
@@ -133,13 +92,14 @@ export function isStaffRoleId(value: unknown): value is StaffRoleId {
   return typeof value === "string" && STAFF_ROLE_IDS.has(value as StaffRoleId);
 }
 
-export function migrateLegacyAuthRole(value: unknown): StaffRoleId | "owner" {
-  if (value === "owner") return "owner";
+export function migrateLegacyAuthRole(value: unknown): StaffRoleId {
   if (isStaffRoleId(value)) return value;
 
-  if (value === "staff") return "store-attendant";
-  if (value === "manager") return "manager";
-  if (value === "cashier") return "cashier";
+  if (typeof value === "string" && value in LEGACY_ROLE_MIGRATIONS) {
+    return LEGACY_ROLE_MIGRATIONS[value];
+  }
 
-  return "store-attendant";
+  if (value === "staff") return "cashier";
+
+  return "cashier";
 }

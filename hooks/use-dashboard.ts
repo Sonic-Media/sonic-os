@@ -8,11 +8,13 @@ import {
   getTodayBranchProgress,
 } from "@/lib/entry-helpers";
 import { formatDisplayDate, getTodayISO } from "@/lib/dates";
-import { getGreeting } from "@/lib/format";
+import { getPersonalizedGreetingLine, getRandomRoleSubtitle } from "@/lib/ux/greeting";
+import { resolveStaffDisplayName } from "@/lib/ux/user-display";
 import { getDashboardChartData } from "@/lib/chart-data";
 import { getDashboardAnalytics } from "@/lib/report-insights";
 import { filterByBranchField } from "@/lib/active-branch/filters";
 import { useActiveBranch } from "@/context/active-branch-context";
+import { useAuth } from "@/context/auth-context";
 import { useEntriesContext } from "@/context/entries-context";
 import { useSettings } from "@/context/settings-context";
 import { useStaff } from "@/context/staff-context";
@@ -22,16 +24,20 @@ export function useDashboard() {
   const { entries, isLoaded } = useEntriesContext();
   const { settings, branches, isLoaded: settingsLoaded } = useSettings();
   const { staff, isLoaded: staffLoaded } = useStaff();
+  const { session } = useAuth();
   const { activeBranch, isLoaded: branchLoaded } = useActiveBranch();
   const [period, setPeriod] = useState<DashboardPeriod>("daily");
+  const [ownerSubtitle] = useState(() => getRandomRoleSubtitle("owner"));
   const today = getTodayISO();
+  const displayName = resolveStaffDisplayName(session, staff);
 
   const data = useMemo(() => {
     const branchEntries = filterByBranchField(entries, activeBranch);
     const activeBranchConfig = branches.find((branch) => branch.id === activeBranch);
     const scopedBranches = activeBranchConfig ? [activeBranchConfig] : branches;
+    const branchIds = scopedBranches.map((branch) => branch.id);
     const todayEntries = filterEntriesByDate(branchEntries, today);
-    const summary = aggregateEntries(todayEntries);
+    const summary = aggregateEntries(todayEntries, { branchIds });
     const progress = getTodayBranchProgress(branchEntries, today, scopedBranches);
     const draftEntry = findMostRecentEntryForDate(
       branchEntries,
@@ -48,13 +54,15 @@ export function useDashboard() {
     const allEntriesCompleted =
       progress.length > 0 && progress.every((item) => item.completed);
     const analytics = getDashboardAnalytics(branchEntries, period, {
+      branchIds,
       branchNames: settings.branchNames,
       staff: staff.filter((member) => member.branch === activeBranch),
     });
     const chartData = getDashboardChartData(
       branchEntries,
       period,
-      settings.branchNames
+      settings.branchNames,
+      branchIds
     );
 
     const dashboard: DashboardSummary = {
@@ -66,7 +74,8 @@ export function useDashboard() {
     };
 
     return {
-      greeting: getGreeting(settings.ownerName),
+      greeting: getPersonalizedGreetingLine(displayName),
+      subtitle: ownerSubtitle,
       date: formatDisplayDate(),
       analytics,
       chartData,
@@ -78,7 +87,8 @@ export function useDashboard() {
     today,
     branches,
     activeBranch,
-    settings.ownerName,
+    displayName,
+    ownerSubtitle,
     settings.branchNames,
     staff,
     period,

@@ -24,4 +24,8 @@ export const entryImportSchema = z.object({
 
 export const importDailyOperationsSchema = z.array(entryImportSchema).max(5000);
 
+export const importDailyOperationsBodySchema = z.object({
+  entries: importDailyOperationsSchema,
+});
+
 export type ImportDailyOperationsInput = z.infer<typeof importDailyOperationsSchema>;

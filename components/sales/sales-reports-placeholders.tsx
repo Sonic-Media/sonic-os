@@ -2,16 +2,16 @@ import { Card } from "@/components/shared/ui/card";
 
 const REPORT_PLACEHOLDERS = [
   {
-    title: "Daily Sales",
+    title: "Daily Accessory Sales",
     description: "Track revenue and transactions by day.",
   },
   {
-    title: "Weekly Sales",
-    description: "Compare weekly sales performance over time.",
+    title: "Weekly Accessory Sales",
+    description: "Compare weekly accessory sales performance over time.",
   },
   {
-    title: "Monthly Sales",
-    description: "View monthly revenue and profit trends.",
+    title: "Monthly Accessory Sales",
+    description: "View monthly accessory revenue and profit trends.",
   },
   {
     title: "Top Selling Items",
@@ -23,7 +23,7 @@ const REPORT_PLACEHOLDERS = [
   },
   {
     title: "Payment Breakdown",
-    description: "Analyze sales by payment method.",
+    description: "Analyze accessory sales by payment method.",
   },
 ];
 

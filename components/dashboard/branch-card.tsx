@@ -42,17 +42,26 @@ export function BranchCard({ name, totals }: BranchCardProps) {
 
 interface DashboardGreetingProps {
   greeting: string;
+  subtitle?: string;
   date: string;
   className?: string;
 }
 
-export function DashboardGreeting({ greeting, date, className }: DashboardGreetingProps) {
+export function DashboardGreeting({
+  greeting,
+  subtitle,
+  date,
+  className,
+}: DashboardGreetingProps) {
   return (
     <section className={cn("mb-8", className)}>
       <p className="text-sm font-medium text-zinc-500 mb-1">Sonic OS</p>
       <h1 className="text-2xl sm:text-3xl font-semibold tracking-tight text-white">
         {greeting} 👋
       </h1>
+      {subtitle ? (
+        <p className="text-sm text-zinc-400 mt-3">{subtitle}</p>
+      ) : null}
       <p className="text-sm text-zinc-500 mt-2">{date}</p>
     </section>
   );

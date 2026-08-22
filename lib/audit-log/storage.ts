@@ -1,4 +1,3 @@
-import { AUDIT_LOG_STORAGE_KEY, MAX_AUDIT_LOG_RECORDS } from "@/lib/audit-log/constants";
 import { normalizeBranchCode } from "@/lib/branch-storage";
 import type { AuditLogRecord } from "@/types/audit-log";
 import type { AuditModule } from "@/types/audit-log";
@@ -55,23 +54,4 @@ export function normalizeAuditLogRecordList(value: unknown): AuditLogRecord[] {
   return value
     .map(normalizeAuditLogRecord)
     .filter((record): record is AuditLogRecord => record !== null);
-}
-
-export function getAuditLogRecords(): AuditLogRecord[] {
-  if (typeof window === "undefined") return [];
-
-  try {
-    const raw = localStorage.getItem(AUDIT_LOG_STORAGE_KEY);
-    if (!raw) return [];
-    return normalizeAuditLogRecordList(JSON.parse(raw) as unknown);
-  } catch {
-    return [];
-  }
-}
-
-export function appendAuditLogRecord(record: AuditLogRecord): void {
-  if (typeof window === "undefined") return;
-
-  const next = [record, ...getAuditLogRecords()].slice(0, MAX_AUDIT_LOG_RECORDS);
-  localStorage.setItem(AUDIT_LOG_STORAGE_KEY, JSON.stringify(next));
 }

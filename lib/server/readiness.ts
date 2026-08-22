@@ -1,5 +1,11 @@
 import { getAppEnvironment, getEnvironmentProfile } from "@/lib/env";
-import { isDatabaseConfigured, prisma } from "@/lib/db";
+import { isDatabaseConfigured, verifyDatabaseConnection } from "@/lib/db";
+import {
+  BootstrapFailedError,
+  ensureApplicationInitialized,
+  getApplicationBootstrapReport,
+} from "@/lib/server/bootstrap";
+import { verifyMigrationsVerifiedStage } from "@/lib/server/bootstrap/verify";
 
 export interface ReadinessReport {
   status: "ready" | "not_ready";
@@ -8,6 +14,11 @@ export interface ReadinessReport {
     databaseConfigured: boolean;
     databaseConnected: boolean;
     migrationsApplied: boolean;
+    bootstrapComplete: boolean;
+  };
+  bootstrap?: {
+    failedStage: string | null;
+    error: string | null;
   };
   timestamp: string;
 }
@@ -19,20 +30,41 @@ export async function getReadinessReport(): Promise<ReadinessReport> {
 
   let databaseConnected = false;
   let migrationsApplied = false;
+  let bootstrapComplete = false;
+  let bootstrapFailure: ReadinessReport["bootstrap"];
 
   if (databaseConfigured) {
     try {
-      await prisma.$queryRaw`SELECT 1`;
+      await verifyDatabaseConnection();
       databaseConnected = true;
+      migrationsApplied = await verifyMigrationsVerifiedStage();
 
-      const migrationRows = await prisma.$queryRaw<
-        { count: bigint }[]
-      >`SELECT COUNT(*)::bigint AS count FROM "_prisma_migrations" WHERE "finished_at" IS NOT NULL`;
+      try {
+        await ensureApplicationInitialized();
+        bootstrapComplete = true;
+      } catch (error) {
+        bootstrapComplete = false;
 
-      migrationsApplied = Number(migrationRows[0]?.count ?? 0) > 0;
-    } catch {
+        if (error instanceof BootstrapFailedError) {
+          bootstrapFailure = {
+            failedStage: error.stage,
+            error: error.message,
+          };
+        } else {
+          const report = await getApplicationBootstrapReport();
+          bootstrapFailure = {
+            failedStage: report.failedStage,
+            error:
+              report.error ??
+              (error instanceof Error ? error.message : "Bootstrap failed."),
+          };
+        }
+      }
+    } catch (error) {
       databaseConnected = false;
       migrationsApplied = false;
+      bootstrapComplete = false;
+      console.error("[readiness] database check failed:", error);
     }
   }
 
@@ -40,6 +72,7 @@ export async function getReadinessReport(): Promise<ReadinessReport> {
     databaseConfigured: profile.requiresDatabase ? databaseConfigured : true,
     databaseConnected: profile.requiresDatabase ? databaseConnected : true,
     migrationsApplied: profile.requiresDatabase ? migrationsApplied : true,
+    bootstrapComplete: profile.requiresDatabase ? bootstrapComplete : true,
   };
 
   const ready = Object.values(checks).every(Boolean);
@@ -48,6 +81,7 @@ export async function getReadinessReport(): Promise<ReadinessReport> {
     status: ready ? "ready" : "not_ready",
     environment: appEnv,
     checks,
+    bootstrap: bootstrapFailure,
     timestamp: new Date().toISOString(),
   };
 }

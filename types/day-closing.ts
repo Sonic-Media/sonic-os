@@ -51,6 +51,9 @@ export interface DayClosingRecord {
   closedBy?: string;
   closedByName?: string;
   closedAt?: string;
+  openedBy?: string;
+  openedByName?: string;
+  openedAt?: string;
   reopenedBy?: string;
   reopenedByName?: string;
   reopenedAt?: string;
@@ -64,6 +67,8 @@ export interface DayClosingStatusInfo {
   branchName: string;
   date: string;
   status: DayClosingStatus;
+  openedByName?: string;
+  openedAt?: string;
   closedByName?: string;
   closedAt?: string;
 }

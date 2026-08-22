@@ -1,7 +1,3 @@
-import {
-  PURCHASING_PURCHASES_STORAGE_KEY,
-  PURCHASING_SUPPLIERS_STORAGE_KEY,
-} from "@/lib/constants";
 import { normalizeBranchCode } from "@/lib/branch-storage";
 import { normalizeStaffActionRecord } from "@/lib/staff/session";
 import type { Purchase, PurchaseLineItem, Supplier } from "@/types/purchasing";
@@ -134,46 +130,6 @@ export function normalizeSupplierList(value: unknown): Supplier[] {
   return value
     .map(normalizeSupplier)
     .filter((supplier): supplier is Supplier => supplier !== null);
-}
-
-export function getPurchases(): Purchase[] {
-  if (typeof window === "undefined") return [];
-
-  try {
-    const raw = localStorage.getItem(PURCHASING_PURCHASES_STORAGE_KEY);
-    if (!raw) return [];
-    return normalizePurchaseList(JSON.parse(raw) as unknown);
-  } catch {
-    return [];
-  }
-}
-
-export function savePurchases(purchases: Purchase[]): void {
-  if (typeof window === "undefined") return;
-  localStorage.setItem(
-    PURCHASING_PURCHASES_STORAGE_KEY,
-    JSON.stringify(purchases)
-  );
-}
-
-export function getSuppliers(): Supplier[] {
-  if (typeof window === "undefined") return [];
-
-  try {
-    const raw = localStorage.getItem(PURCHASING_SUPPLIERS_STORAGE_KEY);
-    if (!raw) return [];
-    return normalizeSupplierList(JSON.parse(raw) as unknown);
-  } catch {
-    return [];
-  }
-}
-
-export function saveSuppliers(suppliers: Supplier[]): void {
-  if (typeof window === "undefined") return;
-  localStorage.setItem(
-    PURCHASING_SUPPLIERS_STORAGE_KEY,
-    JSON.stringify(suppliers)
-  );
 }
 
 export function sortPurchasesByDate(purchases: Purchase[]): Purchase[] {

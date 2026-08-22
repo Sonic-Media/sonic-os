@@ -6,9 +6,11 @@ import { Button } from "@/components/shared/ui/button";
 import { Card } from "@/components/shared/ui/card";
 import { Input } from "@/components/shared/ui/input";
 import { Textarea } from "@/components/shared/ui/textarea";
+import { CloseDaySuccess } from "@/components/operations/close-day-success";
 import { useActiveBranch } from "@/context/active-branch-context";
 import { useAuth } from "@/context/auth-context";
 import { useBranches } from "@/context/branches-context";
+import { useSettings } from "@/context/settings-context";
 import { useDayClosing } from "@/context/day-closing-context";
 import { useEntriesContext } from "@/context/entries-context";
 import { useExpensesModule } from "@/context/expenses-module-context";
@@ -28,8 +30,11 @@ import { canReopenDay } from "@/lib/day-closing/permissions";
 import { formatCurrency } from "@/lib/format";
 import { getStaffRoleName } from "@/lib/staff/roles";
 import { getTodayISO } from "@/lib/dates";
+import { toStaffFacingError } from "@/lib/ux/staff-messages";
+import { resolveStaffDisplayName } from "@/lib/ux/user-display";
 import type {
   CashReconciliationStatus,
+  DayClosingRecord,
   DayClosingStaffPayout,
 } from "@/types/day-closing";
 
@@ -63,7 +68,21 @@ function CashStatusBadge({ status }: { status: CashReconciliationStatus }) {
   return <span className={className}>{label}</span>;
 }
 
-export function CloseDayWorkspace() {
+export function CloseDayWorkspace({
+  onCancel,
+  onCloseComplete,
+  redirectAfterClose = "/operations/today",
+  movieRevenue = 0,
+  accessorySales = 0,
+  savings = 0,
+}: {
+  onCancel?: () => void;
+  onCloseComplete?: () => void;
+  redirectAfterClose?: string;
+  movieRevenue?: number;
+  accessorySales?: number;
+  savings?: number;
+} = {}) {
   const router = useRouter();
   const today = getTodayISO();
   const { activeBranch } = useActiveBranch();
@@ -76,6 +95,7 @@ export function CloseDayWorkspace() {
   const { entries } = useEntriesContext();
   const { staff } = useStaff();
   const { session } = useAuth();
+  const { settings } = useSettings();
   const { closeDay, reopenDay, getClosedRecord } = useDayClosing();
 
   const [step, setStep] = useState(0);
@@ -85,6 +105,9 @@ export function CloseDayWorkspace() {
   const [closingNotes, setClosingNotes] = useState("");
   const [errors, setErrors] = useState<Record<string, string | undefined>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [closeSuccessRecord, setCloseSuccessRecord] = useState<
+    DayClosingRecord | undefined
+  >();
 
   useEffect(() => {
     setStep(0);
@@ -180,7 +203,7 @@ export function CloseDayWorkspace() {
     setIsSubmitting(true);
     setErrors({});
 
-    const result = closeDay({
+    const result = await closeDay({
       branch,
       date: today,
       metrics,
@@ -194,15 +217,43 @@ export function CloseDayWorkspace() {
     setIsSubmitting(false);
 
     if (!result.success) {
-      setErrors(result.errors);
+      setErrors({
+        form: toStaffFacingError(result.errors.form ?? "", {
+          ownerName: settings.ownerName,
+          context: "close-day",
+        }),
+      });
       return;
     }
 
-    router.push("/");
+    if (result.record) {
+      setCloseSuccessRecord(result.record);
+    }
   }
 
-  function handleReopen() {
-    const result = reopenDay(branch, today);
+  function handleCloseSuccessDone() {
+    setCloseSuccessRecord(undefined);
+    onCloseComplete?.();
+    router.push(redirectAfterClose);
+  }
+
+  const staffName = resolveStaffDisplayName(session, staff);
+
+  if (closeSuccessRecord) {
+    return (
+      <CloseDaySuccess
+        staffName={staffName}
+        record={closeSuccessRecord}
+        movieRevenue={movieRevenue}
+        accessorySales={accessorySales}
+        savings={savings}
+        onDone={handleCloseSuccessDone}
+      />
+    );
+  }
+
+  async function handleReopen() {
+    const result = await reopenDay(branch, today);
     if (!result.success) {
       setErrors(result.errors);
       return;
@@ -247,7 +298,7 @@ export function CloseDayWorkspace() {
 
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <MetricCard
-            label="Sales"
+            label="Total Revenue"
             value={formatCurrency(closedRecord.summary.sales)}
           />
           <MetricCard
@@ -311,7 +362,7 @@ export function CloseDayWorkspace() {
         <div className="space-y-4">
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
             <MetricCard
-              label="Today's Sales"
+              label="Total Revenue"
               value={formatCurrency(metrics.todaySales)}
             />
             <MetricCard
@@ -465,7 +516,7 @@ export function CloseDayWorkspace() {
 
       {step === 3 && summary && (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          <MetricCard label="Sales" value={formatCurrency(summary.sales)} />
+          <MetricCard label="Total Revenue" value={formatCurrency(summary.sales)} />
           <MetricCard
             label="Expenses"
             value={formatCurrency(summary.expenses)}
@@ -518,10 +569,16 @@ export function CloseDayWorkspace() {
         <Button
           type="button"
           variant="secondary"
-          onClick={handleBack}
-          disabled={step === 0 || isSubmitting}
+          onClick={() => {
+            if (step === 0 && onCancel) {
+              onCancel();
+              return;
+            }
+            handleBack();
+          }}
+          disabled={(step === 0 && !onCancel) || isSubmitting}
         >
-          Back
+          {step === 0 && onCancel ? "Back to Today" : "Back"}
         </Button>
         {step < STEPS.length - 1 ? (
           <Button type="button" onClick={handleNext}>
