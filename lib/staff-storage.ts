@@ -1,4 +1,5 @@
 import { BRANCH_IDS } from "@/lib/constants";
+import { branchCodesReferToSameInventory } from "@/lib/branch/codes";
 import { normalizeBranchCode } from "@/lib/branch-storage";
 import { getTodayISO } from "@/lib/dates";
 import { isStaffRoleId } from "@/lib/staff/roles";
@@ -79,7 +80,10 @@ export function buildStaffLookup(staff: Staff[]): Map<string, Staff> {
 
 export function getActiveStaffForBranch(staff: Staff[], branch: Branch): Staff[] {
   return staff.filter(
-    (member) => member.active && member.status === "active" && member.branch === branch
+    (member) =>
+      member.active &&
+      member.status === "active" &&
+      branchCodesReferToSameInventory(member.branch, branch)
   );
 }
 

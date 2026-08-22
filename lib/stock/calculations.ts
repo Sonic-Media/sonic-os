@@ -1,5 +1,7 @@
+import { getEquivalentBranchCodes } from "@/lib/branch/codes";
 import { formatCurrency } from "@/lib/format";
 import { computeProductStatus } from "@/lib/stock/product-status";
+import type { Branch } from "@/types";
 import type {
   StockDashboardMetrics,
   StockMovement,
@@ -15,10 +17,14 @@ export function computeBranchNetQuantity(
   productId: string,
   movements: StockMovement[]
 ): number {
+  const branchCodes = new Set(getEquivalentBranchCodes(branchCode));
   let total = 0;
 
   for (const movement of movements) {
-    if (movement.productId !== productId || movement.branch !== branchCode) {
+    if (
+      movement.productId !== productId ||
+      !branchCodes.has(movement.branch as Branch)
+    ) {
       continue;
     }
 

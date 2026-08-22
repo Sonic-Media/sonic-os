@@ -57,7 +57,7 @@ export default function StaffPage() {
       <div className="space-y-3">
         {filteredSummaries.length === 0 ? (
           <p className="text-sm text-zinc-500">
-            No staff members match your search. Add staff in{" "}
+            No staff members match your search for this branch. Staff are managed in{" "}
             <Link href="/settings" className="text-white underline">
               Settings
             </Link>

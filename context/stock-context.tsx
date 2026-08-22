@@ -34,6 +34,11 @@ import {
 } from "@/lib/stock-storage";
 import { computeDashboardMetrics } from "@/lib/stock/calculations";
 import {
+  getBranchProductStock,
+  getBranchProductsForSale,
+  type BranchSaleProduct,
+} from "@/lib/stock/branch-inventory";
+import {
   hasValidationErrors,
   validateStockMovementInput,
   validateStockProductInput,
@@ -43,7 +48,9 @@ import { AUDIT_ACTIONS } from "@/lib/audit-log/constants";
 import { pickAuditFields } from "@/lib/audit-log/snapshots";
 import { recordStaffAction } from "@/lib/staff/audit";
 import { resolveCurrentStaffAction } from "@/lib/staff/session";
+import { roleHasModuleAccess } from "@/lib/staff/permissions";
 import { useAuth } from "@/context/auth-context";
+import type { Branch } from "@/types";
 import {
   DAY_CLOSED_EDIT_MESSAGE,
   isBranchDayClosed,
@@ -69,6 +76,8 @@ interface StockContextValue {
   isLoaded: boolean;
   loadError: string | null;
   getProductById: (id: string) => StockProduct | undefined;
+  getBranchProductStock: (productId: string, branchCode: Branch) => number;
+  getProductsAvailableForSale: (branchCode: Branch) => BranchSaleProduct[];
   addProduct: (input: StockProductInput) => Promise<StockValidationResult>;
   updateProduct: (
     id: string,
@@ -93,13 +102,16 @@ function createValidationResult(
 }
 
 export function StockProvider({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, isLoaded: authLoaded } = useAuth();
+  const { isAuthenticated, isLoaded: authLoaded, session } = useAuth();
+  const canAccessStockModule =
+    session !== null && roleHasModuleAccess(session.role, "stock");
   const [products, setProducts] = useState<StockProduct[]>([]);
   const [movements, setMovements] = useState<StockMovement[]>([]);
   const [priceChanges, setPriceChanges] = useState<StockPriceChange[]>([]);
   const [isLoaded, setIsLoaded] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const hasLoaded = useRef(false);
+  const lastStockAccess = useRef<boolean | null>(null);
   const productsRef = useRef(products);
   const movementsRef = useRef(movements);
   const priceChangesRef = useRef(priceChanges);
@@ -117,20 +129,29 @@ export function StockProvider({ children }: { children: React.ReactNode }) {
   }, [priceChanges]);
 
   const refreshStockFromApi = useCallback(async () => {
-    const [remoteProducts, remoteMovements, remotePriceChanges] =
-      await Promise.all([
-        fetchStockProducts(),
-        fetchStockMovements(),
-        fetchStockPriceChanges(),
-      ]);
+    const remoteProducts = await fetchStockProducts();
 
     productsRef.current = normalizeStockProductList(remoteProducts);
+    setProducts(productsRef.current);
+
+    if (!canAccessStockModule) {
+      movementsRef.current = [];
+      priceChangesRef.current = [];
+      setMovements([]);
+      setPriceChanges([]);
+      return;
+    }
+
+    const [remoteMovements, remotePriceChanges] = await Promise.all([
+      fetchStockMovements(),
+      fetchStockPriceChanges(),
+    ]);
+
     movementsRef.current = normalizeStockMovementList(remoteMovements);
     priceChangesRef.current = normalizeStockPriceChangeList(remotePriceChanges);
-    setProducts(productsRef.current);
     setMovements(movementsRef.current);
     setPriceChanges(priceChangesRef.current);
-  }, []);
+  }, [canAccessStockModule]);
 
   useEffect(() => {
     if (!authLoaded) return;
@@ -144,23 +165,39 @@ export function StockProvider({ children }: { children: React.ReactNode }) {
       setPriceChanges([]);
       setLoadError(null);
       hasLoaded.current = false;
+      lastStockAccess.current = null;
       setIsLoaded(true);
       return;
     }
 
-    if (hasLoaded.current) return;
+    if (
+      hasLoaded.current &&
+      lastStockAccess.current === canAccessStockModule
+    ) {
+      return;
+    }
+
     hasLoaded.current = true;
+    lastStockAccess.current = canAccessStockModule;
 
     queueMicrotask(() => {
       void (async () => {
         try {
           const loaded = await loadFromApi(async () => {
-            const [remoteProducts, remoteMovements, remotePriceChanges] =
-              await Promise.all([
-                fetchStockProducts(),
-                fetchStockMovements(),
-                fetchStockPriceChanges(),
-              ]);
+            const remoteProducts = await fetchStockProducts();
+
+            if (!canAccessStockModule) {
+              return {
+                products: sortProductsByName(remoteProducts),
+                movements: [] as StockMovement[],
+                priceChanges: [] as StockPriceChange[],
+              };
+            }
+
+            const [remoteMovements, remotePriceChanges] = await Promise.all([
+              fetchStockMovements(),
+              fetchStockPriceChanges(),
+            ]);
 
             return {
               products: sortProductsByName(remoteProducts),
@@ -185,7 +222,7 @@ export function StockProvider({ children }: { children: React.ReactNode }) {
         }
       })();
     });
-  }, [authLoaded, isAuthenticated]);
+  }, [authLoaded, isAuthenticated, canAccessStockModule]);
 
   const lookup = useMemo(
     () => new Map(products.map((product) => [product.id, product])),
@@ -195,6 +232,26 @@ export function StockProvider({ children }: { children: React.ReactNode }) {
   const getProductById = useCallback(
     (id: string) => lookup.get(id),
     [lookup]
+  );
+
+  const getBranchProductStockForBranch = useCallback(
+    (productId: string, branchCode: Branch) =>
+      getBranchProductStock(
+        productId,
+        branchCode,
+        movementsRef.current
+      ),
+    []
+  );
+
+  const getProductsAvailableForSale = useCallback(
+    (branchCode: Branch) =>
+      getBranchProductsForSale(
+        productsRef.current,
+        movementsRef.current,
+        branchCode
+      ),
+    []
   );
 
   const metrics = useMemo(
@@ -297,7 +354,12 @@ export function StockProvider({ children }: { children: React.ReactNode }) {
         return createValidationResult({ productId: "Item not found." });
       }
 
-      const errors = validateStockMovementInput(input, product.currentStock);
+      const branchStock = getBranchProductStock(
+        product.id,
+        input.branch,
+        movementsRef.current
+      );
+      const errors = validateStockMovementInput(input, branchStock);
       if (hasValidationErrors(errors)) {
         return createValidationResult(errors);
       }
@@ -339,6 +401,8 @@ export function StockProvider({ children }: { children: React.ReactNode }) {
       isLoaded,
       loadError,
       getProductById,
+      getBranchProductStock: getBranchProductStockForBranch,
+      getProductsAvailableForSale,
       addProduct,
       updateProduct,
       deleteProduct,
@@ -353,6 +417,8 @@ export function StockProvider({ children }: { children: React.ReactNode }) {
       isLoaded,
       loadError,
       getProductById,
+      getBranchProductStockForBranch,
+      getProductsAvailableForSale,
       addProduct,
       updateProduct,
       deleteProduct,

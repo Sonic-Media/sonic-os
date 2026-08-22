@@ -25,6 +25,7 @@ import {
   validateBranchInput,
 } from "@/lib/branch/validation";
 import { sortBranchesByName } from "@/lib/branch-storage";
+import { resolveBranchDisplayName } from "@/lib/branch/display-name";
 import { useAuth } from "@/context/auth-context";
 import { AUDIT_ACTIONS } from "@/lib/audit-log/constants";
 import { pickAuditFields } from "@/lib/audit-log/snapshots";
@@ -129,7 +130,7 @@ export function BranchesProvider({ children }: { children: React.ReactNode }) {
   );
 
   const getBranchName = useCallback(
-    (code: Branch) => lookup.get(code)?.name ?? code,
+    (code: Branch) => resolveBranchDisplayName(code, lookup.get(code)?.name),
     [lookup]
   );
 

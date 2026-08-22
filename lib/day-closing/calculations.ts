@@ -1,3 +1,4 @@
+import { branchCodesReferToSameInventory } from "@/lib/branch/codes";
 import { calculateExpenses } from "@/lib/amounts";
 import {
   computeTodayPurchaseCostByBranch,
@@ -30,7 +31,7 @@ function computeTodayOperatingExpenses(
     .filter(
       (expense) =>
         expense.date === today &&
-        expense.branch === branchCode &&
+        branchCodesReferToSameInventory(expense.branch, branchCode) &&
         !isStaffPaymentExpense(expense)
     )
     .reduce((sum, expense) => sum + expense.amount, 0);
@@ -40,7 +41,7 @@ function computeTodayOperatingExpenses(
       (entry) =>
         entry.date === today &&
         (entry.status === "completed" || entry.status === "draft") &&
-        entry.branch === branchCode
+        branchCodesReferToSameInventory(entry.branch, branchCode)
     )
     .reduce((sum, entry) => sum + calculateExpenses(entry), 0);
 
@@ -56,7 +57,7 @@ function computeTodayStaffPaymentsRecorded(
     .filter(
       (payment) =>
         payment.date === today &&
-        payment.branch === branchCode &&
+        branchCodesReferToSameInventory(payment.branch, branchCode) &&
         payment.paymentType !== "deduction"
     )
     .reduce((sum, payment) => sum + getEffectivePaymentAmount(payment), 0);

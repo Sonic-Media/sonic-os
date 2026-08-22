@@ -28,7 +28,7 @@ function resolveColumnIndexes(headerRow: unknown[]): Record<string, number> {
 
   for (const [field, aliases] of Object.entries(LEDGER_HEADERS)) {
     const matchIndex = normalizedHeaders.findIndex((header) =>
-      aliases.includes(header)
+      (aliases as readonly string[]).includes(header)
     );
     if (matchIndex >= 0) {
       indexes[field] = matchIndex;

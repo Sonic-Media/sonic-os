@@ -10,6 +10,10 @@ export async function fetchStaff(): Promise<Staff[]> {
   return apiGet<Staff[]>("/api/staff");
 }
 
+export async function fetchLinkedStaffMe(): Promise<Staff> {
+  return apiGet<Staff>("/api/staff/me");
+}
+
 export async function createStaffApi(input: StaffInput): Promise<Staff> {
   return apiPost<Staff>("/api/staff", input);
 }

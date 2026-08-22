@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
+import { branchCodesReferToSameInventory } from "@/lib/branch/codes";
 import { filterByBranchField } from "@/lib/active-branch/filters";
 import { useActiveBranch } from "@/context/active-branch-context";
 import { useExpensesModule } from "@/context/expenses-module-context";
@@ -42,7 +43,10 @@ export function useStaffPayments(range?: CashFlowDateRange) {
   const effectiveRange = range ?? getDateRangeForPeriod("month");
 
   const branchStaff = useMemo(
-    () => activeStaff.filter((member) => member.branch === activeBranch),
+    () =>
+      activeStaff.filter((member) =>
+        branchCodesReferToSameInventory(member.branch, activeBranch)
+      ),
     [activeStaff, activeBranch]
   );
 

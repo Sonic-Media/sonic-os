@@ -13,6 +13,7 @@ import { useAuth } from "@/context/auth-context";
 import { useEntriesContext } from "@/context/entries-context";
 import { useSettings } from "@/context/settings-context";
 import { useStaffPaymentsModule } from "@/context/staff-payments-context";
+import { useStaff } from "@/context/staff-context";
 import {
   computeCashDifference,
   computeDayClosingMetrics,
@@ -38,11 +39,13 @@ import {
 } from "@/lib/day-closing/storage";
 import { buildClosedDayDailyOperationEntry } from "@/lib/day-closing/entry-sync";
 import { findDraftForBranchDate } from "@/lib/entry-helpers";
+import { branchCodesReferToSameInventory } from "@/lib/branch/codes";
 import { getTodayISO } from "@/lib/dates";
 import { toStaffFacingError } from "@/lib/ux/staff-messages";
 import { AUDIT_ACTIONS } from "@/lib/audit-log/constants";
 import { pickAuditFields } from "@/lib/audit-log/snapshots";
 import { recordStaffAction, resolveStaffByUserId } from "@/lib/staff/audit";
+import { resolveStaffDisplayName } from "@/lib/ux/user-display";
 import type { Branch } from "@/types";
 import type {
   DayClosingRecord,
@@ -108,10 +111,13 @@ export function DayClosingProvider({ children }: { children: React.ReactNode }) 
   const [closings, setClosings] = useState<DayClosingRecord[]>([]);
   const [isLoaded, setIsLoaded] = useState(false);
   const closingsRef = useRef(closings);
+  const wasAuthenticated = useRef(false);
+  const lastSessionUserId = useRef<string | null>(null);
   const { session, isAuthenticated, isLoaded: authLoaded } = useAuth();
   const { settings } = useSettings();
   const { recordStaffPayment } = useStaffPaymentsModule();
   const { upsertEntry, entries, refreshEntries } = useEntriesContext();
+  const { staff } = useStaff();
 
   useEffect(() => {
     closingsRef.current = closings;
@@ -126,13 +132,31 @@ export function DayClosingProvider({ children }: { children: React.ReactNode }) 
 
   useEffect(() => {
     if (!authLoaded) return;
+
     if (!isAuthenticated) {
       closingsRef.current = [];
       setDayClosingsCache([]);
       setClosings([]);
       setIsLoaded(true);
+      wasAuthenticated.current = false;
+      lastSessionUserId.current = null;
       return;
     }
+
+    const sessionUserId = session?.userId ?? null;
+    const shouldRefresh =
+      !wasAuthenticated.current ||
+      lastSessionUserId.current !== sessionUserId;
+
+    wasAuthenticated.current = true;
+    lastSessionUserId.current = sessionUserId;
+
+    if (!shouldRefresh) {
+      setIsLoaded(true);
+      return;
+    }
+
+    setIsLoaded(false);
 
     queueMicrotask(() => {
       void (async () => {
@@ -145,7 +169,7 @@ export function DayClosingProvider({ children }: { children: React.ReactNode }) 
         }
       })();
     });
-  }, [authLoaded, isAuthenticated, refreshClosingsFromApi]);
+  }, [authLoaded, isAuthenticated, refreshClosingsFromApi, session?.userId]);
 
   const persistClosings = useCallback((next: DayClosingRecord[]) => {
     closingsRef.current = next;
@@ -226,12 +250,13 @@ export function DayClosingProvider({ children }: { children: React.ReactNode }) 
       }
 
       try {
+        const actorName = resolveStaffDisplayName(session, staff);
         const saved = await runOnApi(() =>
           openDayApi({
             branch,
             date,
             openedBy: session.userId,
-            openedByName: session.displayName,
+            openedByName: actorName,
           })
         );
 
@@ -269,8 +294,10 @@ export function DayClosingProvider({ children }: { children: React.ReactNode }) 
         });
       }
     },
-    [persistClosings, refreshEntries, session, settings.ownerName]
+    [persistClosings, refreshEntries, session, settings.ownerName, staff]
   );
+
+  const closeDay = useCallback(
     async (input: CloseDayInput): Promise<DayClosingValidationResult> => {
       const errors: Record<string, string | undefined> = {};
 
@@ -338,7 +365,9 @@ export function DayClosingProvider({ children }: { children: React.ReactNode }) 
       );
       const now = new Date().toISOString();
       const existing = closingsRef.current.find(
-        (record) => record.branch === input.branch && record.date === input.date
+        (record) =>
+          branchCodesReferToSameInventory(record.branch, input.branch) &&
+          record.date === input.date
       );
 
       try {
@@ -391,7 +420,7 @@ export function DayClosingProvider({ children }: { children: React.ReactNode }) 
           input.date
         );
 
-        upsertEntry(
+        await upsertEntry(
           buildClosedDayDailyOperationEntry({
             branch: input.branch,
             date: input.date,
@@ -410,6 +439,8 @@ export function DayClosingProvider({ children }: { children: React.ReactNode }) 
           })
         );
 
+        await refreshEntries();
+
         return createValidationResult({}, saved);
       } catch (error) {
         return createValidationResult({
@@ -420,7 +451,7 @@ export function DayClosingProvider({ children }: { children: React.ReactNode }) 
         });
       }
     },
-    [recordStaffPayment, persistClosings, session, upsertEntry, entries, settings.ownerName]
+    [recordStaffPayment, persistClosings, session, upsertEntry, entries, refreshEntries, settings.ownerName]
   );
 
   const reopenDay = useCallback(

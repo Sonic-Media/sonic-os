@@ -119,6 +119,23 @@ export async function listStaff(): Promise<Staff[]> {
   return sortStaff(staff.map(mapStaffToEntity));
 }
 
+export async function getLinkedStaffForUser(userId: string): Promise<Staff | null> {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: {
+      staff: {
+        include: staffInclude,
+      },
+    },
+  });
+
+  if (!user?.staff) {
+    return null;
+  }
+
+  return mapStaffToEntity(user.staff);
+}
+
 export async function createStaff(input: StaffInput): Promise<Staff> {
   const name = input.name.trim();
   if (!name) {

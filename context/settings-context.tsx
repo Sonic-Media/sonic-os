@@ -18,6 +18,7 @@ import {
   runOnApi,
 } from "@/lib/data-source/context-api";
 import { APP_VERSION, DEFAULT_APP_SETTINGS } from "@/lib/constants";
+import { resolveBranchDisplayName } from "@/lib/branch/display-name";
 import { buildBranchConfigs } from "@/lib/settings-storage";
 import type { AppSettings, Branch, BranchConfig } from "@/types";
 
@@ -107,7 +108,12 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
   );
 
   const getBranchName = useCallback(
-    (branch: Branch) => settings.branchNames[branch] ?? branch,
+    (branch: Branch) =>
+      resolveBranchDisplayName(
+        branch,
+        settings.branchNames[branch] ??
+          DEFAULT_APP_SETTINGS.branchNames[branch]
+      ),
     [settings.branchNames]
   );
 

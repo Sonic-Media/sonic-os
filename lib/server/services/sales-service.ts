@@ -2,13 +2,14 @@ import { ApiError } from "@/lib/api/errors";
 import { prisma } from "@/lib/db";
 import { Prisma } from "@/lib/prisma";
 import { getBranchIdForSession } from "@/lib/server/branch-lookup";
+import { getBranchProductStockByBranchId } from "@/lib/server/branch-inventory";
 import { mapSaleToEntity } from "@/lib/server/mappers/entities";
 import { getSessionFromRequest, requireSession } from "@/lib/server/session";
 import { applyStockMovement, type ProductCache } from "@/lib/server/stock-transactions";
 import { recordTransactionAudit } from "@/lib/server/transaction-audit";
 import { AUDIT_ACTIONS } from "@/lib/audit-log/constants";
 import type { AuthSession } from "@/types/auth";
-import type { Sale } from "@/types/sales";
+import type { BranchSaleProduct, Sale } from "@/types/sales";
 import type { StaffActionRecord } from "@/types/staff-session";
 
 const UUID_PATTERN =
@@ -295,6 +296,47 @@ export async function updateSaleCustomerNames(
     where: { customerId },
     data: { customerName: trimmedName },
   });
+}
+
+export async function listBranchProductsForSale(
+  branchCodeOverride?: string | null
+): Promise<BranchSaleProduct[]> {
+  const session = await requireSession();
+  const branchId = await getBranchIdForSession(
+    session,
+    branchCodeOverride?.trim() || session.branch
+  );
+
+  const products = await prisma.product.findMany({
+    orderBy: { name: "asc" },
+    select: {
+      id: true,
+      name: true,
+      buyingPrice: true,
+      sellingPrice: true,
+    },
+  });
+
+  const available: BranchSaleProduct[] = [];
+
+  for (const product of products) {
+    const branchStock = await getBranchProductStockByBranchId(
+      branchId,
+      product.id
+    );
+
+    if (branchStock <= 0) continue;
+
+    available.push({
+      id: product.id,
+      name: product.name,
+      buyingPrice: product.buyingPrice,
+      sellingPrice: product.sellingPrice,
+      branchStock,
+    });
+  }
+
+  return available;
 }
 
 export function sortSaleEntities(sales: Sale[]): Sale[] {

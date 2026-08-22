@@ -32,6 +32,7 @@ function mapSession(
       id: string;
       username: string;
       displayName: string;
+      staffId: string | null;
       role: { slug: string };
       branch: { code: string };
     };
@@ -43,6 +44,7 @@ function mapSession(
     displayName: session.user.displayName,
     role: session.user.role.slug as UserRole,
     branch: session.user.branch.code as Branch,
+    staffId: session.user.staffId ?? undefined,
     locked: session.locked,
     loggedInAt: session.createdAt.toISOString(),
   };

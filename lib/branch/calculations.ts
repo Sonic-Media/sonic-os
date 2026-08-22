@@ -1,3 +1,4 @@
+import { branchCodesReferToSameInventory } from "@/lib/branch/codes";
 import { getTodayISO } from "@/lib/dates";
 import type { BranchEntity, BranchDashboardMetrics } from "@/types/branch";
 import type { Entry } from "@/types";
@@ -25,7 +26,7 @@ export function computeTodayRevenueByBranch(
       (sale) =>
         sale.date === today &&
         sale.status === "completed" &&
-        sale.branch === branch.code
+        branchCodesReferToSameInventory(sale.branch, branch.code)
     )
     .reduce((sum, sale) => sum + sale.total, 0);
 
@@ -34,7 +35,7 @@ export function computeTodayRevenueByBranch(
       (entry) =>
         entry.date === today &&
         (entry.status === "completed" || entry.status === "draft") &&
-        entry.branch === branch.code
+        branchCodesReferToSameInventory(entry.branch, branch.code)
     )
     .reduce((sum, entry) => sum + entry.sales, 0);
 

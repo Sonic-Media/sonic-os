@@ -45,6 +45,7 @@ async function readSessionFromDatabase(
     displayName: session.user.displayName,
     role: roleSlug,
     branch: session.user.branch.code as Branch,
+    staffId: session.user.staffId ?? undefined,
     locked: session.locked,
     loggedInAt: session.createdAt.toISOString(),
   };

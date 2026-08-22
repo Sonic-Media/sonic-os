@@ -30,7 +30,7 @@ interface EntriesContextValue {
   isLoaded: boolean;
   loadError: string | null;
   refreshEntries: () => Promise<void>;
-  upsertEntry: (entry: Entry) => Entry;
+  upsertEntry: (entry: Entry) => Promise<Entry>;
   deleteEntry: (id: string) => void;
   importEntries: (entries: Entry[]) => Promise<Entry[]>;
   removeEntriesByIds: (ids: string[]) => number;
@@ -64,6 +64,7 @@ export function EntriesProvider({ children }: { children: React.ReactNode }) {
       entriesRef.current = [];
       setEntries([]);
       setLoadError(null);
+      hasLoaded.current = false;
       setIsLoaded(true);
       return;
     }
@@ -72,6 +73,7 @@ export function EntriesProvider({ children }: { children: React.ReactNode }) {
       entriesRef.current = [];
       setEntries([]);
       setLoadError(null);
+      hasLoaded.current = false;
       setIsLoaded(true);
       return;
     }
@@ -92,21 +94,14 @@ export function EntriesProvider({ children }: { children: React.ReactNode }) {
     });
   }, [authLoaded, isAuthenticated, refreshEntriesFromApi]);
 
-  const upsertEntry = useCallback((entry: Entry): Entry => {
-    void (async () => {
-      try {
-        await runOnApi(async () => {
-          const saved = await upsertDailyOperationApi(entry);
-          const next = upsertEntryInList(entriesRef.current, saved);
-          entriesRef.current = next;
-          setEntries(next);
-        });
-      } catch (error) {
-        console.error(getDataSourceErrorMessage(error));
-      }
-    })();
-
-    return entry;
+  const upsertEntry = useCallback(async (entry: Entry): Promise<Entry> => {
+    return runOnApi(async () => {
+      const saved = await upsertDailyOperationApi(entry);
+      const next = upsertEntryInList(entriesRef.current, saved);
+      entriesRef.current = next;
+      setEntries(next);
+      return saved;
+    });
   }, []);
 
   const deleteEntry = useCallback((id: string) => {

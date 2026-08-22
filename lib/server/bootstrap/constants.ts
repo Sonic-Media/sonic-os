@@ -15,7 +15,7 @@ const ALL_MODULES: StaffModule[] = [
 ];
 
 export const DEFAULT_OWNER_USERNAME = "owner";
-export const DEFAULT_OWNER_DISPLAY_NAME = "Owner";
+export const DEFAULT_OWNER_DISPLAY_NAME = "Kevin";
 
 export const PRODUCTION_ROLES = [
   {

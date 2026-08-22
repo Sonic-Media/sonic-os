@@ -11,6 +11,7 @@ import {
 } from "@/lib/server/branch-lookup";
 import { mapStaffToEntity } from "@/lib/server/mappers/entities";
 import { requireSession } from "@/lib/server/session";
+import { isRoleGreetingLabel } from "@/lib/ux/user-display";
 import { buildStaffActionRecord } from "@/lib/staff/session";
 import { upsertDailyOperation } from "@/lib/server/services/daily-operations-service";
 import type { Branch } from "@/types";
@@ -162,6 +163,21 @@ export async function listDayClosings(): Promise<DayClosingRecord[]> {
   return Promise.all(records.map((record) => mapDayClosingRecord(record)));
 }
 
+async function resolveActorDisplayName(
+  session: Awaited<ReturnType<typeof requireSession>>,
+  staffName?: string | null
+): Promise<string> {
+  if (staffName && !isRoleGreetingLabel(staffName)) {
+    return staffName;
+  }
+
+  if (!isRoleGreetingLabel(session.displayName)) {
+    return session.displayName;
+  }
+
+  return staffName ?? session.displayName;
+}
+
 async function ensureDailyOperationDraft(
   branch: Branch,
   date: string,
@@ -211,7 +227,11 @@ async function ensureDailyOperationDraft(
     notes: "",
     status: "draft",
     staffId: actor?.staff?.id,
-    staffName: actor?.staff?.name ?? session.displayName,
+    staffName: await resolveActorDisplayName(
+      session,
+      actor?.staff?.name ?? null
+    ),
+    createdAt: now.toISOString(),
   });
 }
 
@@ -219,6 +239,14 @@ export async function openDay(input: unknown): Promise<DayClosingRecord> {
   const parsed = openDaySchema.parse(input);
   const branchId = await getBranchIdByCode(parsed.branch);
   const session = await requireSession();
+
+  const actor = await prisma.user.findUnique({
+    where: { id: session.userId },
+    include: { staff: true },
+  });
+  const openedByName =
+    parsed.openedByName ??
+    (await resolveActorDisplayName(session, actor?.staff?.name ?? null));
 
   const existing = await prisma.dayClosing.findUnique({
     where: {
@@ -260,15 +288,15 @@ export async function openDay(input: unknown): Promise<DayClosingRecord> {
     update: {
       status: "open",
       openedBy: parsed.openedBy ?? session.userId,
-      openedByName: parsed.openedByName ?? session.displayName,
+      openedByName,
       openedAt: now,
-      metrics: EMPTY_METRICS as Prisma.InputJsonValue,
-      staffPayouts: [] as Prisma.InputJsonValue,
+      metrics: EMPTY_METRICS as unknown as Prisma.InputJsonValue,
+      staffPayouts: [] as unknown as Prisma.InputJsonValue,
       expectedCash: 0,
       actualCashCounted: 0,
       cashDifference: 0,
       cashStatus: "balanced",
-      summary: EMPTY_SUMMARY as Prisma.InputJsonValue,
+      summary: EMPTY_SUMMARY as unknown as Prisma.InputJsonValue,
       reconciliationNotes: null,
       closingNotes: null,
       closedBy: null,
@@ -279,15 +307,15 @@ export async function openDay(input: unknown): Promise<DayClosingRecord> {
       date: parsed.date,
       branchId,
       status: "open",
-      metrics: EMPTY_METRICS as Prisma.InputJsonValue,
-      staffPayouts: [] as Prisma.InputJsonValue,
+      metrics: EMPTY_METRICS as unknown as Prisma.InputJsonValue,
+      staffPayouts: [] as unknown as Prisma.InputJsonValue,
       expectedCash: 0,
       actualCashCounted: 0,
       cashDifference: 0,
       cashStatus: "balanced",
-      summary: EMPTY_SUMMARY as Prisma.InputJsonValue,
+      summary: EMPTY_SUMMARY as unknown as Prisma.InputJsonValue,
       openedBy: parsed.openedBy ?? session.userId,
-      openedByName: parsed.openedByName ?? session.displayName,
+      openedByName,
       openedAt: now,
     },
   });
@@ -301,7 +329,7 @@ export async function closeDay(input: unknown): Promise<DayClosingRecord> {
   const parsed = closeDaySchema.parse(input);
   const branchId = await getBranchIdByCode(parsed.branch);
   const session = await requireSession();
-  const summary = parsed.summary as DayClosingSummary;
+  const summary = parsed.summary as unknown as DayClosingSummary;
 
   const existing = await prisma.dayClosing.findUnique({
     where: {
@@ -336,14 +364,14 @@ export async function closeDay(input: unknown): Promise<DayClosingRecord> {
     },
     update: {
       status: "closed",
-      metrics: parsed.metrics as Prisma.InputJsonValue,
-      staffPayouts: parsed.staffPayouts as Prisma.InputJsonValue,
+      metrics: parsed.metrics as unknown as Prisma.InputJsonValue,
+      staffPayouts: parsed.staffPayouts as unknown as Prisma.InputJsonValue,
       expectedCash: parsed.expectedCash,
       actualCashCounted: parsed.actualCashCounted,
       cashDifference: parsed.cashDifference,
       cashStatus: parsed.cashStatus,
       reconciliationNotes: parsed.reconciliationNotes?.trim() || null,
-      summary: parsed.summary as Prisma.InputJsonValue,
+      summary: parsed.summary as unknown as Prisma.InputJsonValue,
       closedBy: parsed.closedBy ?? null,
       closedByName: parsed.closedByName ?? null,
       closedAt: now,
@@ -356,14 +384,14 @@ export async function closeDay(input: unknown): Promise<DayClosingRecord> {
       date: parsed.date,
       branchId,
       status: "closed",
-      metrics: parsed.metrics as Prisma.InputJsonValue,
-      staffPayouts: parsed.staffPayouts as Prisma.InputJsonValue,
+      metrics: parsed.metrics as unknown as Prisma.InputJsonValue,
+      staffPayouts: parsed.staffPayouts as unknown as Prisma.InputJsonValue,
       expectedCash: parsed.expectedCash,
       actualCashCounted: parsed.actualCashCounted,
       cashDifference: parsed.cashDifference,
       cashStatus: parsed.cashStatus,
       reconciliationNotes: parsed.reconciliationNotes?.trim() || null,
-      summary: parsed.summary as Prisma.InputJsonValue,
+      summary: parsed.summary as unknown as Prisma.InputJsonValue,
       closedBy: parsed.closedBy ?? null,
       closedByName: parsed.closedByName ?? null,
       closedAt: now,

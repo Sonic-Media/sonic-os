@@ -3,10 +3,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/shared/ui/button";
 import { Input } from "@/components/shared/ui/input";
-import { useAuth } from "@/context/auth-context";
 import { useSettings } from "@/context/settings-context";
-import { useStaff } from "@/context/staff-context";
 import { useStaffPaymentsModule } from "@/context/staff-payments-context";
+import { useLinkedStaff } from "@/hooks/use-linked-staff";
+import { branchCodesReferToSameInventory } from "@/lib/branch/codes";
 import { formatCurrency } from "@/lib/format";
 import { getStaffRoleName } from "@/lib/staff/roles";
 import { DEFAULT_DAILY_WAGE } from "@/lib/staff/constants";
@@ -23,29 +23,20 @@ export function StaffPaymentSection({
   date,
   readOnly = false,
 }: StaffPaymentSectionProps) {
-  const { session } = useAuth();
-  const { staff } = useStaff();
+  const { linkedStaff: loggedInStaff, isLoaded: staffLoaded } =
+    useLinkedStaff(branch);
   const { getBranchName } = useSettings();
   const {
     payments,
     recordStaffPaymentAsync,
   } = useStaffPaymentsModule();
 
-  const loggedInStaff = useMemo(
-    () =>
-      staff.find(
-        (member) =>
-          member.userId === session?.userId &&
-          member.branch === branch &&
-          member.active !== false
-      ),
-    [branch, session?.userId, staff]
-  );
-
   const branchPayments = useMemo(
     () =>
       payments.filter(
-        (payment) => payment.branch === branch && payment.date === date
+        (payment) =>
+          branchCodesReferToSameInventory(payment.branch, branch) &&
+          payment.date === date
       ),
     [payments, branch, date]
   );
@@ -111,7 +102,11 @@ export function StaffPaymentSection({
         Staff Payment
       </h3>
 
-      {!loggedInStaff ? (
+      {!staffLoaded ? (
+        <div className="rounded-xl border border-zinc-800/80 bg-zinc-900/40 px-4 py-3">
+          <p className="text-sm text-zinc-500">Loading staff profile...</p>
+        </div>
+      ) : !loggedInStaff ? (
         <div className="rounded-xl border border-zinc-800/80 bg-zinc-900/40 px-4 py-3">
           <p className="text-sm text-zinc-400">
             No staff profile is linked to your account for this branch.

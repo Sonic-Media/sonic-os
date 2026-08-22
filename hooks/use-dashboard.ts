@@ -13,6 +13,7 @@ import { resolveStaffDisplayName } from "@/lib/ux/user-display";
 import { getDashboardChartData } from "@/lib/chart-data";
 import { getDashboardAnalytics } from "@/lib/report-insights";
 import { filterByBranchField } from "@/lib/active-branch/filters";
+import { branchCodesReferToSameInventory } from "@/lib/branch/codes";
 import { useActiveBranch } from "@/context/active-branch-context";
 import { useAuth } from "@/context/auth-context";
 import { useEntriesContext } from "@/context/entries-context";
@@ -56,7 +57,9 @@ export function useDashboard() {
     const analytics = getDashboardAnalytics(branchEntries, period, {
       branchIds,
       branchNames: settings.branchNames,
-      staff: staff.filter((member) => member.branch === activeBranch),
+      staff: staff.filter((member) =>
+        branchCodesReferToSameInventory(member.branch, activeBranch)
+      ),
     });
     const chartData = getDashboardChartData(
       branchEntries,

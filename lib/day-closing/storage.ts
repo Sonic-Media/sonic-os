@@ -1,5 +1,10 @@
+import { branchCodesReferToSameInventory } from "@/lib/branch/codes";
 import type { Branch } from "@/types";
 import type { DayClosingRecord, DayClosingStatus } from "@/types/day-closing";
+
+function matchesBranch(recordBranch: Branch, branch: Branch): boolean {
+  return branchCodesReferToSameInventory(recordBranch, branch);
+}
 
 let cachedClosings: DayClosingRecord[] = [];
 
@@ -44,7 +49,7 @@ export function getClosedDayRecord(
 ): DayClosingRecord | undefined {
   return records.find(
     (record) =>
-      record.branch === branch &&
+      matchesBranch(record.branch, branch) &&
       record.date === date &&
       record.status === "closed"
   );
@@ -57,7 +62,7 @@ export function getOpenDayRecord(
 ): DayClosingRecord | undefined {
   return records.find(
     (record) =>
-      record.branch === branch &&
+      matchesBranch(record.branch, branch) &&
       record.date === date &&
       record.status === "open"
   );

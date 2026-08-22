@@ -5,6 +5,7 @@ import {
   isInPeriod,
 } from "@/lib/dates";
 import { parseAmount } from "@/lib/amounts";
+import { branchCodesReferToSameInventory } from "@/lib/branch/codes";
 import { DEFAULT_BRANCH_CODE } from "@/lib/constants";
 import { prepareExpensesForSave } from "@/lib/expenses";
 import {
@@ -39,6 +40,12 @@ export function entryToForm(entry: Entry): EntryFormData {
   };
 }
 
+function normalizeOptionalStaffId(value: string | undefined): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  return trimmed || undefined;
+}
+
 export function formToEntry(
   form: EntryFormData,
   options?: {
@@ -57,7 +64,9 @@ export function formToEntry(
     resolveCurrentStaffAction(form.branch);
   const legacy = legacyStaffFields(createdBy);
   const staffId =
-    legacy.staffId ?? existing?.staffId ?? (form.staffId || undefined);
+    normalizeOptionalStaffId(legacy.staffId) ??
+    normalizeOptionalStaffId(existing?.staffId) ??
+    normalizeOptionalStaffId(form.staffId);
   const staffName =
     options?.staffName?.trim() ??
     legacy.staffName ??
@@ -99,7 +108,7 @@ export function findCompletedEntryForBranchDate(
   return entries.find(
     (entry) =>
       entry.status === "completed" &&
-      entry.branch === branch &&
+      branchCodesReferToSameInventory(entry.branch, branch) &&
       entry.date === date &&
       entry.id !== excludeId
   );
@@ -124,7 +133,8 @@ export function findMostRecentEntryForDate(
       (entry) =>
         entry.status === status &&
         entry.date === date &&
-        (branch === undefined || entry.branch === branch)
+        (branch === undefined ||
+          branchCodesReferToSameInventory(entry.branch, branch))
     )
     .sort((a, b) => b.timestamp - a.timestamp)[0];
 }

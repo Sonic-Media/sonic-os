@@ -160,6 +160,7 @@ export function StaffProvider({ children }: { children: React.ReactNode }) {
   const [isLoaded, setIsLoaded] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const hasLoaded = useRef(false);
+  const wasAuthenticated = useRef(false);
   const staffRef = useRef(staff);
 
   useEffect(() => {
@@ -178,6 +179,12 @@ export function StaffProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!authLoaded) return;
+
+    if (isAuthenticated && !wasAuthenticated.current) {
+      hasLoaded.current = false;
+    }
+    wasAuthenticated.current = isAuthenticated;
+
     if (hasLoaded.current && !isAuthenticated) {
       staffRef.current = [];
       setStaff([]);

@@ -22,6 +22,7 @@ export interface AuthSession {
   displayName: string;
   role: UserRole;
   branch: Branch;
+  staffId?: string;
   locked: boolean;
   loggedInAt: string;
 }

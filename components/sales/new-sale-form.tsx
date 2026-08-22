@@ -9,8 +9,11 @@ import { Select } from "@/components/shared/ui/select";
 import { Textarea } from "@/components/shared/ui/textarea";
 import { TotalsField } from "@/components/shared/totals-grid";
 import { useActiveBranch } from "@/context/active-branch-context";
+import { useAuth } from "@/context/auth-context";
 import { useSales } from "@/context/sales-context";
-import { useStock } from "@/context/stock-context";
+import { useBranchSaleProducts } from "@/hooks/use-branch-sale-products";
+import { resolveSaleBranch } from "@/lib/branch/access";
+import { roleHasModuleAccess } from "@/lib/staff/permissions";
 import { formatCurrency } from "@/lib/format";
 import { computeSalePreview } from "@/lib/sales/calculations";
 import { SALE_PAYMENT_METHODS } from "@/lib/sales/constants";
@@ -25,8 +28,17 @@ export function NewSaleForm({
   onSuccess?: () => void;
 } = {}) {
   const router = useRouter();
+  const { session } = useAuth();
   const { activeBranch } = useActiveBranch();
-  const { products } = useStock();
+  const saleBranch = resolveSaleBranch(session, activeBranch);
+  const {
+    products: availableProducts,
+    isLoaded: productsLoaded,
+    loadError: productsLoadError,
+    refresh: refreshBranchProducts,
+  } = useBranchSaleProducts(saleBranch, Boolean(session));
+  const canAccessStock =
+    session !== null && roleHasModuleAccess(session.role, "stock");
   const { customers, completeSale } = useSales();
 
   const [productId, setProductId] = useState("");
@@ -39,15 +51,17 @@ export function NewSaleForm({
   const [errors, setErrors] = useState<Record<string, string | undefined>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const selectedProduct = products.find((product) => product.id === productId);
+  const selectedProduct = availableProducts.find(
+    (product) => product.id === productId
+  );
 
   const productOptions = useMemo(
     () =>
-      products.map((product) => ({
+      availableProducts.map((product) => ({
         value: product.id,
-        label: `${product.name} (${product.currentStock.toLocaleString("en-UG")} in stock)`,
+        label: `${product.name} (${product.branchStock.toLocaleString("en-UG")} in stock)`,
       })),
-    [products]
+    [availableProducts]
   );
 
   const customerOptions = useMemo(
@@ -89,7 +103,7 @@ export function NewSaleForm({
 
   function handleProductChange(nextProductId: string) {
     setProductId(nextProductId);
-    const product = products.find((item) => item.id === nextProductId);
+    const product = availableProducts.find((item) => item.id === nextProductId);
     if (product) {
       setUnitPrice(String(product.sellingPrice));
     }
@@ -115,8 +129,11 @@ export function NewSaleForm({
       discount: Number.isFinite(parsedDiscount) ? parsedDiscount : 0,
       customerId: customerId || undefined,
       paymentMethod: paymentMethod as SalePaymentMethod,
-      branch: activeBranch,
+      branch: saleBranch,
       notes,
+      branchStock: selectedProduct.branchStock,
+      buyingPrice: selectedProduct.buyingPrice,
+      productName: selectedProduct.name,
     });
 
     setIsSubmitting(false);
@@ -135,21 +152,41 @@ export function NewSaleForm({
       setCustomerId("");
       setPaymentMethod("");
       setNotes("");
+      void refreshBranchProducts();
       return;
     }
 
+    void refreshBranchProducts();
     router.push("/sales/history");
   }
 
-  if (products.length === 0) {
+  if (!productsLoaded) {
     return (
       <Card>
-        <p className="text-sm text-zinc-400">
-          {inline
-            ? "No accessory items are available to sell yet. Ask the owner to add stock."
-            : "Add items to stock before recording sales."}
-        </p>
-        {!inline && (
+        <p className="text-sm text-zinc-400">Loading products…</p>
+      </Card>
+    );
+  }
+
+  if (productsLoadError) {
+    return (
+      <Card>
+        <p className="text-sm text-red-400">{productsLoadError}</p>
+      </Card>
+    );
+  }
+
+  if (availableProducts.length === 0) {
+    const emptyMessage = canAccessStock
+      ? inline
+        ? "No accessory items are available to sell yet. Ask the owner to add stock."
+        : "Add items to stock before recording sales."
+      : "No products are currently available for sale.\nPlease contact your manager.";
+
+    return (
+      <Card>
+        <p className="whitespace-pre-line text-sm text-zinc-400">{emptyMessage}</p>
+        {!inline && canAccessStock && (
           <Button href="/stock/products" variant="secondary" className="mt-4">
             Go to Stock
           </Button>
@@ -208,7 +245,7 @@ export function NewSaleForm({
               {selectedProduct && (
                 <p className="mt-1 text-xs text-zinc-500">
                   Available:{" "}
-                  {selectedProduct.currentStock.toLocaleString("en-UG")}
+                  {selectedProduct.branchStock.toLocaleString("en-UG")}
                 </p>
               )}
             </div>

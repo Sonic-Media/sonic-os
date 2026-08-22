@@ -18,6 +18,7 @@ import {
 } from "@/lib/api/customers";
 import { createSaleApi, fetchSales } from "@/lib/api/sales";
 import { useAuth } from "@/context/auth-context";
+import { roleHasModuleAccess } from "@/lib/staff/permissions";
 import {
   getDataSourceErrorMessage,
   loadFromApi,
@@ -92,8 +93,10 @@ function createValidationResult(
 }
 
 export function SalesProvider({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, isLoaded: authLoaded } = useAuth();
-  const { getProductById, refreshStockFromApi } = useStock();
+  const { isAuthenticated, isLoaded: authLoaded, session } = useAuth();
+  const { getProductById, refreshStockFromApi, getBranchProductStock } = useStock();
+  const canAccessStockModule =
+    session !== null && roleHasModuleAccess(session.role, "stock");
 
   const [sales, setSales] = useState<Sale[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -272,11 +275,20 @@ export function SalesProvider({ children }: { children: React.ReactNode }) {
       }
 
       const product = getProductById(input.productId);
-      if (!product) {
+      const buyingPrice = product?.buyingPrice ?? input.buyingPrice;
+      const productName = product?.name ?? input.productName;
+
+      if (!buyingPrice || !productName) {
         return createValidationResult({ productId: "Item not found." });
       }
 
-      const errors = validateSaleInput(input, product.currentStock);
+      const availableStock =
+        input.branchStock ??
+        (product
+          ? getBranchProductStock(input.productId, input.branch)
+          : 0);
+
+      const errors = validateSaleInput(input, availableStock);
       if (hasValidationErrors(errors)) {
         return createValidationResult(errors);
       }
@@ -293,7 +305,7 @@ export function SalesProvider({ children }: { children: React.ReactNode }) {
       const preview = computeSalePreview(
         input.quantity,
         input.unitPrice,
-        product.buyingPrice,
+        buyingPrice,
         discount
       );
 
@@ -305,11 +317,11 @@ export function SalesProvider({ children }: { children: React.ReactNode }) {
       const legacy = legacyStaffFields(actor);
 
       const lineItem = {
-        productId: product.id,
-        productName: product.name,
+        productId: input.productId,
+        productName,
         quantity: input.quantity,
         unitPrice: input.unitPrice,
-        buyingPrice: product.buyingPrice,
+        buyingPrice,
         lineTotal: preview.subtotal,
       };
 
@@ -342,7 +354,9 @@ export function SalesProvider({ children }: { children: React.ReactNode }) {
         const saved = await runOnApi(async () => {
           const created = await createSaleApi(sale);
           await refreshSalesFromApi();
-          await refreshStockFromApi();
+          if (canAccessStockModule) {
+            await refreshStockFromApi();
+          }
 
           recordStaffAction({
             staffId: actor?.staffId,
@@ -374,7 +388,7 @@ export function SalesProvider({ children }: { children: React.ReactNode }) {
         saleInFlight.current = false;
       }
     },
-    [getProductById, getCustomerById, refreshSalesFromApi, refreshStockFromApi]
+    [canAccessStockModule, getBranchProductStock, getCustomerById, refreshSalesFromApi, refreshStockFromApi]
   );
 
   const value = useMemo(

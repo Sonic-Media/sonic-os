@@ -9,7 +9,7 @@ import {
   DEFAULT_BRANCH_NAME,
   DEFAULT_EXPENSE_TEMPLATES,
 } from "@/lib/constants";
-import { prisma, verifyDatabaseConnection } from "@/lib/db";
+import { prisma, resetPrismaClientCache, verifyDatabaseConnection } from "@/lib/db";
 import { getTodayISO } from "@/lib/dates";
 import { clearBranchLookupCache } from "@/lib/server/branch-lookup";
 import {
@@ -27,7 +27,13 @@ export async function runDatabaseConnectionStage(): Promise<void> {
 }
 
 export async function runMigrationsVerifiedStage(): Promise<void> {
-  return;
+  await prisma.$executeRaw`
+    ALTER TABLE "DayClosing" ADD COLUMN IF NOT EXISTS "openedBy" TEXT;
+    ALTER TABLE "DayClosing" ADD COLUMN IF NOT EXISTS "openedByName" TEXT;
+    ALTER TABLE "DayClosing" ADD COLUMN IF NOT EXISTS "openedAt" TIMESTAMP(3);
+  `;
+
+  resetPrismaClientCache();
 }
 
 export async function runBranchesStage(): Promise<void> {
@@ -138,7 +144,7 @@ export async function runOwnerUserStage(): Promise<void> {
   await prisma.user.upsert({
     where: { username: DEFAULT_OWNER_USERNAME },
     update: {
-      displayName: DEFAULT_OWNER_DISPLAY_NAME,
+      displayName: DEFAULT_APP_SETTINGS.ownerName,
       passwordHash,
       roleId: ownerRole.id,
       branchId,
@@ -146,7 +152,7 @@ export async function runOwnerUserStage(): Promise<void> {
     },
     create: {
       username: DEFAULT_OWNER_USERNAME,
-      displayName: DEFAULT_OWNER_DISPLAY_NAME,
+      displayName: DEFAULT_APP_SETTINGS.ownerName,
       passwordHash,
       roleId: ownerRole.id,
       branchId,
@@ -189,6 +195,13 @@ export async function runOwnerStaffStage(): Promise<void> {
   });
 
   if (existingStaff) {
+    const ownerName = DEFAULT_APP_SETTINGS.ownerName;
+    if (existingStaff.name !== ownerName) {
+      await prisma.staff.update({
+        where: { id: existingStaff.id },
+        data: { name: ownerName },
+      });
+    }
     return;
   }
 
@@ -198,7 +211,7 @@ export async function runOwnerStaffStage(): Promise<void> {
 
   await prisma.staff.create({
     data: {
-      name: ownerUser.displayName,
+      name: DEFAULT_APP_SETTINGS.ownerName,
       username: DEFAULT_OWNER_USERNAME,
       branchId: ownerUser.branchId,
       roleId: staffRole.id,

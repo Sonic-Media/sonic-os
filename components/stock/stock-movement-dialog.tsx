@@ -29,7 +29,7 @@ export function StockMovementDialog({
   onClose,
   onSuccess,
 }: StockMovementDialogProps) {
-  const { products, recordMovement } = useStock();
+  const { products, recordMovement, getBranchProductStock } = useStock();
   const [productId, setProductId] = useState(initialProductId ?? "");
   const [quantity, setQuantity] = useState("");
   const [reason, setReason] = useState("");
@@ -38,11 +38,14 @@ export function StockMovementDialog({
 
   const productOptions = useMemo(
     () =>
-      products.map((product) => ({
-        value: product.id,
-        label: `${product.name} (${product.currentStock.toLocaleString("en-UG")} in stock)`,
-      })),
-    [products]
+      products.map((product) => {
+        const branchStock = getBranchProductStock(product.id, defaultBranch);
+        return {
+          value: product.id,
+          label: `${product.name} (${branchStock.toLocaleString("en-UG")} in stock)`,
+        };
+      }),
+    [defaultBranch, getBranchProductStock, products]
   );
 
   const reasonOptions = STOCK_MOVEMENT_REASONS[movementType].map((item) => ({
@@ -51,6 +54,9 @@ export function StockMovementDialog({
   }));
 
   const selectedProduct = products.find((product) => product.id === productId);
+  const selectedBranchStock = selectedProduct
+    ? getBranchProductStock(selectedProduct.id, defaultBranch)
+    : 0;
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
@@ -74,9 +80,9 @@ export function StockMovementDialog({
       movementType === "out" &&
       selectedProduct &&
       parsedQuantity !== null &&
-      parsedQuantity > selectedProduct.currentStock
+      parsedQuantity > selectedBranchStock
     ) {
-      nextErrors.quantity = `Cannot remove more than current stock (${selectedProduct.currentStock.toLocaleString("en-UG")}).`;
+      nextErrors.quantity = `Cannot remove more than current stock (${selectedBranchStock.toLocaleString("en-UG")}).`;
     }
 
     if (Object.values(nextErrors).some(Boolean)) {
@@ -171,7 +177,7 @@ export function StockMovementDialog({
               />
               {selectedProduct && (
                 <p className="mt-1 text-xs text-zinc-500">
-                  Available: {selectedProduct.currentStock.toLocaleString("en-UG")}
+                  Available: {selectedBranchStock.toLocaleString("en-UG")}
                 </p>
               )}
             </div>

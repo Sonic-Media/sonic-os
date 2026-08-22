@@ -30,6 +30,7 @@ import type {
   ExpenseRecordUpdateInput,
 } from "@/types/expenses-module";
 import type { StaffActionRecord } from "@/types/staff-session";
+import type { StaffRoleId } from "@/types/staff-role";
 
 const expenseInclude = { branch: true } as const;
 
@@ -40,31 +41,31 @@ async function resolveExpenseStaff(
 ): Promise<{
   staffId: string | null;
   staffName: string | null;
-  staffRole: string | null;
+  staffRole: StaffRoleId | null;
 }> {
   let staffId = createdBy?.staffId ?? null;
   let staffName = createdBy?.staffName ?? null;
-  let staffRole = createdBy?.role ?? null;
+  let staffRole: StaffRoleId | null = createdBy?.role ?? null;
 
   if (!staffId) {
     const user = await tx.user.findUnique({
       where: { id: session.userId },
-      include: { staff: true },
+      include: { staff: { include: { role: true } } },
     });
     if (user?.staffId) {
       staffId = user.staffId;
       staffName = user.staff?.name ?? null;
-      staffRole = user.staff?.role ?? null;
+      staffRole = (user.staff?.role?.slug as StaffRoleId | undefined) ?? null;
     }
   }
 
   if (staffId && !staffName) {
     const staffMember = await tx.staff.findUnique({
       where: { id: staffId },
-      select: { name: true, role: true },
+      select: { name: true, role: { select: { slug: true } } },
     });
     staffName = staffMember?.name ?? null;
-    staffRole = staffRole ?? staffMember?.role ?? null;
+    staffRole = staffRole ?? (staffMember?.role?.slug as StaffRoleId | undefined) ?? null;
   }
 
   return { staffId, staffName, staffRole };

@@ -92,7 +92,7 @@ export function CloseDayWorkspace({
   const { purchases } = usePurchasing();
   const { expenses } = useExpensesModule();
   const { payments } = useStaffPaymentsModule();
-  const { entries } = useEntriesContext();
+  const { entries, refreshEntries } = useEntriesContext();
   const { staff } = useStaff();
   const { session } = useAuth();
   const { settings } = useSettings();
@@ -233,8 +233,10 @@ export function CloseDayWorkspace({
 
   function handleCloseSuccessDone() {
     setCloseSuccessRecord(undefined);
-    onCloseComplete?.();
-    router.push(redirectAfterClose);
+    void refreshEntries().finally(() => {
+      onCloseComplete?.();
+      router.push(redirectAfterClose);
+    });
   }
 
   const staffName = resolveStaffDisplayName(session, staff);
@@ -246,7 +248,6 @@ export function CloseDayWorkspace({
         record={closeSuccessRecord}
         movieRevenue={movieRevenue}
         accessorySales={accessorySales}
-        savings={savings}
         onDone={handleCloseSuccessDone}
       />
     );

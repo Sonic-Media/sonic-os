@@ -52,6 +52,10 @@ function resetCachedClient(): void {
   }
 }
 
+export function resetPrismaClientCache(): void {
+  resetCachedClient();
+}
+
 export function getPrismaClient(): PrismaClient {
   const connectionString = getDatabaseUrl();
 

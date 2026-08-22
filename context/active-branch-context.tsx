@@ -12,6 +12,8 @@ import {
 import { setActiveBranchApi } from "@/lib/api/auth";
 import { getDataSourceErrorMessage } from "@/lib/data-source/context-api";
 import { DEFAULT_BRANCH_CODE } from "@/lib/constants";
+import { canSwitchActiveBranch } from "@/lib/branch/access";
+import { resolveInventoryBranchCode } from "@/lib/branch/codes";
 import { useAuth } from "@/context/auth-context";
 import { useBranches } from "@/context/branches-context";
 import type { Branch } from "@/types";
@@ -44,6 +46,7 @@ export function ActiveBranchProvider({
     if (!authLoaded || !branchesLoaded) return;
 
     if (!isAuthenticated || !session) {
+      hasInitialized.current = false;
       setActiveBranchState(DEFAULT_BRANCH_CODE);
       setIsLoaded(true);
       return;
@@ -82,6 +85,10 @@ export function ActiveBranchProvider({
         nextBranch = activeBranches[0].code;
       }
 
+      if (session && !canSwitchActiveBranch(session.role)) {
+        nextBranch = resolveInventoryBranchCode(session.branch);
+      }
+
       setActiveBranchState(nextBranch);
       setIsLoaded(true);
     })();
@@ -96,6 +103,11 @@ export function ActiveBranchProvider({
 
   const setActiveBranch = useCallback(
     async (branch: Branch) => {
+      if (session && !canSwitchActiveBranch(session.role)) {
+        setActiveBranchState(resolveInventoryBranchCode(session.branch));
+        return;
+      }
+
       const normalized = branch.trim().toLowerCase();
       setActiveBranchState(normalized);
 

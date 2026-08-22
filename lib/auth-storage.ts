@@ -115,6 +115,10 @@ function normalizeAuthSession(value: unknown): AuthSession | null {
     displayName,
     role,
     branch: normalizeBranch(raw.branch),
+    staffId:
+      typeof raw.staffId === "string" && raw.staffId.trim()
+        ? raw.staffId.trim()
+        : undefined,
     locked: raw.locked === true,
     loggedInAt:
       typeof raw.loggedInAt === "string" && raw.loggedInAt.trim()
@@ -150,6 +154,7 @@ export function createSessionFromUser(user: AppUser): AuthSession {
     displayName: user.displayName,
     role: user.role,
     branch: user.branch,
+    staffId: user.staffId,
     locked: false,
     loggedInAt: new Date().toISOString(),
   };

@@ -1,6 +1,7 @@
 import { ApiError } from "@/lib/api/errors";
 import type { Prisma } from "@/lib/prisma";
 import { computeWeightedAverageBuyingPrice } from "@/lib/purchasing/calculations";
+import { assertSufficientBranchStock } from "@/lib/server/branch-inventory";
 import { toJsonField } from "@/lib/server/json-fields";
 import { computeProductStatus } from "@/lib/stock/product-status";
 import type { StaffActionRecord } from "@/types/staff-session";
@@ -55,6 +56,15 @@ export async function applyStockMovement(
       status: 400,
       code: "validation_error",
     });
+  }
+
+  if (input.movement === "out") {
+    await assertSufficientBranchStock(
+      tx,
+      input.branchId,
+      input.productId,
+      input.quantity
+    );
   }
 
   const nextStock =

@@ -17,7 +17,10 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const entry = await withDatabase(() => upsertDailyOperation(body));
+    const entry = await withDatabase(() => upsertDailyOperation(body), {
+      request,
+      module: "operations",
+    });
     return jsonCreated(entry);
   } catch (error) {
     return handleRouteError(error);

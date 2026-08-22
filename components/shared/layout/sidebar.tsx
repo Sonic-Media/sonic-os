@@ -18,7 +18,9 @@ export function Sidebar() {
   const { staff } = useStaff();
 
   const linkedStaff = session
-    ? staff.find((member) => member.userId === session.userId)
+    ? session.staffId
+      ? staff.find((member) => member.id === session.staffId)
+      : staff.find((member) => member.userId === session.userId)
     : undefined;
 
   const visibleNavItems = navItems.filter((item) =>

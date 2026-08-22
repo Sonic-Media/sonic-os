@@ -223,7 +223,7 @@ function StaffRow({ member }: { member: Staff }) {
 }
 
 export function StaffSection() {
-  const { staff, addStaff, linkStaffAccount } = useStaff();
+  const { staff, addStaff, linkStaffAccount, isLoaded, loadError } = useStaff();
   const { addUser } = useAuth();
   const { activeBranches } = useBranches();
 
@@ -325,7 +325,11 @@ export function StaffSection() {
       </h3>
 
       <div className="space-y-3 mb-4">
-        {staff.length === 0 ? (
+        {loadError ? (
+          <p className="text-sm text-red-400">{loadError}</p>
+        ) : !isLoaded ? (
+          <p className="text-sm text-zinc-500">Loading staff...</p>
+        ) : staff.length === 0 ? (
           <p className="text-sm text-zinc-500">No staff members yet.</p>
         ) : (
           staff.map((member) => <StaffRow key={member.id} member={member} />)

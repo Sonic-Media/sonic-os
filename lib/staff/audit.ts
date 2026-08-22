@@ -40,6 +40,12 @@ export function getStaffAuditRecords(): StaffAuditRecord[] {
 export function resolveStaffFromSession(): Staff | undefined {
   const session = getClientSession();
   if (!session) return undefined;
+
+  if (session.staffId) {
+    const byId = staffListCache.find((member) => member.id === session.staffId);
+    if (byId) return byId;
+  }
+
   return staffListCache.find((member) => member.userId === session.userId);
 }
 

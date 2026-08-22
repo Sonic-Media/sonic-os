@@ -16,6 +16,12 @@ import {
 import { createDefaultExpenses } from "@/lib/expenses";
 import { getTodayISO } from "@/lib/dates";
 import { upsertEntryInList } from "@/lib/storage";
+import { getDataSourceErrorMessage } from "@/lib/data-source/context-api";
+import { getClientSession } from "@/lib/client/session-registry";
+import {
+  buildStaffActionRecord,
+  resolveCurrentStaffAction,
+} from "@/lib/staff/session";
 import { useActiveBranch } from "@/context/active-branch-context";
 import { useEntriesContext } from "@/context/entries-context";
 import { useExpenseTemplates } from "@/context/expense-templates-context";
@@ -75,6 +81,8 @@ export function useEntryForm(options: UseEntryFormOptions = {}) {
         )
   );
   const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [lastSavedAt, setLastSavedAt] = useState<number | null>(null);
   const [duplicateEntry, setDuplicateEntry] = useState<Entry | null>(null);
   const [hasStarted, setHasStarted] = useState(isEdit);
   const hasInteracted = useRef(isEdit);
@@ -146,6 +154,12 @@ export function useEntryForm(options: UseEntryFormOptions = {}) {
 
   const resolveStaffName = useCallback(
     (existing?: Entry) => {
+      const session = getClientSession();
+      if (session?.staffId) {
+        const linkedStaff = getStaffById(session.staffId);
+        if (linkedStaff) return linkedStaff.name;
+      }
+
       if (!form.staffId) {
         return existing?.staffName ?? "";
       }
@@ -154,6 +168,36 @@ export function useEntryForm(options: UseEntryFormOptions = {}) {
     [form.staffId, getStaffById]
   );
 
+  const resolveCreatedBy = useCallback(
+    (branch: Branch) => {
+      const session = getClientSession();
+      if (session?.staffId) {
+        const linkedStaff = getStaffById(session.staffId);
+        if (linkedStaff) {
+          return buildStaffActionRecord(
+            linkedStaff,
+            new Date().toISOString(),
+            branch
+          );
+        }
+      }
+
+      return resolveCurrentStaffAction(branch);
+    },
+    [getStaffById]
+  );
+
+  const buildDraftEntry = useCallback(
+    (activeDraftId?: string | null, existing?: Entry) =>
+      formToEntry(form, {
+        id: activeDraftId ?? undefined,
+        status: "draft",
+        existing,
+        staffName: resolveStaffName(existing),
+        createdBy: resolveCreatedBy(form.branch),
+      }),
+    [form, resolveCreatedBy, resolveStaffName]
+  );
 
   function promoteToCompletedSync(
     entryId: string,
@@ -201,6 +245,8 @@ export function useEntryForm(options: UseEntryFormOptions = {}) {
 
     hasInteracted.current = true;
     setHasStarted(true);
+    setSaveError(null);
+    setLastSavedAt(null);
   }
 
   useEffect(() => {
@@ -222,24 +268,23 @@ export function useEntryForm(options: UseEntryFormOptions = {}) {
       if (saveLockRef.current) return;
 
       saveLockRef.current = true;
-      try {
-        const activeDraftId = resolveActiveDraftId();
-        const existing = activeDraftId
-          ? entriesRef.current.find((entry) => entry.id === activeDraftId)
-          : undefined;
-        const entry = formToEntry(form, {
-          id: activeDraftId ?? undefined,
-          status: "draft",
-          existing,
-          staffName: resolveStaffName(existing),
-        });
+      const activeDraftId = resolveActiveDraftId();
+      const existing = activeDraftId
+        ? entriesRef.current.find((entry) => entry.id === activeDraftId)
+        : undefined;
+      const entry = buildDraftEntry(activeDraftId, existing);
 
-        upsertEntry(entry);
-        syncEntriesRef(entry);
-        draftIdRef.current = entry.id;
-      } finally {
-        saveLockRef.current = false;
-      }
+      void upsertEntry(entry)
+        .then((saved) => {
+          syncEntriesRef(saved);
+          draftIdRef.current = saved.id;
+        })
+        .catch((error) => {
+          console.error(getDataSourceErrorMessage(error));
+        })
+        .finally(() => {
+          saveLockRef.current = false;
+        });
     }, AUTOSAVE_DEBOUNCE_MS);
 
     return cancelPendingAutosave;
@@ -251,7 +296,7 @@ export function useEntryForm(options: UseEntryFormOptions = {}) {
     cancelPendingAutosave,
     resolveActiveDraftId,
     syncEntriesRef,
-    resolveStaffName,
+    buildDraftEntry,
   ]);
 
   function updateField<K extends keyof EntryFormData>(
@@ -285,11 +330,15 @@ export function useEntryForm(options: UseEntryFormOptions = {}) {
       }
       hasInteracted.current = true;
       setHasStarted(true);
+      setSaveError(null);
+      setLastSavedAt(null);
       return;
     }
 
     hasInteracted.current = true;
     setHasStarted(true);
+    setSaveError(null);
+    setLastSavedAt(null);
     setForm((prev) => ({ ...prev, [key]: value }));
   }
 
@@ -365,9 +414,10 @@ export function useEntryForm(options: UseEntryFormOptions = {}) {
     }
   }
 
-  function handleSubmitRequest() {
+  async function handleSubmitRequest(): Promise<boolean> {
     if (mode === "today") {
       cancelPendingAutosave();
+      setSaveError(null);
       saveLockRef.current = true;
       setIsSaving(true);
 
@@ -376,23 +426,23 @@ export function useEntryForm(options: UseEntryFormOptions = {}) {
         const existing = activeDraftId
           ? entriesRef.current.find((entry) => entry.id === activeDraftId)
           : undefined;
-        const entry = formToEntry(form, {
-          id: activeDraftId ?? undefined,
-          status: "draft",
-          existing,
-          staffName: resolveStaffName(existing),
-        });
-
-        upsertEntry(entry);
-        syncEntriesRef(entry);
-        draftIdRef.current = entry.id;
+        const entry = buildDraftEntry(activeDraftId, existing);
+        const saved = await upsertEntry(entry);
+        syncEntriesRef(saved);
+        draftIdRef.current = saved.id;
+        setLastSavedAt(Date.now());
+        return true;
+      } catch (error) {
+        setSaveError(getDataSourceErrorMessage(error));
+        setLastSavedAt(null);
+        return false;
       } finally {
         saveLockRef.current = false;
         setIsSaving(false);
       }
-      return;
     }
     handleSave();
+    return true;
   }
 
   function handleCancelDuplicate() {
@@ -410,6 +460,8 @@ export function useEntryForm(options: UseEntryFormOptions = {}) {
   return {
     form,
     isSaving,
+    saveError,
+    lastSavedAt,
     isEdit,
     isDraftEdit,
     lockBranch,

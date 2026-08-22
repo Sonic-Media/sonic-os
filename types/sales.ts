@@ -76,6 +76,17 @@ export interface SaleInput {
   paymentMethod: SalePaymentMethod;
   branch: Branch;
   notes?: string;
+  branchStock?: number;
+  buyingPrice?: number;
+  productName?: string;
+}
+
+export interface BranchSaleProduct {
+  id: string;
+  name: string;
+  buyingPrice: number;
+  sellingPrice: number;
+  branchStock: number;
 }
 
 export interface CustomerInput {

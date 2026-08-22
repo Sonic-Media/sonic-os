@@ -61,6 +61,17 @@ export function roleCanAccessApiPath(
 
   if (
     method === "GET" &&
+    (pathname === "/api/sales/branch-products" ||
+      pathname.startsWith("/api/sales/branch-products"))
+  ) {
+    return (
+      roleHasModuleAccess(role, "sales") ||
+      roleHasModuleAccess(role, "operations")
+    );
+  }
+
+  if (
+    method === "GET" &&
     (pathname === "/api/purchases" || pathname.startsWith("/api/purchases/"))
   ) {
     return (

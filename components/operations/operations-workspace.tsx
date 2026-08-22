@@ -27,6 +27,8 @@ export function OperationsWorkspace({
   const {
     form,
     isSaving,
+    saveError,
+    lastSavedAt,
     status,
     movieRevenue,
     accessorySales,
@@ -78,6 +80,8 @@ export function OperationsWorkspace({
         mode={mode}
         form={form}
         isSaving={isSaving}
+        saveError={saveError}
+        lastSavedAt={lastSavedAt}
         movieRevenue={movieRevenue}
         accessorySales={accessorySales}
         totalExpenses={totalExpenses}
@@ -91,8 +95,11 @@ export function OperationsWorkspace({
         onCloseDay={
           mode === "today"
             ? () => {
-                handleSubmitRequest();
-                setCloseFlowActive(true);
+                void handleSubmitRequest().then((saved) => {
+                  if (saved) {
+                    setCloseFlowActive(true);
+                  }
+                });
               }
             : undefined
         }

@@ -37,7 +37,7 @@ export function useHistory() {
 
   function duplicateEntry(source: Entry) {
     const draft = duplicateEntryAsTodayDraft(source);
-    upsertEntry(draft);
+    void upsertEntry(draft).catch(console.error);
     router.push(`/entry/${draft.id}/edit`);
   }
 

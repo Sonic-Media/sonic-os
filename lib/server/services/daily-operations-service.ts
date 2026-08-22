@@ -23,6 +23,13 @@ function expenseIdForDb(expense: Expense): string {
   return isValidUuid(expense.id) ? expense.id : randomUUID();
 }
 
+function normalizeStaffIdForDb(staffId: string | undefined | null): string | null {
+  if (typeof staffId !== "string") return null;
+  const trimmed = staffId.trim();
+  if (!trimmed || !isValidUuid(trimmed)) return null;
+  return trimmed;
+}
+
 function entryToDailyOperationData(entry: Entry, branchId: string) {
   return {
     date: entry.date,
@@ -30,7 +37,7 @@ function entryToDailyOperationData(entry: Entry, branchId: string) {
     timestamp: BigInt(entry.timestamp),
     branchId,
     sales: entry.sales,
-    staffId: entry.staffId ?? null,
+    staffId: normalizeStaffIdForDb(entry.staffId),
     staffName: entry.staffName ?? "",
     createdBy: toJsonField(entry.createdBy),
     notes: entry.notes,

@@ -2,19 +2,29 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useActiveBranch } from "@/context/active-branch-context";
+import { useAuth } from "@/context/auth-context";
 import { useBranches } from "@/context/branches-context";
+import { canSwitchActiveBranch } from "@/lib/branch/access";
 import { cn } from "@/lib/utils";
 
 export function BranchSwitcher({ className }: { className?: string }) {
+  const { session } = useAuth();
   const { activeBranch, setActiveBranch, isLoaded } = useActiveBranch();
   const { activeBranches, getBranchName } = useBranches();
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  const canSwitch = session ? canSwitchActiveBranch(session.role) : false;
 
   const currentName = useMemo(
     () => getBranchName(activeBranch),
     [activeBranch, getBranchName]
   );
+
+  useEffect(() => {
+    if (!canSwitch) {
+      setIsOpen(false);
+    }
+  }, [canSwitch]);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -29,6 +39,17 @@ export function BranchSwitcher({ className }: { className?: string }) {
 
   if (!isLoaded || activeBranches.length === 0) {
     return null;
+  }
+
+  if (!canSwitch) {
+    return (
+      <div className={cn("rounded-xl border border-zinc-800/80 bg-zinc-950/60 px-3 py-2.5", className)}>
+        <p className="text-[10px] font-medium uppercase tracking-wide text-zinc-500">
+          Branch
+        </p>
+        <p className="truncate text-sm font-medium text-white">{currentName}</p>
+      </div>
+    );
   }
 
   return (
