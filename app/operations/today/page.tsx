@@ -1,12 +1,13 @@
 "use client";
 
-import { Suspense, useMemo, useState } from "react";
+import { Suspense, useMemo } from "react";
 import { DayClosedBanner } from "@/components/operations/day-closed-banner";
 import { OpenShopPage } from "@/components/operations/open-shop-page";
 import { OperationsReadOnlyView } from "@/components/operations/operations-read-only-view";
 import { OperationsSubnav } from "@/components/operations/operations-subnav";
-import { OperationsWorkspace } from "@/components/operations/operations-workspace";
-import { ShiftCompletedPage } from "@/components/operations/shift-completed-page";
+import { StaffDayClosedView } from "@/components/operations/staff/staff-day-closed-view";
+import { StaffOperationsWorkspace } from "@/components/operations/staff/staff-operations-workspace";
+import { Card } from "@/components/shared/ui/card";
 import { PageContainer } from "@/components/shared/layout/page-container";
 import { PageHeader } from "@/components/shared/layout/page-header";
 import { PageSkeleton } from "@/components/shared/page-skeleton";
@@ -19,6 +20,7 @@ import { useActiveBranch } from "@/context/active-branch-context";
 import { useAuth } from "@/context/auth-context";
 import { useDayClosing } from "@/context/day-closing-context";
 import { useEntriesContext } from "@/context/entries-context";
+import { useStaffAttendance } from "@/hooks/use-staff-attendance";
 
 function TodayOperationsContent() {
   const { activeBranch, isLoaded: branchLoaded } = useActiveBranch();
@@ -31,7 +33,7 @@ function TodayOperationsContent() {
     getClosedRecord,
     isLoaded: closingLoaded,
   } = useDayClosing();
-  const [shiftFlowActive, setShiftFlowActive] = useState(false);
+  const { currentAttendance } = useStaffAttendance(today);
 
   const isOwner = session?.role === "owner";
 
@@ -54,55 +56,75 @@ function TodayOperationsContent() {
   const closedRecord = getClosedRecord(activeBranch, today);
   const isDayClosed = isBranchDayClosed(activeBranch, today);
   const shopNeedsOpening = needsShopOpening(activeBranch, today);
+  const staffOnShift = currentAttendance?.presence === "on-shift";
 
-  if (!isOwner && isDayClosed) {
+  if (isOwner) {
     return (
       <PageContainer>
-        <ShiftCompletedPage />
+        <PageHeader
+          title="Today's Operations"
+          subtitle="Read-only view — staff run daily operations from this workspace"
+          showBranchBadge
+        />
+
+        <OperationsSubnav />
+
+        {isDayClosed && closedRecord ? (
+          <>
+            <DayClosedBanner branch={activeBranch} record={closedRecord} />
+            {activeEntry ? (
+              <OperationsReadOnlyView entry={activeEntry} />
+            ) : null}
+          </>
+        ) : shopNeedsOpening ? (
+          <Card className="mt-6 border-amber-500/15 bg-amber-500/[0.04] p-6">
+            <p className="text-sm font-medium text-amber-200">Branch Waiting</p>
+            <p className="mt-2 text-sm text-zinc-400">
+              The branch has not been opened yet today. The first staff member on
+              site will start the shift. Mission Control will update automatically.
+            </p>
+          </Card>
+        ) : activeEntry ? (
+          <OperationsReadOnlyView entry={activeEntry} />
+        ) : (
+          <Card className="mt-6 p-6">
+            <p className="text-sm text-zinc-400">
+              Staff have opened the branch. Operational records will appear here as
+              they are saved.
+            </p>
+          </Card>
+        )}
       </PageContainer>
     );
   }
 
-  if (!isOwner && (shopNeedsOpening || shiftFlowActive)) {
+  if (isDayClosed) {
     return (
-      <PageContainer>
-        <OpenShopPage
-          onShiftStarted={() => setShiftFlowActive(true)}
-          onFlowComplete={() => setShiftFlowActive(false)}
-        />
+      <PageContainer className="lg:max-w-5xl">
+        <StaffDayClosedView branch={activeBranch} date={today} />
+      </PageContainer>
+    );
+  }
+
+  if (shopNeedsOpening) {
+    return (
+      <PageContainer className="lg:max-w-5xl">
+        <OpenShopPage mode="start-shift" />
+      </PageContainer>
+    );
+  }
+
+  if (!staffOnShift) {
+    return (
+      <PageContainer className="lg:max-w-5xl">
+        <OpenShopPage mode="clock-in" />
       </PageContainer>
     );
   }
 
   return (
-    <PageContainer>
-      <PageHeader
-        title="Today's Operations"
-        subtitle={
-          isDayClosed
-            ? "Today's records are closed and read-only"
-            : "Record movie revenue, accessory sales, expenses, staff payments, and close the day"
-        }
-        showBranchBadge
-      />
-
-      <OperationsSubnav />
-
-      {isDayClosed && closedRecord ? (
-        <>
-          <DayClosedBanner branch={activeBranch} record={closedRecord} />
-          {activeEntry ? (
-            <OperationsReadOnlyView entry={activeEntry} />
-          ) : null}
-        </>
-      ) : (
-        <OperationsWorkspace
-          mode="today"
-          branch={activeBranch}
-          entry={activeEntry}
-          lockDate
-        />
-      )}
+    <PageContainer className="lg:max-w-5xl">
+      <StaffOperationsWorkspace branch={activeBranch} entry={activeEntry} />
     </PageContainer>
   );
 }

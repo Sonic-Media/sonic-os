@@ -98,27 +98,15 @@ export function OperationsForm({
       />
 
       {mode === "today" && (
-        <Input
-          label="Movie Revenue"
-          type="number"
-          inputMode="numeric"
-          placeholder="0"
-          value={form.sales}
-          onChange={(event) => updateField("sales", event.target.value)}
-          hint="Enter today's total movie ticket revenue"
-        />
-      )}
-
-      <AccessorySalesSection date={form.date} />
-
-      <ExpenseList
-        expenses={form.expenses}
-        onChange={(expenses) => updateField("expenses", expenses)}
-        seedFromTemplates={seedCommonExpenses}
-      />
-
-      {mode === "today" && (
         <>
+          <AccessorySalesSection date={form.date} />
+
+          <ExpenseList
+            expenses={form.expenses}
+            onChange={(expenses) => updateField("expenses", expenses)}
+            seedFromTemplates={seedCommonExpenses}
+          />
+
           <StaffPaymentSection branch={form.branch} date={form.date} />
 
           <CashSummary
@@ -131,6 +119,28 @@ export function OperationsForm({
             onSavingsAllocationChange={(value) =>
               updateField("savingsAllocation", value)
             }
+          />
+        </>
+      )}
+
+      {mode === "historical" && (
+        <>
+          <Input
+            label="Movie Revenue"
+            type="number"
+            inputMode="numeric"
+            placeholder="0"
+            value={form.sales}
+            onChange={(event) => updateField("sales", event.target.value)}
+            hint="Enter total movie ticket revenue for this day"
+          />
+
+          <AccessorySalesSection date={form.date} />
+
+          <ExpenseList
+            expenses={form.expenses}
+            onChange={(expenses) => updateField("expenses", expenses)}
+            seedFromTemplates={seedCommonExpenses}
           />
         </>
       )}

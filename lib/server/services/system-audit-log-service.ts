@@ -115,4 +115,33 @@ export async function listAuditLogEntriesForUser(
   return records.map(mapAuditLogEntry);
 }
 
+const ATTENDANCE_ACTIONS = [
+  "Start Shift",
+  "Clock In",
+  "Clock Out",
+  "Open Shop",
+] as const;
+
+export async function listStaffAttendanceEntries(
+  staffId: string,
+  date: string
+): Promise<AuditLogRecord[]> {
+  const dayStart = new Date(`${date}T00:00:00.000Z`);
+  const dayEnd = new Date(`${date}T23:59:59.999Z`);
+
+  const records = await prisma.auditLogEntry.findMany({
+    where: {
+      userId: staffId,
+      action: { in: [...ATTENDANCE_ACTIONS] },
+      timestamp: {
+        gte: dayStart,
+        lte: dayEnd,
+      },
+    },
+    orderBy: { timestamp: "asc" },
+  });
+
+  return records.map(mapAuditLogEntry);
+}
+
 export type { AuditLogInput };

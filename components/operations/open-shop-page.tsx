@@ -3,13 +3,28 @@
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/shared/ui/button";
 import { ShiftGreeting } from "@/components/shared/ux/shift-greeting";
+import {
+  StaffCard,
+  StaffMetricTile,
+  StaffSectionLabel,
+} from "@/components/operations/staff/primitives";
 import { useAuth } from "@/context/auth-context";
 import { useActiveBranch } from "@/context/active-branch-context";
 import { useDayClosing } from "@/context/day-closing-context";
 import { useSettings } from "@/context/settings-context";
 import { useStaff } from "@/context/staff-context";
+import { useStaffAttendance } from "@/hooks/use-staff-attendance";
 import { canOpenShop } from "@/lib/day-closing/permissions";
 import { formatEntryDisplayDate, getTodayISO } from "@/lib/dates";
+import {
+  getOpeningHoursLabel,
+  getOpeningHoursStatus,
+} from "@/lib/operations/opening-hours";
+import {
+  formatClockTime,
+  recordStaffClockIn,
+  recordStaffStartShiftAttendance,
+} from "@/lib/staff/attendance";
 import {
   formatGreetingTime,
   getDaysSinceLastShift,
@@ -17,11 +32,12 @@ import {
 } from "@/lib/ux/greeting";
 import { toStaffFacingError } from "@/lib/ux/staff-messages";
 import { resolveStaffDisplayName } from "@/lib/ux/user-display";
-import type { DayClosingRecord } from "@/types/day-closing";
+import { cn } from "@/lib/utils";
+
+type ShiftGateMode = "start-shift" | "clock-in";
 
 interface OpenShopPageProps {
-  onShiftStarted?: () => void;
-  onFlowComplete?: () => void;
+  mode?: ShiftGateMode;
 }
 
 function formatCurrentTime(date: Date): string {
@@ -29,8 +45,7 @@ function formatCurrentTime(date: Date): string {
 }
 
 export function OpenShopPage({
-  onShiftStarted,
-  onFlowComplete,
+  mode = "start-shift",
 }: OpenShopPageProps) {
   const today = getTodayISO();
   const { session } = useAuth();
@@ -38,12 +53,10 @@ export function OpenShopPage({
   const { getBranchName, settings } = useSettings();
   const { staff } = useStaff();
   const { closings, openDay } = useDayClosing();
+  const { currentAttendance } = useStaffAttendance(today);
   const [now, setNow] = useState(() => new Date());
-  const [isOpening, setIsOpening] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | undefined>();
-  const [openedRecord, setOpenedRecord] = useState<DayClosingRecord | null>(
-    null
-  );
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(new Date()), 1000);
@@ -59,154 +72,158 @@ export function OpenShopPage({
     [closings, activeBranch, today]
   );
   const successLine = useMemo(
-    () => getStartShiftSuccessLine(staffName, today),
-    [staffName, today]
+    () =>
+      mode === "start-shift"
+        ? getStartShiftSuccessLine(staffName, today)
+        : `${staffName}, you are now on shift.`,
+    [mode, staffName, today]
   );
 
-  const canOpen = session ? canOpenShop(session.role) : false;
+  const canStart = session ? canOpenShop(session.role) : false;
+  const isStartShift = mode === "start-shift";
+  const openingHours = getOpeningHoursStatus(now);
+  const canOpenNow = isStartShift ? openingHours.canOpen : true;
+  const actionLabel = isStartShift ? "Open Shop" : "Clock In";
+  const isOnShift = currentAttendance?.presence === "on-shift";
 
-  async function handleStartShift() {
-    if (!canOpen) return;
+  async function handleSubmit() {
+    if (!canStart || isSubmitting || !canOpenNow) return;
 
-    setIsOpening(true);
+    setIsSubmitting(true);
     setError(undefined);
 
-    const result = await openDay(activeBranch, today);
-    setIsOpening(false);
+    try {
+      if (isStartShift) {
+        const result = await openDay(activeBranch, today);
 
-    if (!result.success) {
-      setError(
-        toStaffFacingError(result.errors.form ?? "", {
-          ownerName: settings.ownerName,
-          context: "start-shift",
-        })
-      );
-      return;
+        if (!result.success) {
+          setError(
+            toStaffFacingError(result.errors.form ?? "", {
+              ownerName: settings.ownerName,
+              context: "start-shift",
+            })
+          );
+          return;
+        }
+
+        const attendanceRecord = recordStaffStartShiftAttendance(activeBranch);
+        if (!attendanceRecord) {
+          setError(
+            "The branch opened, but we couldn't start your attendance session. Please try Clock In again."
+          );
+        }
+        return;
+      }
+
+      const clockInRecord = recordStaffClockIn(activeBranch);
+      if (!clockInRecord) {
+        setError(
+          "We couldn't record your clock-in. Please sign out and back in, then try again."
+        );
+      }
+    } finally {
+      setIsSubmitting(false);
     }
-
-    onShiftStarted?.();
-    setOpenedRecord(result.record ?? null);
   }
 
-  function handleContinue() {
-    onFlowComplete?.();
-  }
-
-  if (openedRecord) {
-    const openedAt = openedRecord.openedAt ?? openedRecord.reopenedAt;
-
+  if (isOnShift) {
     return (
-      <div className="flex min-h-[70vh] items-center justify-center px-4 py-10">
-        <div className="w-full max-w-lg rounded-3xl border border-zinc-800/80 bg-zinc-950/80 p-8 shadow-2xl shadow-black/30">
-          <div className="text-center">
-            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full border border-emerald-500/30 bg-emerald-500/10">
-              <span className="text-2xl text-emerald-400">✓</span>
-            </div>
-            <h2 className="mt-5 text-2xl font-semibold text-white">
-              Shift Started
-            </h2>
-            <p className="mt-3 text-sm text-zinc-400">{successLine}</p>
+      <div className="mx-auto flex min-h-[60vh] max-w-lg items-center justify-center py-10">
+        <StaffCard accent="revenue" className="w-full text-center">
+          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full border border-emerald-500/30 bg-emerald-500/10">
+            <span className="text-2xl text-emerald-400">✓</span>
           </div>
-
-          <div className="mt-8 space-y-4">
-            <div className="rounded-2xl border border-zinc-800/80 bg-zinc-900/40 px-4 py-3">
-              <p className="text-xs uppercase tracking-wide text-zinc-500">
-                Opened at
-              </p>
-              <p className="mt-1 text-base font-medium text-white tabular-nums">
-                {openedAt ? formatGreetingTime(openedAt) : formatCurrentTime(now)}
-              </p>
-            </div>
-
-            <div className="rounded-2xl border border-zinc-800/80 bg-zinc-900/40 px-4 py-3">
-              <p className="text-xs uppercase tracking-wide text-zinc-500">
-                Branch
-              </p>
-              <p className="mt-1 text-base font-medium text-white">
-                {getBranchName(activeBranch)}
-              </p>
-            </div>
-          </div>
-
-          <div className="mt-8">
-            <Button
-              type="button"
-              size="lg"
-              className="w-full"
-              onClick={handleContinue}
-            >
-              Continue
-            </Button>
-          </div>
-        </div>
+          <h2 className="mt-6 text-2xl font-semibold text-white">
+            {isStartShift ? "Shop Opened" : "Clocked In"}
+          </h2>
+          <p className="mt-3 text-sm text-zinc-400">{successLine}</p>
+          <p className="mt-6 text-sm text-zinc-500">
+            Opening Today&apos;s Operations...
+          </p>
+        </StaffCard>
       </div>
     );
   }
 
   return (
-    <div className="flex min-h-[70vh] items-center justify-center px-4 py-10">
-      <div className="w-full max-w-lg rounded-3xl border border-zinc-800/80 bg-zinc-950/80 p-8 shadow-2xl shadow-black/30">
-        <div className="mb-8">
+    <div className="mx-auto flex min-h-[60vh] max-w-lg items-center justify-center py-10">
+      <StaffCard accent="hero" hero className="w-full">
+        <div className="mb-8 text-center">
           <ShiftGreeting
             displayName={staffName}
             date={now}
             dateKey={today}
-            daysSinceLastShift={daysSinceLastShift}
-            context="start-shift"
+            daysSinceLastShift={isStartShift ? daysSinceLastShift : undefined}
+            context={isStartShift ? "start-shift" : "clock-in"}
             align="center"
           />
         </div>
 
-        <div className="space-y-4">
-          <div className="rounded-2xl border border-zinc-800/80 bg-zinc-900/40 px-4 py-3">
-            <p className="text-xs uppercase tracking-wide text-zinc-500">Branch</p>
-            <p className="mt-1 text-base font-medium text-white">
-              {getBranchName(activeBranch)}
-            </p>
-          </div>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <StaffMetricTile
+            label="Branch"
+            value={getBranchName(activeBranch)}
+          />
+          <StaffMetricTile label="Staff" value={staffName} />
+          <StaffMetricTile
+            label="Date"
+            value={formatEntryDisplayDate(today)}
+          />
+          <StaffMetricTile
+            label="Current Time"
+            value={formatCurrentTime(now)}
+          />
+        </div>
 
-          <div className="rounded-2xl border border-zinc-800/80 bg-zinc-900/40 px-4 py-3">
-            <p className="text-xs uppercase tracking-wide text-zinc-500">
-              Staff Name
-            </p>
-            <p className="mt-1 text-base font-medium text-white">{staffName}</p>
-          </div>
-
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <div className="rounded-2xl border border-zinc-800/80 bg-zinc-900/40 px-4 py-3">
-              <p className="text-xs uppercase tracking-wide text-zinc-500">Date</p>
-              <p className="mt-1 text-base font-medium text-white">
-                {formatEntryDisplayDate(today)}
+        <div className="mt-5">
+          {!isStartShift ? (
+            <div className="rounded-2xl border border-emerald-500/10 bg-emerald-500/[0.04] px-4 py-4 text-center">
+              <p className="text-sm text-emerald-300">
+                The branch is already open. Clock in to start your session.
+              </p>
+              <p className="mt-1 text-xs text-zinc-500">
+                Last check: {formatClockTime(now.toISOString())}
               </p>
             </div>
-
-            <div className="rounded-2xl border border-zinc-800/80 bg-zinc-900/40 px-4 py-3">
-              <p className="text-xs uppercase tracking-wide text-zinc-500">
-                Current Time
-              </p>
-              <p className="mt-1 text-base font-medium text-white tabular-nums">
-                {formatCurrentTime(now)}
+          ) : (
+            <div className="rounded-2xl border border-white/[0.05] bg-black/20 px-4 py-4 text-center">
+              <StaffSectionLabel>Opening Hours</StaffSectionLabel>
+              <p className="mt-2 text-sm text-white">{getOpeningHoursLabel()}</p>
+              <p
+                className={cn(
+                  "mt-2 text-sm",
+                  openingHours.canOpen ? "text-emerald-400" : "text-amber-300"
+                )}
+              >
+                {openingHours.message}
               </p>
             </div>
-          </div>
+          )}
         </div>
 
         {error ? (
-          <p className="mt-4 whitespace-pre-line text-sm text-red-400">{error}</p>
+          <p className="mt-5 whitespace-pre-line text-center text-sm text-red-400">
+            {error}
+          </p>
         ) : null}
 
         <div className="mt-8">
           <Button
             type="button"
             size="lg"
-            className="w-full"
-            disabled={!canOpen || isOpening}
-            onClick={handleStartShift}
+            className={cn(
+              "h-14 w-full rounded-2xl text-base font-semibold",
+              isStartShift
+                ? "bg-gradient-to-r from-emerald-600 to-teal-600 shadow-[0_16px_40px_-16px_rgba(16,185,129,0.7)] hover:from-emerald-500 hover:to-teal-500"
+                : ""
+            )}
+            disabled={!canStart || isSubmitting || !canOpenNow}
+            onClick={() => void handleSubmit()}
           >
-            {isOpening ? "Starting..." : "Start Shift"}
+            {isSubmitting ? "Working..." : actionLabel}
           </Button>
         </div>
-      </div>
+      </StaffCard>
     </div>
   );
 }

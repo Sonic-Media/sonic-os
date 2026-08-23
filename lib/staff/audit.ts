@@ -1,6 +1,9 @@
 import { recordAuditEntry } from "@/lib/audit-log/record";
+import { AUDIT_LOG_UPDATED_EVENT } from "@/lib/audit-log/constants";
 import { getClientSession } from "@/lib/client/session-registry";
 import { fetchStaff } from "@/lib/api/staff";
+import { getTodayISO } from "@/lib/dates";
+import { migrateLegacyAuthRole } from "@/lib/staff/roles";
 import type { Staff } from "@/types";
 import type { AuditLogRecord } from "@/types/audit-log";
 import type { StaffAuditInput, StaffAuditRecord } from "@/types/staff-audit";
@@ -33,8 +36,41 @@ export function syncStaffAuditCacheFromAuditLog(records: AuditLogRecord[]): void
   auditRecordCache = records.map(mapAuditLogToStaffAudit);
 }
 
+export function mergeStaffAuditRecords(records: StaffAuditRecord[]): void {
+  if (records.length === 0) return;
+
+  const merged = new Map<string, StaffAuditRecord>();
+  for (const record of auditRecordCache) {
+    merged.set(record.id, record);
+  }
+  for (const record of records) {
+    merged.set(record.id, record);
+  }
+
+  auditRecordCache = [...merged.values()].sort((left, right) =>
+    right.timestamp.localeCompare(left.timestamp)
+  );
+}
+
 export function getStaffAuditRecords(): StaffAuditRecord[] {
   return auditRecordCache;
+}
+
+function buildStaffFromSession(): Staff | undefined {
+  const session = getClientSession();
+  if (!session?.staffId) return undefined;
+
+  return {
+    id: session.staffId,
+    name: session.displayName,
+    branch: session.branch,
+    role: migrateLegacyAuthRole(session.role),
+    status: "active",
+    active: true,
+    loginEnabled: true,
+    userId: session.userId,
+    dateJoined: getTodayISO(),
+  };
 }
 
 export function resolveStaffFromSession(): Staff | undefined {
@@ -46,7 +82,10 @@ export function resolveStaffFromSession(): Staff | undefined {
     if (byId) return byId;
   }
 
-  return staffListCache.find((member) => member.userId === session.userId);
+  const byUserId = staffListCache.find((member) => member.userId === session.userId);
+  if (byUserId) return byUserId;
+
+  return buildStaffFromSession();
 }
 
 export function resolveStaffByUserId(userId: string): Staff | undefined {
@@ -73,7 +112,17 @@ export function recordStaffAction(input: StaffAuditInput): StaffAuditRecord | nu
       staffId = fromSession.id;
       staffName = fromSession.name;
       role = fromSession.role;
-      branch = fromSession.branch;
+      branch = branch ?? fromSession.branch;
+    }
+  }
+
+  if (!staffId || !staffName || !role || !branch) {
+    const session = getClientSession();
+    if (session?.staffId) {
+      staffId = session.staffId;
+      staffName = session.displayName;
+      role = migrateLegacyAuthRole(session.role);
+      branch = branch ?? session.branch;
     }
   }
 
@@ -106,6 +155,13 @@ export function recordStaffAction(input: StaffAuditInput): StaffAuditRecord | nu
   };
 
   auditRecordCache = [record, ...auditRecordCache].slice(0, 500);
+
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(
+      new CustomEvent(AUDIT_LOG_UPDATED_EVENT, { detail: record })
+    );
+  }
+
   return record;
 }
 

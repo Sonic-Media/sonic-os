@@ -12,6 +12,7 @@ interface CashSummaryProps {
   savingsAllocation: string;
   onSavingsAllocationChange?: (value: string) => void;
   readOnly?: boolean;
+  payrollLabel?: string;
 }
 
 function SummaryRow({
@@ -42,6 +43,7 @@ export function CashSummary({
   savingsAllocation,
   onSavingsAllocationChange,
   readOnly = false,
+  payrollLabel = "Payroll",
 }: CashSummaryProps) {
   const allocation = Number(savingsAllocation) || 0;
   const remainingCash = netCash - allocation;
@@ -64,9 +66,9 @@ export function CashSummary({
         valueClassName="text-emerald-400"
       />
       <SummaryRow label="Total Expenses" value={formatCurrency(totalExpenses)} />
-      {staffPayouts > 0 && (
+      {(staffPayouts > 0 || payrollLabel === "Daily Wage") && (
         <SummaryRow
-          label="Payroll"
+          label={payrollLabel}
           value={formatCurrency(staffPayouts)}
         />
       )}

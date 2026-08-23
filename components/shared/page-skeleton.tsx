@@ -6,39 +6,41 @@ interface PageSkeletonProps {
   variant?: PageSkeletonVariant;
 }
 
+function SkeletonBlock({
+  className,
+}: {
+  className?: string;
+}) {
+  return (
+    <div
+      className={`animate-pulse rounded-3xl border border-white/[0.04] bg-zinc-900/60 ${className ?? ""}`}
+    />
+  );
+}
+
 export function PageSkeleton({ variant = "default" }: PageSkeletonProps) {
   return (
     <PageContainer>
-      <div className="animate-pulse space-y-4">
-        <div className="h-10 bg-zinc-900 rounded-xl" />
+      <div className="space-y-6 pb-10">
         {variant === "dashboard" ? (
           <>
-            <div className="h-16 bg-zinc-900 rounded-2xl" />
-            <div className="h-10 bg-zinc-900 rounded-xl" />
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-              <div className="h-28 bg-zinc-900 rounded-2xl" />
-              <div className="h-28 bg-zinc-900 rounded-2xl" />
-              <div className="h-28 bg-zinc-900 rounded-2xl" />
-              <div className="h-28 bg-zinc-900 rounded-2xl col-span-2 sm:col-span-1" />
+            <SkeletonBlock className="h-44" />
+            <SkeletonBlock className="h-56" />
+            <SkeletonBlock className="h-48" />
+            <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1.4fr)_minmax(320px,0.8fr)]">
+              <SkeletonBlock className="h-80" />
+              <SkeletonBlock className="h-56" />
             </div>
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-              <div className="h-48 bg-zinc-900 rounded-2xl" />
-              <div className="h-48 bg-zinc-900 rounded-2xl" />
-            </div>
-            <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-1">
-                <div className="h-32 bg-zinc-900 rounded-2xl" />
-                <div className="h-32 bg-zinc-900 rounded-2xl" />
-              </div>
-              <div className="h-48 bg-zinc-900 rounded-2xl" />
-            </div>
-            <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
-              <div className="h-40 bg-zinc-900 rounded-2xl" />
-              <div className="h-40 bg-zinc-900 rounded-2xl" />
+            <SkeletonBlock className="h-[520px]" />
+            <SkeletonBlock className="h-64" />
+            <SkeletonBlock className="h-56" />
+            <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+              <SkeletonBlock className="h-56" />
+              <SkeletonBlock className="h-56" />
             </div>
           </>
         ) : (
-          <div className="h-48 bg-zinc-900 rounded-2xl" />
+          <SkeletonBlock className="h-48" />
         )}
       </div>
     </PageContainer>

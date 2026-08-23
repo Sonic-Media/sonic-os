@@ -125,7 +125,6 @@ const OWNER_ONLY_PREFIXES = [
   "/api/roles",
   "/api/daily-operations/import",
   "/api/audit-log",
-  "/api/system-audit-log",
 ];
 
 export function getApiModuleForPath(pathname: string): StaffModule | null {

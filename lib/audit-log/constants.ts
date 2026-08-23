@@ -23,6 +23,9 @@ export const AUDIT_ACTIONS = {
   CLOSE_DAY: "Close Day",
   REOPEN_DAY: "Reopen Day",
   OPEN_DAY: "Open Shop",
+  START_SHIFT: "Start Shift",
+  CLOCK_IN: "Clock In",
+  CLOCK_OUT: "Clock Out",
 } as const satisfies Record<string, AuditAction>;
 
 export const AUDIT_MODULE_OPTIONS: { value: AuditModule | "all"; label: string }[] =

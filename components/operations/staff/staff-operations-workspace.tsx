@@ -1,0 +1,193 @@
+"use client";
+
+import { useMemo, useState } from "react";
+import { DuplicateEntryDialog } from "@/components/entry/duplicate-entry-dialog";
+import { StaffAccessorySalesCard } from "@/components/operations/staff/staff-accessory-sales-card";
+import { StaffCashSummaryCard } from "@/components/operations/staff/staff-cash-summary-card";
+import { StaffDailyWageCard } from "@/components/operations/staff/staff-daily-wage-card";
+import { StaffEndOfDayCard } from "@/components/operations/staff/staff-end-of-day-card";
+import { StaffExpensesCard } from "@/components/operations/staff/staff-expenses-card";
+import { StaffRevenueCard } from "@/components/operations/staff/staff-revenue-card";
+import { StaffWelcomeCard } from "@/components/operations/staff/staff-welcome-card";
+import { useEntryForm } from "@/hooks/use-entry-form";
+import { useStaffCloseDay } from "@/hooks/use-staff-close-day";
+import { useSales } from "@/context/sales-context";
+import { useActiveBranch } from "@/context/active-branch-context";
+import { filterByBranchField } from "@/lib/active-branch/filters";
+import { isPayrollEntryExpense } from "@/lib/expenses";
+import type { Branch, Entry } from "@/types";
+
+type StaffWorkflowSection =
+  | "accessory-sales"
+  | "expenses"
+  | "daily-wage"
+  | "cash-summary"
+  | "end-of-day";
+
+interface StaffOperationsWorkspaceProps {
+  branch: Branch;
+  entry?: Entry;
+}
+
+function resolveInitialSection({
+  hasSales,
+  hasExpenses,
+  wageRecorded,
+}: {
+  hasSales: boolean;
+  hasExpenses: boolean;
+  wageRecorded: boolean;
+}): StaffWorkflowSection {
+  if (!hasSales) return "accessory-sales";
+  if (!hasExpenses) return "expenses";
+  if (!wageRecorded) return "daily-wage";
+  return "end-of-day";
+}
+
+export function StaffOperationsWorkspace({
+  branch,
+  entry,
+}: StaffOperationsWorkspaceProps) {
+  const { sales } = useSales();
+  const { activeBranch } = useActiveBranch();
+
+  const {
+    form,
+    isSaving,
+    saveError,
+    movieRevenue,
+    accessorySales,
+    totalExpenses,
+    staffPayouts,
+    balance,
+    duplicateEntry,
+    updateField,
+    handleSubmitRequest,
+    handleEditExisting,
+    handleCancelDuplicate,
+    seedCommonExpenses,
+  } = useEntryForm({
+    entry,
+    initialBranch: branch,
+    initialDate: entry?.date,
+    lockDate: true,
+    mode: "today",
+  });
+
+  const { closeStaffDay, isClosing, error: closeError } = useStaffCloseDay(
+    form.date
+  );
+
+  const accessorySalesCount = useMemo(
+    () =>
+      filterByBranchField(sales, activeBranch).filter(
+        (sale) => sale.date === form.date && sale.status === "completed"
+      ).length,
+    [sales, activeBranch, form.date]
+  );
+
+  const expenseCount = useMemo(
+    () =>
+      form.expenses.filter(
+        (expense) => expense.amount > 0 && !isPayrollEntryExpense(expense)
+      ).length,
+    [form.expenses]
+  );
+
+  const wageRecorded = staffPayouts > 0;
+
+  const [expandedSection, setExpandedSection] = useState<
+    StaffWorkflowSection | null
+  >(() =>
+    resolveInitialSection({
+      hasSales: accessorySalesCount > 0,
+      hasExpenses: expenseCount > 0,
+      wageRecorded,
+    })
+  );
+
+  function expandSection(section: StaffWorkflowSection | null) {
+    setExpandedSection(section);
+  }
+
+  async function handleCloseDay() {
+    const saved = await handleSubmitRequest();
+    if (!saved) return;
+
+    await closeStaffDay(form.notes.trim());
+  }
+
+  return (
+    <div className="mx-auto max-w-3xl space-y-5 pb-4">
+      <StaffWelcomeCard />
+
+      <StaffRevenueCard
+        movieRevenue={movieRevenue}
+        accessorySales={accessorySales}
+      />
+
+      <StaffAccessorySalesCard
+        date={form.date}
+        expanded={expandedSection === "accessory-sales"}
+        onExpandedChange={(open) =>
+          expandSection(open ? "accessory-sales" : null)
+        }
+        onSaleComplete={() => {
+          if (expenseCount === 0) {
+            expandSection("expenses");
+          } else {
+            expandSection(null);
+          }
+        }}
+      />
+
+      <StaffExpensesCard
+        form={form}
+        seedCommonExpenses={seedCommonExpenses}
+        updateField={updateField}
+        expanded={expandedSection === "expenses"}
+        onExpandedChange={(open) => expandSection(open ? "expenses" : null)}
+      />
+
+      <StaffDailyWageCard
+        branch={form.branch}
+        date={form.date}
+        expanded={expandedSection === "daily-wage"}
+        onExpandedChange={(open) => expandSection(open ? "daily-wage" : null)}
+        onRecorded={() => expandSection("end-of-day")}
+      />
+
+      <StaffCashSummaryCard
+        movieRevenue={movieRevenue}
+        accessorySales={accessorySales}
+        totalExpenses={totalExpenses}
+        staffPayouts={staffPayouts}
+        netCash={balance}
+        expanded={expandedSection === "cash-summary"}
+        onExpandedChange={(open) => expandSection(open ? "cash-summary" : null)}
+      />
+
+      <StaffEndOfDayCard
+        form={form}
+        movieRevenue={movieRevenue}
+        totalExpenses={totalExpenses}
+        staffPayouts={staffPayouts}
+        accessorySalesCount={accessorySalesCount}
+        isClosing={isClosing || isSaving}
+        closeError={closeError ?? saveError}
+        updateField={updateField}
+        onCloseDay={() => void handleCloseDay()}
+        expanded={expandedSection === "end-of-day"}
+        onExpandedChange={(open) => expandSection(open ? "end-of-day" : null)}
+      />
+
+      {duplicateEntry ? (
+        <DuplicateEntryDialog
+          entry={duplicateEntry}
+          onEditExisting={handleEditExisting}
+          onCancel={handleCancelDuplicate}
+        />
+      ) : null}
+    </div>
+  );
+}

@@ -33,7 +33,7 @@ export async function POST(request: Request) {
               branch: session.branch,
             }
           : undefined),
-      { request }
+      { request, module: "operations" }
     );
     return jsonCreated(record);
   } catch (error) {

@@ -1,7 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import { useAuth } from "@/context/auth-context";
 import { useEntryForm } from "@/hooks/use-entry-form";
+import { canAccessCloseDay } from "@/lib/day-closing/permissions";
 import { CloseDayWorkspace } from "@/components/operations/close-day-workspace";
 import { OperationsClosingPanel } from "@/components/operations/operations-closing-panel";
 import { OperationsForm } from "@/components/operations/operations-form";
@@ -23,6 +25,7 @@ export function OperationsWorkspace({
   initialDate,
   lockDate = mode === "today",
 }: OperationsWorkspaceProps) {
+  const { session } = useAuth();
   const [closeFlowActive, setCloseFlowActive] = useState(false);
   const {
     form,
@@ -93,7 +96,7 @@ export function OperationsWorkspace({
         updateField={updateField}
         onSubmit={handleSubmitRequest}
         onCloseDay={
-          mode === "today"
+          mode === "today" && session && canAccessCloseDay(session.role)
             ? () => {
                 void handleSubmitRequest().then((saved) => {
                   if (saved) {
