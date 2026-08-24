@@ -1,4 +1,6 @@
-import "dotenv/config";
+import { loadEnvFiles } from "../lib/env/load-env";
+
+loadEnvFiles();
 import { DEFAULT_EXPENSE_TEMPLATES } from "../lib/constants";
 import { getPrismaClient } from "../lib/db";
 import { runApplicationBootstrap } from "../lib/server/bootstrap/pipeline";
