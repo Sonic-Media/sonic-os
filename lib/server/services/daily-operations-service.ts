@@ -4,6 +4,11 @@ import { prisma } from "@/lib/db";
 import { getBranchIdByCode } from "@/lib/server/branch-lookup";
 import { toJsonField } from "@/lib/server/json-fields";
 import { mapDailyOperationToEntry } from "@/lib/server/mappers/entities";
+import {
+  assertBranchDayOpenForWrite,
+  assertOwnerCannotEditTodayOperations,
+} from "@/lib/server/day-closing-guards";
+import { requireSession } from "@/lib/server/session";
 import { getPeriodDateBounds } from "@/lib/dates";
 import type { Entry, Expense, ReportPeriod } from "@/types";
 
@@ -76,6 +81,10 @@ export async function listDailyOperationsInPeriod(
 }
 
 export async function upsertDailyOperation(entry: Entry): Promise<Entry> {
+  const session = await requireSession();
+  assertOwnerCannotEditTodayOperations(session, entry.date);
+  await assertBranchDayOpenForWrite(entry.branch, entry.date);
+
   const branchId = await getBranchIdByCode(entry.branch);
   const data = entryToDailyOperationData(entry, branchId);
   const expenseRows = entry.expenses.map((expense) => ({

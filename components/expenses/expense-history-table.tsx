@@ -9,6 +9,11 @@ import { usePaginatedList } from "@/hooks/use-paginated-list";
 import { formatCurrency } from "@/lib/format";
 import { getExpensePaymentMethodLabel } from "@/lib/expenses-module/constants";
 import { isStaffPaymentExpense } from "@/lib/staff-payments/calculations";
+import {
+  getExpenseRecordSource,
+  isLateEntryExpense,
+} from "@/lib/transactions/types";
+import { getTodayISO } from "@/lib/dates";
 import { useStaffPaymentsModule } from "@/context/staff-payments-context";
 import { useSettings } from "@/context/settings-context";
 import type { ExpenseRecord } from "@/types/expenses-module";
@@ -27,6 +32,15 @@ function formatExpenseDate(date: string): string {
     year: "numeric",
     month: "short",
     day: "numeric",
+  });
+}
+
+function formatRecordedTime(iso: string): string {
+  const parsed = new Date(iso);
+  if (Number.isNaN(parsed.getTime())) return "—";
+  return parsed.toLocaleTimeString("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
   });
 }
 
@@ -93,6 +107,12 @@ export function ExpenseHistoryTable({
               <th className="px-5 py-4 text-xs font-medium uppercase tracking-wide text-zinc-500">
                 Staff
               </th>
+              <th className="px-5 py-4 text-xs font-medium uppercase tracking-wide text-zinc-500">
+                Source
+              </th>
+              <th className="px-5 py-4 text-xs font-medium uppercase tracking-wide text-zinc-500">
+                Recorded
+              </th>
               {showActions && (
                 <th className="px-5 py-4 text-xs font-medium uppercase tracking-wide text-zinc-500 text-right">
                   Actions
@@ -131,6 +151,25 @@ export function ExpenseHistoryTable({
                 </td>
                 <td className="px-5 py-4 text-zinc-400">
                   {resolveStaffLabel(expense)}
+                </td>
+                <td className="px-5 py-4 text-zinc-400">
+                  <div className="flex flex-col gap-1">
+                    <span>
+                      {getExpenseRecordSource({
+                        notes: expense.notes,
+                        staffPaymentId: expense.staffPaymentId,
+                        date: expense.date,
+                        createdAt: expense.createdAt,
+                        today: getTodayISO(),
+                      })}
+                    </span>
+                    {isLateEntryExpense(expense.notes) ? (
+                      <span className="text-xs text-amber-300">Late Entry</span>
+                    ) : null}
+                  </div>
+                </td>
+                <td className="px-5 py-4 text-zinc-400">
+                  {formatRecordedTime(expense.createdAt)}
                 </td>
                 {showActions && (
                   <td className="px-5 py-4">

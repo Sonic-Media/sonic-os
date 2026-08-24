@@ -1,35 +1,34 @@
 import { cn } from "@/lib/utils";
+import { uiSurface, uiTypography } from "@/lib/ui/design-tokens";
 
 interface InputProps extends React.InputHTMLAttributes<HTMLInputElement> {
   label?: string;
   hint?: string;
+  error?: string;
 }
 
-export function Input({ label, hint, className, id, ...props }: InputProps) {
+export function Input({ label, hint, error, className, id, ...props }: InputProps) {
   const inputId = id ?? label?.toLowerCase().replace(/\s+/g, "-");
 
   return (
     <div className="space-y-2">
-      {label && (
-        <label
-          htmlFor={inputId}
-          className="block text-sm font-medium text-zinc-400"
-        >
+      {label ? (
+        <label htmlFor={inputId} className={uiTypography.label}>
           {label}
         </label>
-      )}
+      ) : null}
       <input
         id={inputId}
         className={cn(
-          "w-full h-12 px-4 rounded-xl bg-zinc-900/80 border border-zinc-800",
-          "text-white text-base placeholder:text-zinc-600",
-          "focus:outline-none focus:ring-2 focus:ring-white/20 focus:border-zinc-600",
-          "transition-all duration-200",
+          uiSurface.input,
+          error && "border-red-500/40 focus:border-red-500/50 focus:ring-red-500/20",
           className
         )}
+        aria-invalid={Boolean(error)}
         {...props}
       />
-      {hint && <p className="text-xs text-zinc-500">{hint}</p>}
+      {error ? <p className="text-xs text-red-400">{error}</p> : null}
+      {!error && hint ? <p className="text-xs text-zinc-500">{hint}</p> : null}
     </div>
   );
 }

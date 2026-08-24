@@ -13,33 +13,58 @@ export function ExpensesDashboardSummary({
   metrics,
 }: ExpensesDashboardSummaryProps) {
   return (
-    <section className="grid grid-cols-1 gap-3 mb-8 sm:grid-cols-2">
-      <StatCard
-        label="Today's Expenses"
-        value={metrics.todaysExpenses ?? 0}
-        formatValue={() => formatExpensesCurrency(metrics.todaysExpenses)}
-      />
-      <StatCard
-        label="This Month Expenses"
-        value={metrics.monthExpenses ?? 0}
-        formatValue={() => formatExpensesCurrency(metrics.monthExpenses)}
-      />
-      <StatCard
-        label="Highest Expense Category"
-        value={0}
-        formatValue={() =>
-          metrics.highestExpenseCategory ?? EXPENSES_PLACEHOLDER
-        }
-        className="sm:col-span-2"
-      />
-      <StatCard
-        label="Average Daily Expense"
-        value={metrics.averageDailyExpense ?? 0}
-        formatValue={() =>
-          formatExpensesCurrency(metrics.averageDailyExpense)
-        }
-        className="sm:col-span-2"
-      />
+    <section className="space-y-6">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <StatCard
+          label="Today's Expense"
+          value={metrics.todaysExpenses ?? 0}
+          formatValue={() => formatExpensesCurrency(metrics.todaysExpenses)}
+        />
+        <StatCard
+          label="This Week"
+          value={metrics.weekExpenses ?? 0}
+          formatValue={() => formatExpensesCurrency(metrics.weekExpenses)}
+        />
+        <StatCard
+          label="This Month"
+          value={metrics.monthExpenses ?? 0}
+          formatValue={() => formatExpensesCurrency(metrics.monthExpenses)}
+        />
+        <StatCard
+          label="Average Daily"
+          value={metrics.averageDailyExpense ?? 0}
+          formatValue={() =>
+            formatExpensesCurrency(metrics.averageDailyExpense)
+          }
+        />
+      </div>
+
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+        <StatCard
+          label="Highest Category"
+          value={0}
+          formatValue={() =>
+            metrics.highestExpenseCategory ?? EXPENSES_PLACEHOLDER
+          }
+        />
+        <StatCard
+          label="Top Categories"
+          value={0}
+          formatValue={() =>
+            metrics.topCategories.length > 0
+              ? metrics.topCategories
+                  .map((item) => `${item.category} · ${formatExpensesCurrency(item.total)}`)
+                  .join("  ·  ")
+              : EXPENSES_PLACEHOLDER
+          }
+          className="lg:col-span-1"
+        />
+      </div>
+
+      <p className="text-sm text-zinc-500">
+        Read-only expense overview. Record today&apos;s expenses in{" "}
+        <span className="text-zinc-300">Today&apos;s Operations</span>.
+      </p>
     </section>
   );
 }

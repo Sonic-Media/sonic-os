@@ -1,7 +1,7 @@
 SONIC OS — PURCHASING MODULE PRODUCTION CERTIFICATION
 ====================================================
 
-Date: 2026-08-22T11:25:03.893Z
+Date: 2026-08-24T00:15:26.477Z
 Result: CERTIFIED
 Checks passed: 20/20
 
@@ -20,7 +20,7 @@ duplicate protection, persistence, and error handling.
 CHECKLIST
 ---------
 [PASS] 1. Create purchase orders
-    Purchase PUR-20260822-0002 total 90,000 UGX
+    Purchase PUR-20260824-0001 total 90,000 UGX
 [PASS] 2. Receive stock into inventory
     Product A stock movement recorded (1 purchase receipts)
 [PASS] 3. Verify stock increases correctly
@@ -28,7 +28,7 @@ CHECKLIST
 [PASS] 4. Verify average cost calculations
     Weighted average buying price 9000 UGX (9000 on first receipt)
 [PASS] 5. Verify supplier assignment
-    Linked to cert-purchasing-1787397902544 Supplier
+    Linked to cert-purchasing-1787530525246 Supplier
 [PASS] 6. Verify branch assignment
     Purchase saved to branch main (Kansanga)
 [PASS] 7. Verify inventory valuation updates correctly

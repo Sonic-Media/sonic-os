@@ -133,6 +133,18 @@ export function SettingsContent() {
 
       <StaffSection />
 
+      <Card>
+        <h3 className="mb-3 text-sm font-medium uppercase tracking-wide text-zinc-500">
+          Expense Settings
+        </h3>
+        <p className="mb-4 text-sm text-zinc-400">
+          Manage expense categories used across Sonic OS.
+        </p>
+        <Button href="/settings/expense-settings" variant="secondary">
+          Manage Expense Categories
+        </Button>
+      </Card>
+
       <ExpenseTemplatesSection />
 
       <Card>

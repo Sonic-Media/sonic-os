@@ -4,7 +4,6 @@ import { useMemo } from "react";
 import { PurchaseHistoryFilters } from "@/components/purchasing/purchase-history-filters";
 import { PurchaseHistoryTable } from "@/components/purchasing/purchase-history-table";
 import { PurchasingSubnav } from "@/components/purchasing/purchasing-subnav";
-import { Button } from "@/components/shared/ui/button";
 import { PageContainer } from "@/components/shared/layout/page-container";
 import { PageHeader } from "@/components/shared/layout/page-header";
 import { usePurchaseHistory } from "@/hooks/use-purchase-history";
@@ -27,12 +26,8 @@ export default function PurchaseHistoryPage() {
     <PageContainer>
       <PageHeader
         title="Purchase History"
-        subtitle="All supplier purchase records"
+        subtitle="Read-only history of supplier purchases"
       />
-
-      <div className="mb-6 flex justify-end">
-        <Button href="/purchasing/new">New Purchase</Button>
-      </div>
 
       <PurchasingSubnav />
 

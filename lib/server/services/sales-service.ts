@@ -7,6 +7,10 @@ import { mapSaleToEntity } from "@/lib/server/mappers/entities";
 import { getSessionFromRequest, requireSession } from "@/lib/server/session";
 import { applyStockMovement, type ProductCache } from "@/lib/server/stock-transactions";
 import { recordTransactionAudit } from "@/lib/server/transaction-audit";
+import {
+  assertBranchDayOpenForWrite,
+  assertStaffOperationalRole,
+} from "@/lib/server/day-closing-guards";
 import { AUDIT_ACTIONS } from "@/lib/audit-log/constants";
 import type { AuthSession } from "@/types/auth";
 import type { BranchSaleProduct, Sale } from "@/types/sales";
@@ -177,6 +181,8 @@ export async function completeSale(sale: Sale): Promise<Sale> {
   }
 
   const session = await requireSession();
+  assertStaffOperationalRole(session);
+  await assertBranchDayOpenForWrite(sale.branch, sale.date);
   const branchId = await getBranchIdForSession(
     session,
     sale.branch?.trim() || null

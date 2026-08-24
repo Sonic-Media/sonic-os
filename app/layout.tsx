@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist } from "next/font/google";
 import { AppShell } from "@/components/shared/layout/app-shell";
 import { CommandPaletteProvider } from "@/context/command-palette-context";
+import { ToastProvider } from "@/context/toast-context";
 import { EntriesProvider } from "@/context/entries-context";
 import { ExpenseTemplatesProvider } from "@/context/expense-templates-context";
 import { AuthProvider } from "@/context/auth-context";
@@ -56,7 +57,9 @@ export default function RootLayout({
                         <StaffPaymentsProvider>
                         <DayClosingProvider>
                         <CommandPaletteProvider>
-                          <AppShell>{children}</AppShell>
+                          <ToastProvider>
+                            <AppShell>{children}</AppShell>
+                          </ToastProvider>
                         </CommandPaletteProvider>
                         </DayClosingProvider>
                         </StaffPaymentsProvider>

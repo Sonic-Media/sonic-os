@@ -1,4 +1,8 @@
 import { NOTIFICATIONS_STORAGE_KEY } from "@/lib/constants";
+import {
+  readLocalStorageJson,
+  writeLocalStorageItem,
+} from "@/lib/safe-storage";
 
 export interface NotificationPreferences {
   readIds: string[];
@@ -13,26 +17,24 @@ const DEFAULT_PREFERENCES: NotificationPreferences = {
 export function getNotificationPreferences(): NotificationPreferences {
   if (typeof window === "undefined") return DEFAULT_PREFERENCES;
 
-  try {
-    const raw = localStorage.getItem(NOTIFICATIONS_STORAGE_KEY);
-    if (!raw) return DEFAULT_PREFERENCES;
-    const parsed = JSON.parse(raw) as Partial<NotificationPreferences>;
-    return {
-      readIds: Array.isArray(parsed.readIds) ? parsed.readIds : [],
-      dismissedIds: Array.isArray(parsed.dismissedIds)
-        ? parsed.dismissedIds
-        : [],
-    };
-  } catch {
-    return DEFAULT_PREFERENCES;
-  }
+  const parsed = readLocalStorageJson<Partial<NotificationPreferences>>(
+    NOTIFICATIONS_STORAGE_KEY,
+    DEFAULT_PREFERENCES
+  );
+
+  return {
+    readIds: Array.isArray(parsed.readIds) ? parsed.readIds : [],
+    dismissedIds: Array.isArray(parsed.dismissedIds)
+      ? parsed.dismissedIds
+      : [],
+  };
 }
 
 export function saveNotificationPreferences(
   preferences: NotificationPreferences
 ): void {
   if (typeof window === "undefined") return;
-  localStorage.setItem(NOTIFICATIONS_STORAGE_KEY, JSON.stringify(preferences));
+  writeLocalStorageItem(NOTIFICATIONS_STORAGE_KEY, JSON.stringify(preferences));
 }
 
 export function markNotificationRead(id: string): NotificationPreferences {

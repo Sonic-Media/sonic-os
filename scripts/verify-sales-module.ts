@@ -10,6 +10,16 @@ import {
   computeSalesDashboardMetrics,
 } from "@/lib/sales/calculations";
 import type { Sale } from "@/types/sales";
+import {
+  ensureDayOpen,
+  loginWithCredentials,
+  VERIFY_OWNER_CREDENTIALS,
+} from "./verify-session";
+import {
+  cleanupCertificationCashier,
+  createCertificationCashier,
+  type CertificationCashier,
+} from "./verify-bootstrap";
 
 const BASE_URL = process.env.VERIFY_BASE_URL ?? "http://localhost:3000";
 const TEST_PREFIX = `cert-sales-${Date.now()}`;
@@ -99,14 +109,11 @@ class SalesCertifier {
   }
 
   async login() {
-    await this.json("/api/auth/session", {
-      method: "POST",
-      body: JSON.stringify({
-        action: "login",
-        username: "owner",
-        password: "owner",
-      }),
-    });
+    await loginWithCredentials(this, VERIFY_OWNER_CREDENTIALS);
+  }
+
+  async loginAsStaff(username: string, password: string) {
+    await loginWithCredentials(this, { username, password });
   }
 
   async createProduct(name: string, stock: number) {
@@ -238,25 +245,31 @@ function writeReport() {
 }
 
 async function main() {
+  const ownerCertifier = new SalesCertifier();
   const certifier = new SalesCertifier();
   const refreshCertifier = new SalesCertifier();
   const productIds: string[] = [];
   const saleIds: string[] = [];
   const today = new Date().toISOString().slice(0, 10);
+  let certCashier: CertificationCashier | null = null;
 
   console.log("Sales module production certification starting...\n");
 
   try {
-    await certifier.login();
+    await ownerCertifier.login();
+    certCashier = await createCertificationCashier(ownerCertifier, TEST_PREFIX);
 
-    const productA = await certifier.createProduct(`${TEST_PREFIX} Item A`, 0);
-    const productB = await certifier.createProduct(`${TEST_PREFIX} Item B`, 0);
+    const productA = await ownerCertifier.createProduct(`${TEST_PREFIX} Item A`, 0);
+    const productB = await ownerCertifier.createProduct(`${TEST_PREFIX} Item B`, 0);
     const productAId = String(productA.id);
     const productBId = String(productB.id);
     productIds.push(productAId, productBId);
 
-    await certifier.addStock(productAId, 100);
-    await certifier.addStock(productBId, 30);
+    await ownerCertifier.addStock(productAId, 100);
+    await ownerCertifier.addStock(productBId, 30);
+
+    await certifier.loginAsStaff(certCashier.username, certCashier.password);
+    await ensureDayOpen(certifier, today, "main", ownerCertifier);
 
     const sale1 = await certifier.createSaleBody(
       buildSalePayload({
@@ -381,9 +394,8 @@ async function main() {
       `Item A 100→75, Item B 30→29 after ${saleIds.length} sales`
     );
 
-    const owner = await prisma.user.findFirst({
-      where: { username: "owner" },
-      include: { staff: true },
+    const staffRecord = await prisma.staff.findUnique({
+      where: { id: certCashier!.staffId },
     });
     const prismaSales = await prisma.sale.findMany({
       where: { id: { in: saleIds } },
@@ -392,14 +404,16 @@ async function main() {
     assert.ok(prismaSales.every((sale) => sale.branch.code === "main"));
     assert.ok(
       prismaSales.every(
-        (sale) => sale.staffId === owner?.staffId && sale.staffName === owner?.staff?.name
+        (sale) =>
+          sale.staffId === certCashier!.staffId &&
+          sale.staffName === staffRecord?.name
       )
     );
     recordCheck(
       12,
       "Verify Staff attribution",
       true,
-      `All certification sales attributed to ${owner?.staff?.name ?? "owner staff"}`
+      `All certification sales attributed to ${staffRecord?.name ?? "certification cashier"}`
     );
 
     const branch = await prisma.branch.findUniqueOrThrow({ where: { code: "main" } });
@@ -447,7 +461,7 @@ async function main() {
       `${saleIds.length} certification sales visible via /api/sales`
     );
 
-    await refreshCertifier.login();
+    await refreshCertifier.loginAsStaff(certCashier.username, certCashier.password);
     const refreshedSales = await refreshCertifier.listSales();
     assert.equal(
       refreshedSales.filter((sale) => saleIds.includes(String(sale.id))).length,
@@ -587,6 +601,9 @@ async function main() {
     console.log(`\nSales module CERTIFIED. Report written to ${REPORT_PATH}`);
   } finally {
     await cleanup(productIds, saleIds);
+    if (certCashier) {
+      await cleanupCertificationCashier(certCashier);
+    }
     await prisma.$disconnect();
   }
 }

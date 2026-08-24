@@ -32,6 +32,8 @@
     "db:backup": "tsx scripts/backup-database.ts",
     "db:backup:schedule": "tsx scripts/scheduled-backup.ts",
     "db:restore": "tsx scripts/restore-database.ts",
+    "db:production-reset": "tsx scripts/production-reset.ts",
+    "db:production-init": "tsx scripts/production-initialization.ts",
     "docker:build": "docker compose build app",
     "docker:up:dev": "docker compose --profile development up",
     "docker:up:staging": "SONIC_ENV_FILE=deploy/env/staging.env docker compose --profile staging up -d",

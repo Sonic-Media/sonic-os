@@ -9,12 +9,16 @@ import { StaffEndOfDayCard } from "@/components/operations/staff/staff-end-of-da
 import { StaffExpensesCard } from "@/components/operations/staff/staff-expenses-card";
 import { StaffRevenueCard } from "@/components/operations/staff/staff-revenue-card";
 import { StaffWelcomeCard } from "@/components/operations/staff/staff-welcome-card";
+import { useToast } from "@/context/toast-context";
 import { useEntryForm } from "@/hooks/use-entry-form";
 import { useStaffCloseDay } from "@/hooks/use-staff-close-day";
 import { useSales } from "@/context/sales-context";
 import { useActiveBranch } from "@/context/active-branch-context";
 import { filterByBranchField } from "@/lib/active-branch/filters";
+import { parseAmount } from "@/lib/amounts";
 import { isPayrollEntryExpense } from "@/lib/expenses";
+import { uiSpacing } from "@/lib/ui/design-tokens";
+import { cn } from "@/lib/utils";
 import type { Branch, Entry } from "@/types";
 
 type StaffWorkflowSection =
@@ -50,6 +54,7 @@ export function StaffOperationsWorkspace({
 }: StaffOperationsWorkspaceProps) {
   const { sales } = useSales();
   const { activeBranch } = useActiveBranch();
+  const { success: toastSuccess, error: toastError } = useToast();
 
   const {
     form,
@@ -60,6 +65,7 @@ export function StaffOperationsWorkspace({
     totalExpenses,
     staffPayouts,
     balance,
+    remainingCash,
     duplicateEntry,
     updateField,
     handleSubmitRequest,
@@ -111,14 +117,34 @@ export function StaffOperationsWorkspace({
   }
 
   async function handleCloseDay() {
-    const saved = await handleSubmitRequest();
-    if (!saved) return;
+    if (movieRevenue <= 0) {
+      toastError("Enter movie revenue before closing the day.");
+      expandSection("end-of-day");
+      return;
+    }
 
-    await closeStaffDay(form.notes.trim());
+    const saved = await handleSubmitRequest();
+    if (!saved) {
+      toastError(saveError ?? "Could not save today's operations. Please try again.");
+      expandSection("end-of-day");
+      return;
+    }
+
+    const result = await closeStaffDay(form.notes.trim());
+    if (result.success) {
+      toastSuccess("Day Closed");
+      return;
+    }
+
+    toastError(
+      ("message" in result && result.message) ||
+        "Could not close the day. Please try again."
+    );
+    expandSection("end-of-day");
   }
 
   return (
-    <div className="mx-auto max-w-3xl space-y-5 pb-4">
+    <div className={cn("mx-auto max-w-3xl", uiSpacing.page, uiSpacing.section)}>
       <StaffWelcomeCard />
 
       <StaffRevenueCard
@@ -163,6 +189,7 @@ export function StaffOperationsWorkspace({
         totalExpenses={totalExpenses}
         staffPayouts={staffPayouts}
         netCash={balance}
+        savingsAllocation={parseAmount(form.savingsAllocation)}
         expanded={expandedSection === "cash-summary"}
         onExpandedChange={(open) => expandSection(open ? "cash-summary" : null)}
       />

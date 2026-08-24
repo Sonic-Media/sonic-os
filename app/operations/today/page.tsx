@@ -15,7 +15,7 @@ import {
   findCompletedEntryForBranchDate,
   findDraftForBranchDate,
 } from "@/lib/entry-helpers";
-import { getTodayISO } from "@/lib/dates";
+import { useTodayISO } from "@/hooks/use-today-iso";
 import { useActiveBranch } from "@/context/active-branch-context";
 import { useAuth } from "@/context/auth-context";
 import { useDayClosing } from "@/context/day-closing-context";
@@ -25,7 +25,7 @@ import { useStaffAttendance } from "@/hooks/use-staff-attendance";
 function TodayOperationsContent() {
   const { activeBranch, isLoaded: branchLoaded } = useActiveBranch();
   const { session } = useAuth();
-  const today = getTodayISO();
+  const today = useTodayISO();
   const { entries, isLoaded } = useEntriesContext();
   const {
     isBranchDayClosed,

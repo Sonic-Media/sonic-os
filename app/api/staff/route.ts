@@ -1,10 +1,12 @@
 import { jsonCreated, jsonOk } from "@/lib/api/response";
 import { handleRouteError, withDatabase } from "@/lib/server/route-handler";
-import { createStaff, listStaff } from "@/lib/server/services/staff-service";
+import { createStaff, listStaffForSession } from "@/lib/server/services/staff-service";
 
 export async function GET() {
   try {
-    const staff = await withDatabase(() => listStaff(), { module: "operations" });
+    const staff = await withDatabase(() => listStaffForSession(), {
+      module: "operations",
+    });
     return jsonOk(staff);
   } catch (error) {
     return handleRouteError(error);

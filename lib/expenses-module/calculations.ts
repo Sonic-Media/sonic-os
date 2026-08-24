@@ -73,9 +73,11 @@ export function computeExpensesDashboardMetrics(
   if (expenses.length === 0) {
     return {
       todaysExpenses: null,
+      weekExpenses: null,
       monthExpenses: null,
       highestExpenseCategory: null,
       averageDailyExpense: null,
+      topCategories: [],
     };
   }
 
@@ -103,15 +105,30 @@ export function computeExpensesDashboardMetrics(
     0
   );
 
+  const weekStart = getWeekStartISO();
+  const weekExpenseRecords = expenses.filter(
+    (expense) => expense.date >= weekStart
+  );
+  const weekTotal = weekExpenseRecords.reduce(
+    (sum, expense) => sum + getEffectiveExpenseAmount(expense),
+    0
+  );
+  const topCategories = computeCategoryExpenseTotals(expenses, {
+    start: monthStart,
+    end: todayISO,
+  }).slice(0, 3);
+
   return {
     todaysExpenses: todayExpenses.reduce(
       (sum, expense) => sum + getEffectiveExpenseAmount(expense),
       0
     ),
+    weekExpenses: weekTotal,
     monthExpenses: monthTotal,
     highestExpenseCategory,
     averageDailyExpense:
       uniqueDays.size > 0 ? monthTotal / uniqueDays.size : null,
+    topCategories,
   };
 }
 

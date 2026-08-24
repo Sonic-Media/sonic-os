@@ -110,21 +110,14 @@ const COMMAND_DEFINITIONS: CommandDefinition[] = [
     label: "New Sale",
     group: "quick-actions",
     keywords: ["new", "sale", "sell", "pos", "transaction"],
-    href: "/sales/new",
-  },
-  {
-    id: "open-purchasing",
-    label: "Open Purchasing",
-    group: "quick-actions",
-    keywords: ["open", "purchasing", "suppliers", "procurement", "buy"],
-    href: "/purchasing",
+    href: "/operations/today",
   },
   {
     id: "new-purchase",
-    label: "New Purchase",
+    label: "Record Purchase",
     group: "quick-actions",
     keywords: ["new", "purchase", "supplier", "stock in", "buy"],
-    href: "/purchasing/new",
+    href: "/operations/today",
   },
   {
     id: "open-expenses",
@@ -135,9 +128,9 @@ const COMMAND_DEFINITIONS: CommandDefinition[] = [
   },
   {
     id: "new-expense",
-    label: "New Expense",
+    label: "Add Historical Expense",
     group: "quick-actions",
-    keywords: ["new", "expense", "cost", "operating"],
+    keywords: ["historical", "expense", "late entry", "forgotten"],
     href: "/expenses/history",
   },
   {

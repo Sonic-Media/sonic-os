@@ -41,9 +41,11 @@ export interface ExpenseRecord {
 
 export interface ExpensesDashboardMetrics {
   todaysExpenses: number | null;
+  weekExpenses: number | null;
   monthExpenses: number | null;
   highestExpenseCategory: string | null;
   averageDailyExpense: number | null;
+  topCategories: { category: string; total: number }[];
 }
 
 export type CashFlowPeriod = "today" | "week" | "month" | "year" | "custom";

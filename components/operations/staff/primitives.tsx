@@ -3,6 +3,14 @@
 import { useState, type ReactNode } from "react";
 import { useAnimatedValue } from "@/components/dashboard/analytics/animated-value";
 import { formatCurrency } from "@/lib/format";
+import {
+  uiInteraction,
+  uiMotion,
+  uiRadius,
+  uiSpacing,
+  uiSurface,
+  uiTypography,
+} from "@/lib/ui/design-tokens";
 import { cn } from "@/lib/utils";
 
 export type StaffCardAccent =
@@ -31,11 +39,9 @@ const accentGlow: Record<StaffCardAccent, string> = {
   closed: "shadow-[0_24px_80px_-48px_rgba(239,68,68,0.2)]",
 };
 
-export const staffSectionLabelClass =
-  "text-[11px] font-semibold uppercase tracking-[0.22em] text-zinc-500";
+export const staffSectionLabelClass = uiTypography.sectionLabel;
 
-export const staffSectionTitleClass =
-  "text-xl font-semibold tracking-tight text-white sm:text-[1.35rem]";
+export const staffSectionTitleClass = uiTypography.sectionTitle;
 
 export function StaffSectionLabel({
   children,
@@ -99,16 +105,20 @@ export function StaffCard({
   return (
     <div
       className={cn(
-        "animate-in fade-in slide-in-from-bottom-2 rounded-3xl border border-white/[0.06] duration-500",
-        "bg-zinc-950/55 backdrop-blur-md transition-all duration-300 ease-out",
+        "animate-in fade-in slide-in-from-bottom-2 duration-500",
+        uiRadius.lg,
+        uiSurface.cardSubtle,
+        "transition-all duration-200 ease-out",
         "border-t-[3px]",
         accentTopBorder[accent],
         accentGlow[accent],
-        interactive &&
-          "hover:-translate-y-0.5 hover:border-white/[0.09] hover:shadow-[0_28px_80px_-40px_rgba(0,0,0,0.85)]",
+        interactive && uiInteraction.cardHover,
         hero
-          ? "relative overflow-hidden bg-gradient-to-br from-zinc-900/90 via-zinc-950/80 to-black p-8 sm:p-9"
-          : "p-6 sm:p-7",
+          ? cn(
+              "relative overflow-hidden bg-gradient-to-br from-zinc-900/90 via-zinc-950/80 to-black",
+              uiSpacing.cardPaddingLg
+            )
+          : uiSpacing.cardPaddingLg,
         className
       )}
     >
@@ -139,8 +149,9 @@ export function StaffMetricTile({
   return (
     <div
       className={cn(
-        "rounded-2xl border border-white/[0.05] bg-black/20 px-5 py-4 transition-all duration-300 ease-out",
-        "hover:-translate-y-0.5 hover:border-white/[0.08] hover:shadow-[0_12px_32px_-20px_rgba(0,0,0,0.8)]",
+        uiRadius.md,
+        uiSurface.cardInset,
+        uiInteraction.cardHover,
         className
       )}
     >
@@ -241,16 +252,17 @@ export function StaffDotLeaderRow({
 export function StaffPremiumButton({
   children,
   className,
+  disabled,
   ...props
 }: React.ButtonHTMLAttributes<HTMLButtonElement>) {
   return (
     <button
       type="button"
+      disabled={disabled}
       className={cn(
-        "inline-flex items-center justify-center rounded-2xl px-5 py-2.5 text-sm font-semibold",
-        "bg-white text-zinc-950 transition-all duration-200 ease-out",
-        "hover:scale-[1.02] hover:shadow-[0_0_24px_-4px_rgba(255,255,255,0.35)]",
-        "active:scale-[0.98] disabled:pointer-events-none disabled:opacity-50",
+        uiInteraction.button,
+        "h-11 w-full rounded-xl bg-white px-5 text-sm font-semibold text-zinc-950",
+        "hover:scale-[1.01] hover:bg-zinc-100 hover:shadow-[0_0_24px_-4px_rgba(255,255,255,0.25)]",
         className
       )}
       {...props}
@@ -347,7 +359,8 @@ export function StaffCollapsibleCard({
 
       <div
         className={cn(
-          "grid transition-[grid-template-rows,opacity] duration-250 ease-out",
+          "grid transition-[grid-template-rows,opacity]",
+          uiMotion.accordion,
           isOpen && children
             ? "grid-rows-[1fr] opacity-100"
             : "grid-rows-[0fr] opacity-0"

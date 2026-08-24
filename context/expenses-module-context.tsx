@@ -275,6 +275,13 @@ export function ExpensesModuleProvider({
         });
       }
 
+      if (isBranchDayClosed(input.branch, input.date)) {
+        return createValidationResult({ form: DAY_CLOSED_EDIT_MESSAGE });
+      }
+      if (!isBranchDayOpened(input.branch, input.date)) {
+        return createValidationResult({ form: SHOP_NOT_OPENED_MESSAGE });
+      }
+
       const errors = validateExpenseRecordInput(input);
       if (hasValidationErrors(errors)) {
         return createValidationResult(errors);
@@ -336,6 +343,14 @@ export function ExpensesModuleProvider({
       if (
         existing?.staffPaymentId ||
         (existing && isStaffPaymentExpense(existing))
+      ) {
+        return;
+      }
+
+      if (
+        existing &&
+        (isBranchDayClosed(existing.branch, existing.date) ||
+          !isBranchDayOpened(existing.branch, existing.date))
       ) {
         return;
       }

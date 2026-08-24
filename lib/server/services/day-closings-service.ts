@@ -14,6 +14,10 @@ import { requireSession } from "@/lib/server/session";
 import { isRoleGreetingLabel } from "@/lib/ux/user-display";
 import { buildStaffActionRecord } from "@/lib/staff/session";
 import { upsertDailyOperation } from "@/lib/server/services/daily-operations-service";
+import {
+  assertCanCloseDay,
+  assertCanOpenShop,
+} from "@/lib/server/day-closing-guards";
 import type { Branch } from "@/types";
 import type { DayClosingSummary } from "@/types/day-closing";
 import type {
@@ -239,6 +243,7 @@ export async function openDay(input: unknown): Promise<DayClosingRecord> {
   const parsed = openDaySchema.parse(input);
   const branchId = await getBranchIdByCode(parsed.branch);
   const session = await requireSession();
+  assertCanOpenShop(session);
 
   const actor = await prisma.user.findUnique({
     where: { id: session.userId },
@@ -329,6 +334,7 @@ export async function closeDay(input: unknown): Promise<DayClosingRecord> {
   const parsed = closeDaySchema.parse(input);
   const branchId = await getBranchIdByCode(parsed.branch);
   const session = await requireSession();
+  assertCanCloseDay(session);
   const summary = parsed.summary as unknown as DayClosingSummary;
 
   const existing = await prisma.dayClosing.findUnique({
@@ -355,6 +361,35 @@ export async function closeDay(input: unknown): Promise<DayClosingRecord> {
   }
 
   const now = new Date();
+  const actor = await prisma.user.findUnique({
+    where: { id: session.userId },
+    include: {
+      staff: {
+        include: {
+          role: true,
+          branch: true,
+          user: true,
+        },
+      },
+    },
+  });
+
+  const createdBy =
+    actor?.staff &&
+    buildStaffActionRecord(
+      mapStaffToEntity(actor.staff),
+      now.toISOString(),
+      parsed.branch as Branch
+    );
+
+  await syncClosedDayDailyOperation({
+    branch: parsed.branch as Branch,
+    date: parsed.date,
+    summary,
+    closingNotes: parsed.closingNotes,
+    createdBy: createdBy || undefined,
+  });
+
   const record = await prisma.dayClosing.upsert({
     where: {
       branchId_date: {
@@ -397,35 +432,6 @@ export async function closeDay(input: unknown): Promise<DayClosingRecord> {
       closedAt: now,
       closingNotes: parsed.closingNotes?.trim() || null,
     },
-  });
-
-  const actor = await prisma.user.findUnique({
-    where: { id: session.userId },
-    include: {
-      staff: {
-        include: {
-          role: true,
-          branch: true,
-          user: true,
-        },
-      },
-    },
-  });
-
-  const createdBy =
-    actor?.staff &&
-    buildStaffActionRecord(
-      mapStaffToEntity(actor.staff),
-      now.toISOString(),
-      parsed.branch as Branch
-    );
-
-  await syncClosedDayDailyOperation({
-    branch: parsed.branch as Branch,
-    date: parsed.date,
-    summary,
-    closingNotes: parsed.closingNotes,
-    createdBy: createdBy || undefined,
   });
 
   return mapDayClosingRecord(record);

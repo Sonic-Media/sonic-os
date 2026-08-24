@@ -4,7 +4,6 @@ import { useMemo } from "react";
 import { SalesHistoryFilters } from "@/components/sales/sales-history-filters";
 import { SalesHistoryTable } from "@/components/sales/sales-history-table";
 import { SalesSubnav } from "@/components/sales/sales-subnav";
-import { Button } from "@/components/shared/ui/button";
 import { PageContainer } from "@/components/shared/layout/page-container";
 import { PageHeader } from "@/components/shared/layout/page-header";
 import { useSalesHistory } from "@/hooks/use-sales-history";
@@ -27,12 +26,8 @@ export default function SalesHistoryPage() {
     <PageContainer>
       <PageHeader
         title="Accessory Sales History"
-        subtitle="All completed accessory sales"
+        subtitle="Read-only history of completed accessory sales"
       />
-
-      <div className="mb-6 flex justify-end">
-        <Button href="/sales/new">New Accessory Sale</Button>
-      </div>
 
       <SalesSubnav />
 

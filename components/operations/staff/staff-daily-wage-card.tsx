@@ -11,8 +11,10 @@ import {
   StaffSuccessFlash,
 } from "@/components/operations/staff/primitives";
 import { useStaffPaymentsModule } from "@/context/staff-payments-context";
+import { useToast } from "@/context/toast-context";
 import { useLinkedStaff } from "@/hooks/use-linked-staff";
 import { branchCodesReferToSameInventory } from "@/lib/branch/codes";
+import { validateMoneyInput } from "@/lib/amounts";
 import { formatCurrency } from "@/lib/format";
 import { DEFAULT_DAILY_WAGE } from "@/lib/staff/constants";
 import type { Branch } from "@/types";
@@ -54,6 +56,7 @@ export function StaffDailyWageCard({
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showSuccess, setShowSuccess] = useState(false);
+  const { success: toastSuccess } = useToast();
 
   useEffect(() => {
     if (existingPayment) {
@@ -64,18 +67,26 @@ export function StaffDailyWageCard({
   }, [existingPayment, suggestedAmount]);
 
   async function handleRecordPayment() {
-    if (!loggedInStaff || existingPayment) return;
+    if (!loggedInStaff || existingPayment || isSaving) return;
+
+    const validation = validateMoneyInput(amount, {
+      allowZero: false,
+      fieldLabel: "Daily wage",
+    });
+    if (!validation.valid) {
+      setError(validation.message);
+      return;
+    }
 
     setIsSaving(true);
     setError(null);
 
-    const parsedAmount = Number.parseFloat(amount);
     const result = await recordStaffPaymentAsync({
       staffId: loggedInStaff.id,
       date,
       paymentType: "daily-wage",
       paymentMethod: "cash",
-      amount: parsedAmount,
+      amount: validation.amount,
     });
 
     setIsSaving(false);
@@ -88,6 +99,7 @@ export function StaffDailyWageCard({
     }
 
     setShowSuccess(true);
+    toastSuccess("Wage Recorded");
     window.setTimeout(() => setShowSuccess(false), 1200);
     onExpandedChange?.(false);
     onRecorded?.();
@@ -144,10 +156,12 @@ export function StaffDailyWageCard({
           <Button
             type="button"
             onClick={() => void handleRecordPayment()}
-            disabled={isSaving}
-            className="w-full rounded-2xl transition-all duration-200 hover:scale-[1.01] hover:shadow-[0_0_24px_-6px_rgba(255,255,255,0.25)]"
+            loading={isSaving}
+            loadingLabel="Recording..."
+            disabled={isSaving || isRecorded}
+            className="w-full"
           >
-            {isSaving ? "Recording..." : "Record Daily Cut"}
+            Record Daily Cut
           </Button>
         </div>
       )}

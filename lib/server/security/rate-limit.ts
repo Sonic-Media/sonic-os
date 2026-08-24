@@ -15,6 +15,14 @@ export function checkRateLimit(
   key: string,
   options: { limit: number; windowMs: number }
 ): RateLimitResult {
+  if (process.env.NODE_ENV !== "production") {
+    return {
+      allowed: true,
+      remaining: options.limit,
+      retryAfterSeconds: 0,
+    };
+  }
+
   const now = Date.now();
   const existing = buckets.get(key);
 

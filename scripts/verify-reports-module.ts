@@ -29,6 +29,16 @@ import {
 import { prisma } from "@/lib/db";
 import { isStaffPaymentExpense } from "@/lib/staff-payments/calculations";
 import {
+  ensureDayOpen as ensureBranchDayOpen,
+  loginWithCredentials,
+  VERIFY_OWNER_CREDENTIALS,
+} from "./verify-session";
+import {
+  cleanupCertificationCashier,
+  createCertificationCashier,
+  type CertificationCashier,
+} from "./verify-bootstrap";
+import {
   mapDailyOperationToEntry,
   mapExpenseRecordToEntity,
   mapSaleToEntity,
@@ -131,14 +141,11 @@ class ReportsCertifier {
   }
 
   async login() {
-    await this.json("/api/auth/session", {
-      method: "POST",
-      body: JSON.stringify({
-        action: "login",
-        username: "owner",
-        password: "owner",
-      }),
-    });
+    await loginWithCredentials(this, VERIFY_OWNER_CREDENTIALS);
+  }
+
+  async loginAsStaff(username: string, password: string) {
+    await loginWithCredentials(this, { username, password });
   }
 
   async fetchReportSummary(period: ReportPeriod) {
@@ -415,33 +422,12 @@ function buildCloseDayPayload(options: {
   };
 }
 
-async function ensureDayOpen(certifier: ReportsCertifier, date: string) {
-  const closings = await prisma.dayClosing.findMany({
-    where: { date, branch: { code: BRANCH } },
-  });
-  const record = closings[0];
-  if (record?.status === "closed") {
-    await certifier.reopenDay(date);
-  }
-
-  const refreshed = await prisma.dayClosing.findMany({
-    where: { date, branch: { code: BRANCH } },
-  });
-  const openRecord = refreshed[0];
-  const isOpened =
-    openRecord?.status === "open" &&
-    !!(openRecord.openedAt || openRecord.reopenedAt);
-
-  if (!isOpened) {
-    await certifier.json<JsonRecord>("/api/day-closings", {
-      method: "POST",
-      body: JSON.stringify({
-        action: "open",
-        branch: BRANCH,
-        date,
-      }),
-    });
-  }
+async function ensureDayOpen(
+  certifier: ReportsCertifier,
+  date: string,
+  reopenCertifier?: ReportsCertifier
+) {
+  await ensureBranchDayOpen(certifier, date, BRANCH, reopenCertifier);
 }
 
 async function assertEntryMatchesModules(entry: Entry) {
@@ -568,6 +554,7 @@ function writeReport(bugFix?: string) {
 
 async function main() {
   const certifier = new ReportsCertifier();
+  const staffCertifier = new ReportsCertifier();
   const refreshCertifier = new ReportsCertifier();
   const today = getTodayISO();
   const branchIds: Branch[] = ["main", "kansanga", "salaama"];
@@ -576,6 +563,7 @@ async function main() {
   const paymentIds: string[] = [];
   const productIds: string[] = [];
   let bugFixNote: string | undefined;
+  let certCashier: CertificationCashier | null = null;
 
   console.log("Reports module production certification starting...\n");
 
@@ -763,7 +751,9 @@ async function main() {
       `38 imported days: sales ${historicalSummary.totalSales}, expenses ${historicalSummary.totalExpenses}, savings ${historicalSummary.totalSavings}`
     );
 
-    await ensureDayOpen(certifier, today);
+    certCashier = await createCertificationCashier(certifier, TEST_PREFIX);
+    await staffCertifier.loginAsStaff(certCashier.username, certCashier.password);
+    await ensureDayOpen(staffCertifier, today, certifier);
     await cleanupTodayBranchActivity(today);
 
     const liveSaleAmount = 60_000;
@@ -771,14 +761,14 @@ async function main() {
     const liveStaffAmount = 5_000;
     const product = await certifier.createProduct(`${TEST_PREFIX} Item`, 20);
     productIds.push(String(product.id));
-    const sale = await certifier.createSale(
+    const sale = await staffCertifier.createSale(
       String(product.id),
       `${TEST_PREFIX} Item`,
       4,
       today
     );
     saleIds.push(String(sale.id));
-    const expense = await certifier.createExpense(
+    const expense = await staffCertifier.createExpense(
       liveExpenseAmount,
       `${TEST_PREFIX} transport`,
       today
@@ -788,7 +778,7 @@ async function main() {
       (member) => member.branch === BRANCH && member.active !== false
     );
     assert.ok(staffMember?.id);
-    const payment = await certifier.createStaffPayment(
+    const payment = await staffCertifier.createStaffPayment(
       String(staffMember!.id),
       liveStaffAmount,
       today
@@ -807,7 +797,7 @@ async function main() {
     );
     const payoutRows = buildStaffPayoutRows(dayData.staff, BRANCH, dayData.payments, today);
     const expectedCash = computeExpectedCash(metrics.cashBeforeClosing, payoutRows);
-    await certifier.closeDay(
+    await staffCertifier.closeDay(
       buildCloseDayPayload({
         date: today,
         metrics,
@@ -1003,6 +993,9 @@ async function main() {
       productIds,
       date: today,
     });
+    if (certCashier) {
+      await cleanupCertificationCashier(certCashier);
+    }
     await prisma.$disconnect();
   }
 }

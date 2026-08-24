@@ -57,6 +57,7 @@ import {
   isBranchDayOpened,
   SHOP_NOT_OPENED_MESSAGE,
 } from "@/lib/day-closing/storage";
+import { ownerExemptFromShopOpenGate } from "@/lib/operations/opening-hours";
 import type {
   StockDashboardMetrics,
   StockMovement,
@@ -368,7 +369,10 @@ export function StockProvider({ children }: { children: React.ReactNode }) {
       if (isBranchDayClosed(input.branch, movementDate)) {
         return createValidationResult({ form: DAY_CLOSED_EDIT_MESSAGE });
       }
-      if (!isBranchDayOpened(input.branch, movementDate)) {
+      if (
+        !ownerExemptFromShopOpenGate(session?.role) &&
+        !isBranchDayOpened(input.branch, movementDate)
+      ) {
         return createValidationResult({ form: SHOP_NOT_OPENED_MESSAGE });
       }
 
@@ -389,7 +393,7 @@ export function StockProvider({ children }: { children: React.ReactNode }) {
         });
       }
     },
-    [refreshStockFromApi]
+    [refreshStockFromApi, session?.role]
   );
 
   const value = useMemo(

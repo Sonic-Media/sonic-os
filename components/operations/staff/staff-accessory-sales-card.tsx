@@ -10,9 +10,9 @@ import {
   StaffSectionLabel,
   StaffSuccessFlash,
 } from "@/components/operations/staff/primitives";
+import { useToast } from "@/context/toast-context";
 import { useSales } from "@/context/sales-context";
 import { useActiveBranch } from "@/context/active-branch-context";
-import { useSalesDashboard } from "@/hooks/use-sales-dashboard";
 import { filterByBranchField } from "@/lib/active-branch/filters";
 import { formatCurrency } from "@/lib/format";
 import { getTodayISO } from "@/lib/dates";
@@ -32,12 +32,9 @@ export function StaffAccessorySalesCard({
 }: StaffAccessorySalesCardProps) {
   const { sales } = useSales();
   const { activeBranch } = useActiveBranch();
-  const { metrics } = useSalesDashboard();
   const [refreshKey, setRefreshKey] = useState(0);
   const [showSuccess, setShowSuccess] = useState(false);
-
-  const today = getTodayISO();
-  const isToday = date === today;
+  const { success: toastSuccess } = useToast();
 
   const branchSales = useMemo(
     () => filterByBranchField(sales, activeBranch),
@@ -52,9 +49,8 @@ export function StaffAccessorySalesCard({
     [branchSales, date]
   );
 
-  const todayRevenue = isToday
-    ? (metrics.todayRevenue ?? 0)
-    : todaysSales.reduce((sum, sale) => sum + sale.total, 0);
+  const todayRevenue = todaysSales.reduce((sum, sale) => sum + sale.total, 0);
+  const isToday = date === getTodayISO();
 
   const salesLabel =
     todaysSales.length === 1 ? "1 sale" : `${todaysSales.length} sales`;
@@ -62,6 +58,7 @@ export function StaffAccessorySalesCard({
   function handleSaleSuccess() {
     setRefreshKey((value) => value + 1);
     setShowSuccess(true);
+    toastSuccess("Sale Recorded");
     window.setTimeout(() => setShowSuccess(false), 1200);
     onExpandedChange?.(false);
     onSaleComplete?.();

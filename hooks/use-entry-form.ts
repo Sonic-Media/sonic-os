@@ -27,7 +27,10 @@ import { useEntriesContext } from "@/context/entries-context";
 import { useExpenseTemplates } from "@/context/expense-templates-context";
 import { useStaff } from "@/context/staff-context";
 import { useStaffPaymentsModule } from "@/context/staff-payments-context";
-import { useSalesDashboard } from "@/hooks/use-sales-dashboard";
+import { useSales } from "@/context/sales-context";
+import { useDayClosing } from "@/context/day-closing-context";
+import { filterByBranchField } from "@/lib/active-branch/filters";
+import { isBranchDayClosed } from "@/lib/day-closing/storage";
 import { computeStaffPayoutTotalForBranchDate } from "@/lib/staff-payments/calculations";
 import type { Branch, Entry, EntryFormData, Expense } from "@/types";
 
@@ -65,7 +68,8 @@ export function useEntryForm(options: UseEntryFormOptions = {}) {
   const { activeTemplateExpenses } = useExpenseTemplates();
   const { getStaffById } = useStaff();
   const { payments } = useStaffPaymentsModule();
-  const { metrics: salesMetrics } = useSalesDashboard();
+  const { sales } = useSales();
+  const { isLoaded: closingLoaded } = useDayClosing();
   const { activeBranch, isLoaded: activeBranchLoaded } = useActiveBranch();
   const isEdit = !!options.entry;
   const isDraftEdit = isEdit && options.entry?.status === "draft";
@@ -98,7 +102,16 @@ export function useEntryForm(options: UseEntryFormOptions = {}) {
   }, [entries]);
 
   const movieRevenue = parseAmount(form.sales);
-  const accessorySales = salesMetrics.todayRevenue ?? 0;
+  const accessorySales = useMemo(
+    () =>
+      filterByBranchField(sales, form.branch)
+        .filter(
+          (sale) => sale.date === form.date && sale.status === "completed"
+        )
+        .reduce((sum, sale) => sum + sale.total, 0),
+    [sales, form.branch, form.date]
+  );
+  const savingsAllocation = parseAmount(form.savingsAllocation);
   const totalExpenses = calculateExpenses(form);
   const staffPayouts = useMemo(
     () =>
@@ -110,6 +123,7 @@ export function useEntryForm(options: UseEntryFormOptions = {}) {
     [payments, form.branch, form.date]
   );
   const balance = movieRevenue + accessorySales - totalExpenses - staffPayouts;
+  const remainingCash = balance - savingsAllocation;
   const mode = options.mode ?? "today";
   const status = isEdit ? options.entry!.status : "draft";
   const showStatus = isEdit || hasStarted;
@@ -259,6 +273,13 @@ export function useEntryForm(options: UseEntryFormOptions = {}) {
   useEffect(() => {
     if (!hasInteracted.current) return;
     if (isEdit && options.entry?.status === "completed") return;
+    if (
+      mode === "today" &&
+      closingLoaded &&
+      isBranchDayClosed(form.branch, form.date)
+    ) {
+      return;
+    }
     if (saveLockRef.current) return;
 
     cancelPendingAutosave();
@@ -279,8 +300,8 @@ export function useEntryForm(options: UseEntryFormOptions = {}) {
           syncEntriesRef(saved);
           draftIdRef.current = saved.id;
         })
-        .catch((error) => {
-          console.error(getDataSourceErrorMessage(error));
+        .catch(() => {
+          // Autosave failures surface on explicit save/close actions.
         })
         .finally(() => {
           saveLockRef.current = false;
@@ -292,6 +313,10 @@ export function useEntryForm(options: UseEntryFormOptions = {}) {
     form,
     isEdit,
     options.entry?.status,
+    mode,
+    closingLoaded,
+    form.branch,
+    form.date,
     upsertEntry,
     cancelPendingAutosave,
     resolveActiveDraftId,
@@ -415,6 +440,15 @@ export function useEntryForm(options: UseEntryFormOptions = {}) {
   }
 
   async function handleSubmitRequest(): Promise<boolean> {
+    if (
+      mode === "today" &&
+      closingLoaded &&
+      isBranchDayClosed(form.branch, form.date)
+    ) {
+      setSaveError("This day is closed. Records cannot be changed.");
+      return false;
+    }
+
     if (mode === "today") {
       cancelPendingAutosave();
       setSaveError(null);
@@ -473,6 +507,8 @@ export function useEntryForm(options: UseEntryFormOptions = {}) {
     totalExpenses,
     staffPayouts,
     balance,
+    remainingCash,
+    savingsAllocation,
     duplicateEntry,
     updateField,
     handleSave,

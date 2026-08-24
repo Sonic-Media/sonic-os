@@ -1,7 +1,6 @@
 "use client";
 
 import { NewSaleForm } from "@/components/sales/new-sale-form";
-import { SalesSubnav } from "@/components/sales/sales-subnav";
 import { PageContainer } from "@/components/shared/layout/page-container";
 import { PageHeader } from "@/components/shared/layout/page-header";
 
@@ -10,10 +9,9 @@ export default function NewSalePage() {
     <PageContainer>
       <PageHeader
         title="New Accessory Sale"
-        subtitle="Record an accessory sale and update inventory automatically"
+        subtitle="Record a physical accessory sale for today"
+        showBranchBadge
       />
-
-      <SalesSubnav />
 
       <NewSaleForm />
     </PageContainer>

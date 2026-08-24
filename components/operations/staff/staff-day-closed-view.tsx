@@ -171,6 +171,7 @@ export function StaffDayClosedView({
         totalExpenses={totalExpenses}
         staffPayouts={dailyWage}
         netCash={netCash}
+        savingsAllocation={savingsAllocation}
         readOnly
       />
 

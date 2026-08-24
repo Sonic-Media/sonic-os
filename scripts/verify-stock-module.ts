@@ -2,6 +2,12 @@ import "dotenv/config";
 import assert from "node:assert/strict";
 import { prisma } from "@/lib/db";
 import { computeBranchNetQuantity } from "@/lib/stock/calculations";
+import {
+  cleanupCertificationCashier,
+  createCertificationCashier,
+  type CertificationCashier,
+} from "./verify-bootstrap";
+import { ensureDayOpen, loginWithCredentials } from "./verify-session";
 
 const BASE_URL = process.env.VERIFY_BASE_URL ?? "http://localhost:3000";
 const TEST_PREFIX = `verify-stock-${Date.now()}`;
@@ -56,14 +62,11 @@ class StockVerifier {
   }
 
   async login() {
-    await this.json("/api/auth/session", {
-      method: "POST",
-      body: JSON.stringify({
-        action: "login",
-        username: "owner",
-        password: "owner",
-      }),
-    });
+    await loginWithCredentials(this, { username: "owner", password: "owner" });
+  }
+
+  async loginAsStaff(username: string, password: string) {
+    await loginWithCredentials(this, { username, password });
   }
 
   async createProduct(name: string) {
@@ -229,7 +232,9 @@ async function cleanup(productId: string | null) {
 
 async function main() {
   const verifier = new StockVerifier();
+  const salesVerifier = new StockVerifier();
   let productId: string | null = null;
+  let certCashier: CertificationCashier | null = null;
 
   try {
     console.log("Stock module verification starting...");
@@ -306,7 +311,11 @@ async function main() {
     assert.equal(branchNet, 10);
     console.log("PASS branch net quantity matches movements");
 
-    await verifier.createSale(
+    certCashier = await createCertificationCashier(verifier, TEST_PREFIX);
+    await salesVerifier.loginAsStaff(certCashier.username, certCashier.password);
+    await ensureDayOpen(salesVerifier, new Date().toISOString().slice(0, 10), "main", verifier);
+
+    await salesVerifier.createSale(
       productId,
       `${TEST_PREFIX} Flash Disk 64GB`,
       3,
@@ -320,7 +329,7 @@ async function main() {
     );
 
     await verifier.expectFailure("oversized sale blocked", () =>
-      verifier.createSale(
+      salesVerifier.createSale(
         productId!,
         `${TEST_PREFIX} Flash Disk 64GB`,
         999,
@@ -348,6 +357,9 @@ async function main() {
     console.log("\nAll stock module checks passed.");
   } finally {
     await cleanup(productId);
+    if (certCashier) {
+      await cleanupCertificationCashier(certCashier);
+    }
     await prisma.$disconnect();
   }
 }

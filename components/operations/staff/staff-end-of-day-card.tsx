@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { Button } from "@/components/shared/ui/button";
 import { Input } from "@/components/shared/ui/input";
 import { Textarea } from "@/components/shared/ui/textarea";
@@ -8,7 +9,7 @@ import {
   StaffSectionLabel,
   StaffStatusBadge,
 } from "@/components/operations/staff/primitives";
-import { cn } from "@/lib/utils";
+import { parseAmount } from "@/lib/amounts";
 import type { EntryFormData } from "@/types";
 
 interface StaffEndOfDayCardProps {
@@ -39,7 +40,7 @@ function ChecklistRow({
     <div className="flex items-center justify-between gap-3 rounded-2xl border border-white/[0.05] bg-black/20 px-4 py-3">
       <span className="text-sm text-zinc-400">{label}</span>
       {done ? (
-        <span className="inline-flex items-center gap-1.5 text-sm font-medium text-emerald-400 animate-in fade-in zoom-in-95 duration-300">
+        <span className="inline-flex items-center gap-1.5 text-sm font-medium text-emerald-400 animate-in fade-in duration-300">
           ✓
         </span>
       ) : (
@@ -62,12 +63,23 @@ export function StaffEndOfDayCard({
   expanded,
   onExpandedChange,
 }: StaffEndOfDayCardProps) {
+  const [movieError, setMovieError] = useState<string | null>(null);
   const accessoriesDone = accessorySalesCount > 0;
   const expensesDone = totalExpenses > 0;
   const wageDone = staffPayouts > 0;
   const movieDone = movieRevenue > 0;
   const readyToClose =
     accessoriesDone && expensesDone && wageDone && movieDone;
+
+  function handleCloseClick() {
+    const parsedMovie = parseAmount(form.sales);
+    if (parsedMovie <= 0) {
+      setMovieError("Enter today's movie revenue before closing.");
+      return;
+    }
+    setMovieError(null);
+    onCloseDay();
+  }
 
   return (
     <StaffOperationCard
@@ -109,8 +121,11 @@ export function StaffEndOfDayCard({
                 inputMode="numeric"
                 placeholder="0"
                 value={form.sales}
-                onChange={(event) => updateField("sales", event.target.value)}
-                className="rounded-2xl border-white/[0.08] bg-black/30"
+                error={movieError ?? undefined}
+                onChange={(event) => {
+                  updateField("sales", event.target.value);
+                  if (movieError) setMovieError(null);
+                }}
               />
             </div>
           </div>
@@ -120,7 +135,6 @@ export function StaffEndOfDayCard({
             placeholder="Optional notes about today's shift"
             value={form.notes}
             onChange={(event) => updateField("notes", event.target.value)}
-            className="min-h-[100px] rounded-2xl border-white/[0.08] bg-black/30"
           />
 
           {closeError ? <p className="text-sm text-red-400">{closeError}</p> : null}
@@ -128,16 +142,13 @@ export function StaffEndOfDayCard({
           <Button
             type="button"
             size="lg"
-            disabled={isClosing}
-            onClick={onCloseDay}
-            className={cn(
-              "h-14 w-full rounded-2xl border-0 text-base font-semibold transition-all duration-200",
-              "bg-white text-zinc-950",
-              "hover:scale-[1.01] hover:shadow-[0_0_32px_-8px_rgba(255,255,255,0.45)]",
-              "disabled:opacity-60"
-            )}
+            loading={isClosing}
+            loadingLabel="Closing Day..."
+            disabled={isClosing || !readyToClose}
+            onClick={handleCloseClick}
+            className="w-full"
           >
-            {isClosing ? "Closing Day..." : "Close Day"}
+            Close Day
           </Button>
 
           <p className="text-center text-xs leading-relaxed text-zinc-500">

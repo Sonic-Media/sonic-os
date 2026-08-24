@@ -25,6 +25,16 @@ import {
 } from "@/lib/expenses-module/validation";
 import { mapExpenseRecordToEntity } from "@/lib/server/mappers/entities";
 import type { ExpensePaymentMethod, ExpenseRecord } from "@/types/expenses-module";
+import {
+  ensureDayOpen,
+  loginWithCredentials,
+  VERIFY_OWNER_CREDENTIALS,
+} from "./verify-session";
+import {
+  cleanupCertificationCashier,
+  createCertificationCashier,
+  type CertificationCashier,
+} from "./verify-bootstrap";
 
 const BASE_URL = process.env.VERIFY_BASE_URL ?? "http://localhost:3000";
 const TEST_PREFIX = `cert-expenses-${Date.now()}`;
@@ -114,14 +124,11 @@ class ExpensesCertifier {
   }
 
   async login() {
-    await this.json("/api/auth/session", {
-      method: "POST",
-      body: JSON.stringify({
-        action: "login",
-        username: "owner",
-        password: "owner",
-      }),
-    });
+    await loginWithCredentials(this, VERIFY_OWNER_CREDENTIALS);
+  }
+
+  async loginAsStaff(username: string, password: string) {
+    await loginWithCredentials(this, { username, password });
   }
 
   async listCategories() {
@@ -227,17 +234,22 @@ function writeReport(options?: { bugFix?: string }) {
 }
 
 async function main() {
+  const ownerCertifier = new ExpensesCertifier();
   const certifier = new ExpensesCertifier();
   const refreshCertifier = new ExpensesCertifier();
   const expenseIds: string[] = [];
   const categoryIds: string[] = [];
   const today = new Date().toISOString().slice(0, 10);
   const yesterday = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
+  let certCashier: CertificationCashier | null = null;
 
   console.log("Expenses module production certification starting...\n");
 
   try {
-    await certifier.login();
+    await ownerCertifier.login();
+    certCashier = await createCertificationCashier(ownerCertifier, TEST_PREFIX);
+    await certifier.loginAsStaff(certCashier.username, certCashier.password);
+    await ensureDayOpen(certifier, today, "main", ownerCertifier);
 
     const categories = await certifier.listCategories();
     const categoryIdsInDb = new Set(categories.map((item) => String(item.id)));
@@ -361,23 +373,22 @@ async function main() {
       "All certification expenses saved to branch main (Kansanga)"
     );
 
-    const owner = await prisma.user.findFirst({
-      where: { username: "owner" },
-      include: { staff: true },
+    const staffRecord = await prisma.staff.findUnique({
+      where: { id: certCashier!.staffId },
     });
-    assert.ok(owner?.staffId);
+    assert.ok(staffRecord?.id);
     assert.ok(
       certExpensesBeforeEdit.every(
         (expense) =>
-          expense.staffId === owner.staffId &&
-          expense.staffName === owner.staff?.name
+          expense.staffId === certCashier!.staffId &&
+          expense.staffName === staffRecord.name
       )
     );
     recordCheck(
       7,
       "Verify staff attribution",
       true,
-      `All certification expenses attributed to ${owner.staff?.name ?? "owner staff"}`
+      `All certification expenses attributed to ${staffRecord.name}`
     );
 
     const editTargetId = expenseIds[0]!;
@@ -504,7 +515,7 @@ async function main() {
       "Search + category + payment filters returned the edited rent expense"
     );
 
-    await refreshCertifier.login();
+    await refreshCertifier.loginAsStaff(certCashier.username, certCashier.password);
     const refreshed = await refreshCertifier.listExpenses();
     assert.equal(
       expenseIds.every((id) => refreshed.some((item) => String(item.id) === id)),
@@ -639,6 +650,9 @@ async function main() {
     console.log(`\nExpenses module CERTIFIED. Report written to ${REPORT_PATH}`);
   } finally {
     await cleanup(expenseIds, categoryIds);
+    if (certCashier) {
+      await cleanupCertificationCashier(certCashier);
+    }
     await prisma.$disconnect();
   }
 }

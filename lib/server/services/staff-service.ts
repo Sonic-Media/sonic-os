@@ -6,6 +6,8 @@ import { isStaffRoleId } from "@/lib/staff/roles";
 import { getBranchIdByCode } from "@/lib/server/branch-lookup";
 import { mapStaffToEntity } from "@/lib/server/mappers/entities";
 import { getRoleIdBySlug } from "@/lib/server/role-lookup";
+import { requireSession } from "@/lib/server/session";
+import { migrateLegacyAuthRole } from "@/lib/staff/roles";
 import type { Branch, Staff } from "@/types";
 import type { StaffInput, StaffRoleId, StaffStatus } from "@/types/staff-role";
 
@@ -117,6 +119,22 @@ export async function listStaff(): Promise<Staff[]> {
   });
 
   return sortStaff(staff.map(mapStaffToEntity));
+}
+
+export async function listStaffForSession(): Promise<Staff[]> {
+  const session = await requireSession();
+
+  if (session.role === "owner") {
+    return listStaff();
+  }
+
+  const staffRole = migrateLegacyAuthRole(session.role);
+  if (staffRole === "branch-manager") {
+    return listStaff();
+  }
+
+  const linked = await getLinkedStaffForUser(session.userId);
+  return linked ? [linked] : [];
 }
 
 export async function getLinkedStaffForUser(userId: string): Promise<Staff | null> {

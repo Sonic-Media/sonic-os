@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/shared/ui/button";
 import { Card } from "@/components/shared/ui/card";
+import { EmptyState } from "@/components/shared/ui/empty-state";
 import { Input } from "@/components/shared/ui/input";
 import { Select } from "@/components/shared/ui/select";
 import { Textarea } from "@/components/shared/ui/textarea";
@@ -119,6 +120,30 @@ export function NewSaleForm({
     event.preventDefault();
     if (!selectedProduct || isSubmitting) return;
 
+    if (
+      !Number.isFinite(parsedQuantity) ||
+      parsedQuantity <= 0 ||
+      !Number.isInteger(parsedQuantity)
+    ) {
+      setErrors({ quantity: "Enter a whole quantity greater than zero." });
+      return;
+    }
+
+    if (!Number.isFinite(parsedUnitPrice) || parsedUnitPrice <= 0) {
+      setErrors({ unitPrice: "Enter a valid price greater than zero." });
+      return;
+    }
+
+    if (Number.isFinite(parsedDiscount) && parsedDiscount < 0) {
+      setErrors({ discount: "Discount cannot be negative." });
+      return;
+    }
+
+    if (!paymentMethod) {
+      setErrors({ paymentMethod: "Select a payment method." });
+      return;
+    }
+
     setIsSubmitting(true);
     setErrors({});
 
@@ -177,20 +202,21 @@ export function NewSaleForm({
   }
 
   if (availableProducts.length === 0) {
-    const emptyMessage = canAccessStock
-      ? inline
-        ? "No accessory items are available to sell yet. Ask the owner to add stock."
-        : "Add items to stock before recording sales."
-      : "No products are currently available for sale.\nPlease contact your manager.";
-
     return (
       <Card>
-        <p className="whitespace-pre-line text-sm text-zinc-400">{emptyMessage}</p>
-        {!inline && canAccessStock && (
-          <Button href="/stock/products" variant="secondary" className="mt-4">
+        <EmptyState
+          title="No accessories available."
+          description={
+            canAccessStock
+              ? "Add items to stock before recording sales."
+              : "Please contact your manager."
+          }
+        />
+        {!inline && canAccessStock ? (
+          <Button href="/stock/products" variant="secondary" className="mt-4 w-full">
             Go to Stock
           </Button>
-        )}
+        ) : null}
       </Card>
     );
   }
@@ -358,6 +384,8 @@ export function NewSaleForm({
           <Button
             type="submit"
             className="mt-6 w-full"
+            loading={isSubmitting}
+            loadingLabel="Saving sale..."
             disabled={isSubmitting || !productId || !paymentMethod}
           >
             Complete Sale
@@ -368,6 +396,8 @@ export function NewSaleForm({
         {inline && (
           <Button
             type="submit"
+            loading={isSubmitting}
+            loadingLabel="Saving sale..."
             disabled={isSubmitting || !productId || !paymentMethod}
           >
             Complete Sale

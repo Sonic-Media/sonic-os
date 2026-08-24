@@ -10,17 +10,20 @@ import { useActiveBranch } from "@/context/active-branch-context";
 import { useExpensesModule } from "@/context/expenses-module-context";
 import { getTodayISO } from "@/lib/dates";
 import { EXPENSE_PAYMENT_METHODS, filterSelectableExpenseCategories } from "@/lib/expenses-module/constants";
+import { LATE_ENTRY_NOTE_PREFIX } from "@/lib/transactions/types";
 import type { ExpensePaymentMethod, ExpenseRecord } from "@/types/expenses-module";
 
 interface ExpenseDialogProps {
   mode: "add" | "edit";
   expense?: ExpenseRecord;
+  historical?: boolean;
   onClose: () => void;
 }
 
 export function ExpenseDialog({
   mode,
   expense,
+  historical = false,
   onClose,
 }: ExpenseDialogProps) {
   const { categories, addExpense, updateExpense } = useExpensesModule();
@@ -54,6 +57,13 @@ export function ExpenseDialog({
     event.preventDefault();
 
     const parsedAmount = Number.parseFloat(amount);
+    const trimmedNotes = notes.trim();
+    const historicalNotes = historical
+      ? trimmedNotes
+        ? `${LATE_ENTRY_NOTE_PREFIX} ${trimmedNotes}`
+        : LATE_ENTRY_NOTE_PREFIX
+      : trimmedNotes;
+
     const input = {
       date,
       categoryId,
@@ -61,7 +71,7 @@ export function ExpenseDialog({
       amount: parsedAmount,
       paymentMethod: paymentMethod as ExpensePaymentMethod,
       branch: mode === "edit" ? expense!.branch : activeBranch,
-      notes,
+      notes: historicalNotes,
     };
 
     const result =
@@ -79,7 +89,7 @@ export function ExpenseDialog({
 
   return (
     <StockDialog
-      title={mode === "add" ? "New Expense" : "Edit Expense"}
+      title={historical ? "Add Historical Expense" : mode === "add" ? "New Expense" : "Edit Expense"}
       description="Record an operating expense."
       onClose={onClose}
       className="max-w-lg"

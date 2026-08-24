@@ -1,9 +1,10 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { ExpenseHistoryFilters } from "@/components/expenses/expense-history-filters";
 import { ExpenseHistoryTable } from "@/components/expenses/expense-history-table";
 import { ExpensesSubnav } from "@/components/expenses/expenses-subnav";
+import { HistoricalExpenseGateDialog } from "@/components/expenses/historical-expense-gate-dialog";
 import { Button } from "@/components/shared/ui/button";
 import { PageContainer } from "@/components/shared/layout/page-container";
 import { PageHeader } from "@/components/shared/layout/page-header";
@@ -15,7 +16,9 @@ import { filterSelectableExpenseCategories } from "@/lib/expenses-module/constan
 export default function ExpensesHistoryPage() {
   const { criteria, expenses, updateCriteria } = useExpensesHistory();
   const { categories, deleteExpense } = useExpensesModule();
-  const { openAddExpense, openEditExpense, renderDialogs } = useExpensesDialogs();
+  const { openAddHistoricalExpense, openEditExpense, renderDialogs } =
+    useExpensesDialogs();
+  const [showHistoricalGate, setShowHistoricalGate] = useState(false);
 
   const categoryOptions = useMemo(
     () =>
@@ -38,13 +41,13 @@ export default function ExpensesHistoryPage() {
   return (
     <PageContainer>
       <PageHeader
-        title="Expenses"
-        subtitle="All operating expense records"
+        title="Expense History"
+        subtitle="Master history of every expense recorded across the business"
       />
 
       <div className="mb-6 flex justify-end">
-        <Button type="button" onClick={openAddExpense}>
-          New Expense
+        <Button type="button" onClick={() => setShowHistoricalGate(true)}>
+          Add Historical Expense
         </Button>
       </div>
 
@@ -64,6 +67,15 @@ export default function ExpensesHistoryPage() {
           onDelete={(expense) => handleDelete(expense.id, expense.description)}
         />
       </div>
+
+      <HistoricalExpenseGateDialog
+        open={showHistoricalGate}
+        onClose={() => setShowHistoricalGate(false)}
+        onConfirm={() => {
+          setShowHistoricalGate(false);
+          openAddHistoricalExpense();
+        }}
+      />
 
       {renderDialogs()}
     </PageContainer>

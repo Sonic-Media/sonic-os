@@ -15,9 +15,56 @@ export function parseAmount(value: string | number | unknown): number {
 
   const accountingNegative = normalized.match(/^\((\d+)\)$/);
   const numeric = accountingNegative ? `-${accountingNegative[1]}` : normalized;
+  if (!/^-?\d*(\.\d+)?$/.test(numeric)) {
+    return 0;
+  }
+
   const parsed = Number(numeric);
 
   return Number.isFinite(parsed) ? parsed : 0;
+}
+
+export function validateMoneyInput(
+  value: string | number | unknown,
+  options: { allowZero?: boolean; fieldLabel?: string } = {}
+): { valid: true; amount: number } | { valid: false; amount: number; message: string } {
+  const label = options.fieldLabel ?? "Amount";
+  const amount = parseAmount(value);
+  const raw = String(value ?? "").trim();
+
+  if (raw && amount === 0 && raw !== "0" && raw !== "0.0") {
+    return {
+      valid: false,
+      amount: 0,
+      message: `${label} must be a valid number.`,
+    };
+  }
+
+  if (!Number.isFinite(amount)) {
+    return {
+      valid: false,
+      amount: 0,
+      message: `${label} must be a valid number.`,
+    };
+  }
+
+  if (amount < 0) {
+    return {
+      valid: false,
+      amount,
+      message: `${label} cannot be negative.`,
+    };
+  }
+
+  if (!options.allowZero && amount <= 0) {
+    return {
+      valid: false,
+      amount,
+      message: `${label} must be greater than zero.`,
+    };
+  }
+
+  return { valid: true, amount };
 }
 
 export function calculateExpenses(entry: Pick<Entry, "expenses">): number {

@@ -1,7 +1,7 @@
 SONIC OS — DAILY OPERATIONS PRODUCTION CERTIFICATION
 ====================================================
 
-Date: 2026-08-22T17:51:12.157Z
+Date: 2026-08-24T00:22:31.376Z
 Result: CERTIFIED
 Checks passed: 21/21
 
@@ -19,27 +19,27 @@ history/reports alignment, duplicate protection, reopen, and persistence.
 CHECKLIST
 ---------
 [PASS] 1. Open a new business day
-    Branch main is open for 2026-08-22
+    Branch main is open for 2026-08-24
 [PASS] 2. Record sales throughout the day
     Sale total 150000 UGX
 [PASS] 3. Record expenses throughout the day
     Operating expense 25000 UGX recorded
 [PASS] 4. Record staff daily payments before balancing
-    Fazil paid 20000 UGX before close
+    cert-ops-1787530948493 Cashier paid 20000 UGX before close
 [PASS] 5. Verify every staff payment is linked to the correct Staff member
-    Payment 0ed68537-e3ef-4528-ab6f-d73a96a7b9f9 linked to Fazil and expense d8b43832-30a8-4943-9ca6-86dccda31dbc
+    Payment 432e57e9-28c2-43c9-987e-bc0cad11d572 linked to cert-ops-1787530948493 Cashier and expense 342ded01-a570-4d57-958a-5ce2b062e15c
 [PASS] 6. Verify Staff Payments are automatically included in Daily Operations
-    Metrics include 40000 UGX staff payments
+    Metrics include 20000 UGX staff payments
 [PASS] 7. Verify closing cash calculation
-    Sales 1430000 - Expenses 30000 - Staff 40000 = 1360000 UGX
+    Sales 240000 - Expenses 25000 - Staff 20000 = 175000 UGX
 [PASS] 8. Verify closing cash matches physical drawer
-    Expected and counted cash both 1360000 UGX (balanced)
+    Expected and counted cash both 175000 UGX (balanced)
 [PASS] 9. Verify Daily Operations totals
-    Close summary sales 1430000, expenses 30000, staff 40000
+    Close summary sales 240000, expenses 25000, staff 40000
 [PASS] 10. Verify Reports use the same values
-    Daily report sales 1430000, operating expenses 30000 UGX, payroll 40000 UGX
+    Daily report sales 240000, close summary sales 240000, payroll 40000 UGX
 [PASS] 11. Verify History displays the same values
-    History sales 1430000, net cash 1360000 UGX
+    History sales 240000, net cash 175000 UGX
 [PASS] 12. Verify branch assignment
     Sales, expenses, staff payments, and close record saved to branch main
 [PASS] 13. Prevent duplicate day closures
@@ -47,7 +47,7 @@ CHECKLIST
 [PASS] 14. Prevent closing an already closed day
     This branch day is already closed.
 [PASS] 15. Verify reopening
-    Day reopened for 2026-08-22 on branch main
+    Day reopened for 2026-08-24 on branch main
 [PASS] 16. Refresh browser
     New session reload returned close record and daily operation from PostgreSQL
 [PASS] 17. Restart dev server

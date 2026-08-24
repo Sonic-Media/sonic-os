@@ -10,6 +10,8 @@ import { MissionControlStaffStatus } from "@/components/dashboard/owner/mission-
 import { TodayTimeline } from "@/components/dashboard/owner/today-timeline";
 import { PageContainer } from "@/components/shared/layout/page-container";
 import { useBranchState } from "@/hooks/use-branch-state";
+import { uiSpacing } from "@/lib/ui/design-tokens";
+import { cn } from "@/lib/utils";
 
 interface OwnerDashboardLayoutProps {
   displayName: string;
@@ -20,7 +22,7 @@ export function OwnerDashboardLayout({ displayName }: OwnerDashboardLayoutProps)
   const isClosed = branchState.status === "closed";
 
   return (
-    <PageContainer className="space-y-8 pb-12">
+    <PageContainer className={cn(uiSpacing.page, "space-y-8")}>
       <MissionControlHero displayName={displayName} />
 
       {isClosed ? <MissionControlClosedSummary /> : null}

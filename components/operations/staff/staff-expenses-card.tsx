@@ -10,7 +10,9 @@ import {
   StaffPremiumButton,
   StaffSectionLabel,
 } from "@/components/operations/staff/primitives";
+import { EmptyState } from "@/components/shared/ui/empty-state";
 import { StockDialog } from "@/components/stock/stock-dialog";
+import { useToast } from "@/context/toast-context";
 import { useExpenseList } from "@/hooks/use-expense-list";
 import { calculateExpenses, parseAmount } from "@/lib/amounts";
 import { isPayrollEntryExpense } from "@/lib/expenses";
@@ -36,6 +38,8 @@ export function StaffExpensesCard({
   onExpandedChange,
 }: StaffExpensesCardProps) {
   const [showModal, setShowModal] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
+  const { success: toastSuccess } = useToast();
   const totalExpenses = useMemo(() => calculateExpenses(form), [form]);
 
   const {
@@ -81,7 +85,14 @@ export function StaffExpensesCard({
   function handleSaveExpense() {
     const trimmedName = newName.trim();
     const parsedAmount = parseAmount(newAmount);
-    if (!trimmedName || parsedAmount <= 0) return;
+    if (!trimmedName) {
+      setFormError("Expense name is required.");
+      return;
+    }
+    if (parsedAmount <= 0) {
+      setFormError("Expense amount must be greater than zero.");
+      return;
+    }
 
     const templateMatch = commonExpenses.find(
       (item) => item.name.toLowerCase() === trimmedName.toLowerCase()
@@ -94,7 +105,9 @@ export function StaffExpensesCard({
     });
     setNewName("");
     setNewAmount("");
+    setFormError(null);
     setShowModal(false);
+    toastSuccess("Expense Added");
   }
 
   function handleQuickCategory(name: string) {
@@ -135,7 +148,10 @@ export function StaffExpensesCard({
           </div>
 
           {recordedExpenses.length === 0 ? (
-            <p className="text-sm text-zinc-500">No expenses recorded yet.</p>
+            <EmptyState
+              compact
+              title="No expenses have been recorded today."
+            />
           ) : (
             <div className="rounded-2xl border border-white/[0.05] bg-black/15 px-4 py-2">
               {recordedExpenses.map((expense) => (
@@ -182,11 +198,20 @@ export function StaffExpensesCard({
           <AddExpenseForm
             name={newName}
             amount={newAmount}
-            onNameChange={setNewName}
-            onAmountChange={setNewAmount}
+            onNameChange={(value) => {
+              setNewName(value);
+              setFormError(null);
+            }}
+            onAmountChange={(value) => {
+              setNewAmount(value);
+              setFormError(null);
+            }}
             onSave={handleSaveExpense}
             onCancel={closeModal}
           />
+          {formError ? (
+            <p className="mt-3 text-sm text-red-400">{formError}</p>
+          ) : null}
         </StockDialog>
       ) : null}
     </>

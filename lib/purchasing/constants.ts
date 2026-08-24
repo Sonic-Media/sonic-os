@@ -4,8 +4,7 @@ export const PURCHASING_NAV_ITEMS: {
   exact?: boolean;
 }[] = [
   { href: "/purchasing", label: "Dashboard", exact: true },
-  { href: "/purchasing/new", label: "New Purchase" },
-  { href: "/purchasing/history", label: "Purchase History" },
+  { href: "/purchasing/history", label: "History" },
   { href: "/purchasing/suppliers", label: "Suppliers" },
 ];
 

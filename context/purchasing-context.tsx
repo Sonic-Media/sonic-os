@@ -50,6 +50,7 @@ import {
   isBranchDayOpened,
   SHOP_NOT_OPENED_MESSAGE,
 } from "@/lib/day-closing/storage";
+import { ownerExemptFromShopOpenGate } from "@/lib/operations/opening-hours";
 import type {
   Purchase,
   PurchaseInput,
@@ -93,7 +94,7 @@ export function PurchasingProvider({
 }: {
   children: React.ReactNode;
 }) {
-  const { isAuthenticated, isLoaded: authLoaded } = useAuth();
+  const { isAuthenticated, isLoaded: authLoaded, session } = useAuth();
   const { getProductById, refreshStockFromApi } = useStock();
 
   const [purchases, setPurchases] = useState<Purchase[]>([]);
@@ -300,7 +301,10 @@ export function PurchasingProvider({
       if (isBranchDayClosed(input.branch, dateISO)) {
         return createValidationResult({ form: DAY_CLOSED_EDIT_MESSAGE });
       }
-      if (!isBranchDayOpened(input.branch, dateISO)) {
+      if (
+        !ownerExemptFromShopOpenGate(session?.role) &&
+        !isBranchDayOpened(input.branch, dateISO)
+      ) {
         return createValidationResult({ form: SHOP_NOT_OPENED_MESSAGE });
       }
 
@@ -361,7 +365,7 @@ export function PurchasingProvider({
         purchaseInFlight.current = false;
       }
     },
-    [getSupplierById, getProductById, refreshPurchasesFromApi, refreshStockFromApi]
+    [getSupplierById, getProductById, refreshPurchasesFromApi, refreshStockFromApi, session?.role]
   );
 
   const value = useMemo(

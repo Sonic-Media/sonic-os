@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { useActiveBranch } from "@/context/active-branch-context";
 import { useAuth } from "@/context/auth-context";
 import { useBranches } from "@/context/branches-context";
@@ -34,6 +34,7 @@ export function useStaffCloseDay(date = getTodayISO()) {
   const { closeDay } = useDayClosing();
   const [isClosing, setIsClosing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const closingRef = useRef(false);
 
   const branchEntity = activeBranches.find((item) => item.code === activeBranch);
 
@@ -52,11 +53,16 @@ export function useStaffCloseDay(date = getTodayISO()) {
 
   const closeStaffDay = useCallback(
     async (closingNotes: string) => {
+      if (closingRef.current || isClosing) {
+        return { success: false as const };
+      }
+
       if (!metrics || !session) {
         setError("Unable to close the day right now.");
         return { success: false as const };
       }
 
+      closingRef.current = true;
       setIsClosing(true);
       setError(null);
 
@@ -80,6 +86,7 @@ export function useStaffCloseDay(date = getTodayISO()) {
       });
 
       setIsClosing(false);
+      closingRef.current = false;
 
       if (!result.success) {
         const message = toStaffFacingError(result.errors.form ?? "", {
@@ -87,7 +94,7 @@ export function useStaffCloseDay(date = getTodayISO()) {
           context: "close-day",
         });
         setError(message);
-        return { success: false as const };
+        return { success: false as const, message };
       }
 
       return { success: true as const, record: result.record };
@@ -96,6 +103,7 @@ export function useStaffCloseDay(date = getTodayISO()) {
       activeBranch,
       closeDay,
       date,
+      isClosing,
       metrics,
       payments,
       session,

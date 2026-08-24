@@ -9,6 +9,11 @@ import {
   mapExpenseRecordToEntity,
 } from "@/lib/server/mappers/entities";
 import { requireSession } from "@/lib/server/session";
+import {
+  assertBranchDayOpenForWrite,
+  assertStaffOperationalRole,
+} from "@/lib/server/day-closing-guards";
+import { getBranchCodeById } from "@/lib/server/branch-lookup";
 import { recordTransactionAudit } from "@/lib/server/transaction-audit";
 import { AUDIT_ACTIONS } from "@/lib/audit-log/constants";
 import {
@@ -246,6 +251,8 @@ export async function createExpense(
   }
 
   const session = await requireSession();
+  assertStaffOperationalRole(session);
+  await assertBranchDayOpenForWrite(input.branch, input.date);
   const branchId = await getBranchIdForSession(session, input.branch);
 
   const record = await prisma.$transaction(async (tx) => {
@@ -333,6 +340,8 @@ export async function updateExpense(
   }
 
   const session = await requireSession();
+  assertStaffOperationalRole(session);
+  await assertBranchDayOpenForWrite(input.branch, input.date);
   const branchId = await getBranchIdForSession(session, input.branch);
 
   const record = await prisma.$transaction(async (tx) => {
@@ -382,6 +391,11 @@ export async function deleteExpense(id: string): Promise<void> {
       { status: 400, code: "staff_payment_expense" }
     );
   }
+
+  const session = await requireSession();
+  assertStaffOperationalRole(session);
+  const branch = await getBranchCodeById(existing.branchId);
+  await assertBranchDayOpenForWrite(branch, existing.date);
 
   await prisma.expenseRecord.delete({ where: { id } });
 }

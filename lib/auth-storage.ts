@@ -2,6 +2,7 @@ import {
   DEFAULT_OWNER_PASSWORD_HASH,
   hashPassword,
 } from "@/lib/auth/password";
+import { removeLocalStorageItem } from "@/lib/safe-storage";
 import { isUserRole, normalizeUserRole } from "@/lib/auth/validation";
 import type { AppUser, AuthAuditRecord, AuthSession } from "@/types/auth";
 import type { Branch } from "@/types";
@@ -142,8 +143,16 @@ export function clearSession(): void {
     "sonic-os-staff-audit",
     "sonic-os-branches",
     "sonic-os-activity-log",
+    "sonic-os-notifications",
+    "sonic-os-import-undo",
+    "sonic-os-stock-last-movement-branch",
+    "sonic-os-entries",
+    "sonic-os-sales",
+    "sonic-os-expenses-records",
+    "sonic-os-staff-payments",
+    "sonic-os-purchasing-purchases",
   ]) {
-    localStorage.removeItem(key);
+    removeLocalStorageItem(key);
   }
 }
 

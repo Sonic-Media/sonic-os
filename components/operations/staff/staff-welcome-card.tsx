@@ -72,6 +72,8 @@ export function StaffWelcomeCard() {
             type="button"
             variant="secondary"
             disabled={isClockingOut}
+            loading={isClockingOut}
+            loadingLabel="Clocking Out..."
             onClick={() => void handleClockOut()}
             className="relative shrink-0 rounded-2xl border-white/[0.08] bg-white/[0.04] px-5 transition-all duration-200 hover:-translate-y-0.5 hover:bg-white/[0.08] hover:shadow-[0_0_20px_-6px_rgba(255,255,255,0.2)]"
           >

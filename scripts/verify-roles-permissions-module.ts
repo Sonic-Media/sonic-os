@@ -17,6 +17,7 @@ import {
   resolveCashStatus,
 } from "@/lib/day-closing/calculations";
 import { prisma } from "@/lib/db";
+import { ensureDayOpen as ensureBranchDayOpen } from "./verify-session";
 
 const BASE_URL = process.env.VERIFY_BASE_URL ?? "http://localhost:3000";
 const TEST_PREFIX = `cert-roles-${Date.now()}`;
@@ -176,51 +177,12 @@ async function cleanup(ids: {
   }
 }
 
-async function ensureDayOpen(certifier: RolesCertifier, date: string) {
-  const closings = await certifier.json<Array<{ branch: string; date: string; status: string; openedAt?: string }>>(
-    "/api/day-closings"
-  );
-  const record = closings.find(
-    (entry) => entry.branch === BRANCH && entry.date === date
-  );
-
-  if (record?.status === "closed") {
-    await certifier.json("/api/day-closings", {
-      method: "POST",
-      body: JSON.stringify({
-        action: "reopen",
-        branch: BRANCH,
-        date,
-      }),
-    });
-  }
-
-  const refreshed = await certifier.json<Array<{
-    branch: string;
-    date: string;
-    status: string;
-    openedAt?: string;
-    reopenedAt?: string;
-  }>>(
-    "/api/day-closings"
-  );
-  const openRecord = refreshed.find(
-    (entry) => entry.branch === BRANCH && entry.date === date
-  );
-  const isOpened =
-    openRecord?.status === "open" &&
-    !!(openRecord.openedAt || openRecord.reopenedAt);
-
-  if (!isOpened) {
-    await certifier.json("/api/day-closings", {
-      method: "POST",
-      body: JSON.stringify({
-        action: "open",
-        branch: BRANCH,
-        date,
-      }),
-    });
-  }
+async function ensureDayOpen(
+  certifier: RolesCertifier,
+  date: string,
+  reopenCertifier?: RolesCertifier
+) {
+  await ensureBranchDayOpen(certifier, date, BRANCH, reopenCertifier);
 }
 
 function buildCloseDayPayload(options: {
@@ -438,7 +400,6 @@ async function main() {
     });
     createdUserIds.push(managerUser.id);
 
-    await ensureDayOpen(ownerCertifier, today);
     const product = await ownerCertifier.json<{ id: string }>("/api/stock/products", {
       method: "POST",
       body: JSON.stringify({
@@ -453,6 +414,10 @@ async function main() {
     createdProductIds.push(product.id);
     await ownerCertifier.logout();
 
+    await ownerCertifier.login("owner", "owner");
+    await cashierCertifier.login(cashierUsername, cashierPassword);
+    await ensureDayOpen(cashierCertifier, today, ownerCertifier);
+    await ownerCertifier.logout();
     await cashierCertifier.login(cashierUsername, cashierPassword);
     await cashierCertifier.json("/api/daily-operations");
     await cashierCertifier.json("/api/sales");

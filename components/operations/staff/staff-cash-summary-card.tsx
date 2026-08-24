@@ -13,6 +13,7 @@ interface StaffCashSummaryCardProps {
   totalExpenses: number;
   staffPayouts: number;
   netCash: number;
+  savingsAllocation?: number;
   expanded?: boolean;
   onExpandedChange?: (expanded: boolean) => void;
   readOnly?: boolean;
@@ -65,12 +66,13 @@ export function StaffCashSummaryCard({
   totalExpenses,
   staffPayouts,
   netCash,
+  savingsAllocation = 0,
   expanded,
   onExpandedChange,
   readOnly = false,
 }: StaffCashSummaryCardProps) {
   const totalRevenue = movieRevenue + accessorySales;
-  const remainingCash = netCash;
+  const remainingCash = netCash - savingsAllocation;
 
   const collapsedPreview = (
     <StaffAnimatedMoney
@@ -109,6 +111,12 @@ export function StaffCashSummaryCard({
         animatedValue={staffPayouts}
         valueClassName="text-amber-200/90"
       />
+      {savingsAllocation > 0 ? (
+        <SummaryRow
+          label="Savings Allocation"
+          animatedValue={savingsAllocation}
+        />
+      ) : null}
       <div className="my-2 h-px bg-white/[0.06]" />
       <SummaryRow
         label="Remaining Cash"

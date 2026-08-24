@@ -1,25 +1,27 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Button } from "@/components/shared/ui/button";
 import { ShiftGreeting } from "@/components/shared/ux/shift-greeting";
 import {
   StaffCard,
   StaffMetricTile,
-  StaffSectionLabel,
 } from "@/components/operations/staff/primitives";
+import {
+  ShopScheduleCountdown,
+  useShopCanOpenNow,
+  useShopScheduleNow,
+} from "@/components/operations/shop-schedule-countdown";
 import { useAuth } from "@/context/auth-context";
 import { useActiveBranch } from "@/context/active-branch-context";
 import { useDayClosing } from "@/context/day-closing-context";
 import { useSettings } from "@/context/settings-context";
 import { useStaff } from "@/context/staff-context";
 import { useStaffAttendance } from "@/hooks/use-staff-attendance";
+import { useTodayISO } from "@/hooks/use-today-iso";
+import { useToast } from "@/context/toast-context";
 import { canOpenShop } from "@/lib/day-closing/permissions";
-import { formatEntryDisplayDate, getTodayISO } from "@/lib/dates";
-import {
-  getOpeningHoursLabel,
-  getOpeningHoursStatus,
-} from "@/lib/operations/opening-hours";
+import { formatEntryDisplayDate } from "@/lib/dates";
 import {
   formatClockTime,
   recordStaffClockIn,
@@ -47,21 +49,17 @@ function formatCurrentTime(date: Date): string {
 export function OpenShopPage({
   mode = "start-shift",
 }: OpenShopPageProps) {
-  const today = getTodayISO();
+  const today = useTodayISO();
   const { session } = useAuth();
   const { activeBranch } = useActiveBranch();
   const { getBranchName, settings } = useSettings();
   const { staff } = useStaff();
   const { closings, openDay } = useDayClosing();
   const { currentAttendance } = useStaffAttendance(today);
-  const [now, setNow] = useState(() => new Date());
+  const { success: toastSuccess } = useToast();
+  const now = useShopScheduleNow();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | undefined>();
-
-  useEffect(() => {
-    const timer = window.setInterval(() => setNow(new Date()), 1000);
-    return () => window.clearInterval(timer);
-  }, []);
 
   const staffName = useMemo(
     () => resolveStaffDisplayName(session, staff),
@@ -81,13 +79,13 @@ export function OpenShopPage({
 
   const canStart = session ? canOpenShop(session.role) : false;
   const isStartShift = mode === "start-shift";
-  const openingHours = getOpeningHoursStatus(now);
-  const canOpenNow = isStartShift ? openingHours.canOpen : true;
+  const canOpenNow = useShopCanOpenNow(now);
+  const scheduleAllowsOpen = isStartShift ? canOpenNow : true;
   const actionLabel = isStartShift ? "Open Shop" : "Clock In";
   const isOnShift = currentAttendance?.presence === "on-shift";
 
   async function handleSubmit() {
-    if (!canStart || isSubmitting || !canOpenNow) return;
+    if (!canStart || isSubmitting || !scheduleAllowsOpen) return;
 
     setIsSubmitting(true);
     setError(undefined);
@@ -111,7 +109,9 @@ export function OpenShopPage({
           setError(
             "The branch opened, but we couldn't start your attendance session. Please try Clock In again."
           );
+          return;
         }
+        toastSuccess("Shop Opened");
         return;
       }
 
@@ -120,7 +120,9 @@ export function OpenShopPage({
         setError(
           "We couldn't record your clock-in. Please sign out and back in, then try again."
         );
+        return;
       }
+      toastSuccess("Clocked In");
     } finally {
       setIsSubmitting(false);
     }
@@ -186,18 +188,7 @@ export function OpenShopPage({
               </p>
             </div>
           ) : (
-            <div className="rounded-2xl border border-white/[0.05] bg-black/20 px-4 py-4 text-center">
-              <StaffSectionLabel>Opening Hours</StaffSectionLabel>
-              <p className="mt-2 text-sm text-white">{getOpeningHoursLabel()}</p>
-              <p
-                className={cn(
-                  "mt-2 text-sm",
-                  openingHours.canOpen ? "text-emerald-400" : "text-amber-300"
-                )}
-              >
-                {openingHours.message}
-              </p>
-            </div>
+            <ShopScheduleCountdown now={now} />
           )}
         </div>
 
@@ -217,10 +208,12 @@ export function OpenShopPage({
                 ? "bg-gradient-to-r from-emerald-600 to-teal-600 shadow-[0_16px_40px_-16px_rgba(16,185,129,0.7)] hover:from-emerald-500 hover:to-teal-500"
                 : ""
             )}
-            disabled={!canStart || isSubmitting || !canOpenNow}
+            disabled={!canStart || isSubmitting || !scheduleAllowsOpen}
+            loading={isSubmitting}
+            loadingLabel={isStartShift ? "Opening shop..." : "Clocking in..."}
             onClick={() => void handleSubmit()}
           >
-            {isSubmitting ? "Working..." : actionLabel}
+            {actionLabel}
           </Button>
         </div>
       </StaffCard>

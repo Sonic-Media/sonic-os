@@ -4,7 +4,11 @@ import { prisma } from "@/lib/db";
 import { getBranchIdByCode } from "@/lib/server/branch-lookup";
 import { toJsonField } from "@/lib/server/json-fields";
 import { mapStaffPaymentToEntity } from "@/lib/server/mappers/entities";
-import { getSessionFromRequest } from "@/lib/server/session";
+import {
+  assertBranchDayOpenForWrite,
+  assertStaffOperationalRole,
+} from "@/lib/server/day-closing-guards";
+import { requireSession } from "@/lib/server/session";
 import { recordTransactionAudit } from "@/lib/server/transaction-audit";
 import { AUDIT_ACTIONS } from "@/lib/audit-log/constants";
 import {
@@ -14,6 +18,7 @@ import {
 } from "@/lib/expenses-module/constants";
 import type { StaffPayment, StaffPaymentInput } from "@/types/staff-payment";
 import type { StaffActionRecord } from "@/types/staff-session";
+import type { Branch } from "@/types";
 
 const paymentInclude = { branch: true } as const;
 
@@ -63,12 +68,45 @@ export async function createStaffPayment(
     });
   }
 
-  const branchId = await getBranchIdByCode(staff.branch.code);
+  const session = await requireSession();
+  assertStaffOperationalRole(session);
+
+  if (
+    session.staffId &&
+    session.staffId !== input.staffId &&
+    session.role !== "branch-manager"
+  ) {
+    throw new ApiError("You can only record your own daily wage.", {
+      status: 403,
+      code: "forbidden",
+    });
+  }
+
+  const branchCode = staff.branch.code as Branch;
+  await assertBranchDayOpenForWrite(branchCode, input.date);
+
+  const branchId = await getBranchIdByCode(branchCode);
+
+  const duplicatePayment = await prisma.staffPayment.findFirst({
+    where: {
+      staffId: staff.id,
+      branchId,
+      date: input.date,
+      paymentType: { not: "deduction" },
+    },
+  });
+
+  if (duplicatePayment) {
+    throw new ApiError("Daily wage already recorded for this date.", {
+      status: 409,
+      code: "duplicate_payment",
+    });
+  }
+
   const paymentId = randomUUID();
   const expenseId = randomUUID();
   const paymentLabel = getStaffPaymentTypeLabel(input.paymentType);
   const amount = Math.abs(input.amount);
-  const session = await getSessionFromRequest();
 
   await prisma.$transaction(async (tx) => {
     await tx.expenseCategory.upsert({

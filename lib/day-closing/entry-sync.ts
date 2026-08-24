@@ -43,19 +43,16 @@ export function buildClosedDayDailyOperationEntry(options: {
   createdBy?: StaffActionRecord;
 }): Entry {
   const expenseLines = buildClosingExpenseLines(options.summary);
-  const existingExpenses = options.existing?.expenses ?? [];
 
   return formToEntry(
     {
       date: options.date,
       branch: options.branch,
-      sales: String(options.existing?.sales ?? options.summary.sales),
+      sales: String(options.summary.sales),
       expenses:
-        existingExpenses.length > 0
-          ? existingExpenses
-          : expenseLines.length > 0
-            ? expenseLines
-            : createDefaultExpenses([]),
+        expenseLines.length > 0
+          ? expenseLines
+          : createDefaultExpenses([]),
       staffId: "",
       notes:
         options.closingNotes?.trim() ||

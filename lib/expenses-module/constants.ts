@@ -10,10 +10,10 @@ export const EXPENSES_NAV_ITEMS: {
   exact?: boolean;
 }[] = [
   { href: "/expenses", label: "Dashboard", exact: true },
-  { href: "/expenses/history", label: "Expenses" },
+  { href: "/expenses/history", label: "History" },
   { href: "/expenses/cash-flow", label: "Cash Flow" },
   { href: "/expenses/reports", label: "Reports" },
-  { href: "/expenses/categories", label: "Categories" },
+  { href: "/settings/expense-settings", label: "Settings" },
 ];
 
 export const DEFAULT_EXPENSE_CATEGORIES: { id: string; name: string }[] = [

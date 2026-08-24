@@ -1,6 +1,7 @@
 "use client";
 
 import { cn } from "@/lib/utils";
+import { uiSurface } from "@/lib/ui/design-tokens";
 
 interface StockDialogProps {
   title: string;
@@ -32,7 +33,8 @@ export function StockDialog({
         aria-modal="true"
         aria-label={title}
         className={cn(
-          "relative flex max-h-[90vh] w-full flex-col rounded-2xl border border-zinc-800/80 bg-zinc-950 shadow-2xl",
+          "relative flex max-h-[90vh] w-full flex-col",
+          uiSurface.modal,
           className ?? "max-w-lg"
         )}
       >
