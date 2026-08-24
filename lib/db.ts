@@ -1,6 +1,21 @@
 import { PrismaPg } from "@prisma/adapter-pg";
 import { Pool } from "pg";
 import { PrismaClient } from "@/lib/prisma";
+import {
+  formatDatabaseConnectionError,
+  getDatabaseUrlDiagnostics,
+  getDatabaseUrlFromEnv,
+  getPoolConfig,
+  resolveDatabaseUrl,
+} from "@/lib/db/connection";
+
+export {
+  formatDatabaseConnectionError,
+  getDatabaseUrlDiagnostics,
+  getDatabaseUrlFromEnv,
+  normalizeDatabaseUrl,
+  resolveDatabaseUrl,
+} from "@/lib/db/connection";
 
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
@@ -8,22 +23,8 @@ const globalForPrisma = globalThis as unknown as {
   databaseUrl: string | undefined;
 };
 
-function getDatabaseUrl(): string {
-  const connectionString = process.env.DATABASE_URL?.trim();
-  if (!connectionString) {
-    throw new Error("DATABASE_URL is not configured.");
-  }
-
-  return connectionString;
-}
-
 function createPool(connectionString: string): Pool {
-  return new Pool({
-    connectionString,
-    max: 10,
-    idleTimeoutMillis: 30_000,
-    connectionTimeoutMillis: 10_000,
-  });
+  return new Pool(getPoolConfig(connectionString));
 }
 
 function createPrismaClient(connectionString: string): PrismaClient {
@@ -57,7 +58,7 @@ export function resetPrismaClientCache(): void {
 }
 
 export function getPrismaClient(): PrismaClient {
-  const connectionString = getDatabaseUrl();
+  const connectionString = resolveDatabaseUrl();
 
   if (
     globalForPrisma.prisma &&
@@ -88,9 +89,50 @@ export const prisma = new Proxy({} as PrismaClient, {
 });
 
 export function isDatabaseConfigured(): boolean {
-  return Boolean(process.env.DATABASE_URL?.trim());
+  return Boolean(getDatabaseUrlFromEnv());
 }
 
 export async function verifyDatabaseConnection(): Promise<void> {
   await prisma.$queryRaw`SELECT 1`;
+}
+
+export interface DatabaseConnectionCheck {
+  connected: boolean;
+  diagnostics: ReturnType<typeof getDatabaseUrlDiagnostics>;
+  error: string | null;
+}
+
+export async function checkDatabaseConnection(): Promise<DatabaseConnectionCheck> {
+  const diagnostics = getDatabaseUrlDiagnostics();
+
+  if (!diagnostics.configured) {
+    return {
+      connected: false,
+      diagnostics,
+      error: "DATABASE_URL is not configured.",
+    };
+  }
+
+  if (diagnostics.invalid) {
+    return {
+      connected: false,
+      diagnostics,
+      error: diagnostics.parseError ?? "DATABASE_URL is not a valid URL.",
+    };
+  }
+
+  try {
+    await verifyDatabaseConnection();
+    return {
+      connected: true,
+      diagnostics,
+      error: null,
+    };
+  } catch (error) {
+    return {
+      connected: false,
+      diagnostics,
+      error: formatDatabaseConnectionError(error),
+    };
+  }
 }

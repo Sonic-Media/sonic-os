@@ -9,7 +9,11 @@ import {
   DEFAULT_BRANCH_NAME,
   DEFAULT_EXPENSE_TEMPLATES,
 } from "@/lib/constants";
-import { prisma, resetPrismaClientCache, verifyDatabaseConnection } from "@/lib/db";
+import {
+  checkDatabaseConnection,
+  prisma,
+  resetPrismaClientCache,
+} from "@/lib/db";
 import { getTodayISO } from "@/lib/dates";
 import { clearBranchLookupCache } from "@/lib/server/branch-lookup";
 import {
@@ -23,7 +27,13 @@ import { ensureProductCategoriesSeeded } from "@/lib/server/product-category-loo
 import { clearRoleLookupCache } from "@/lib/server/role-lookup";
 
 export async function runDatabaseConnectionStage(): Promise<void> {
-  await verifyDatabaseConnection();
+  const connection = await checkDatabaseConnection();
+
+  if (!connection.connected) {
+    throw new Error(
+      connection.error ?? "Unable to connect to PostgreSQL."
+    );
+  }
 }
 
 export async function runMigrationsVerifiedStage(): Promise<void> {

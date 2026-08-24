@@ -1,24 +1,14 @@
-import { isDatabaseConfigured, verifyDatabaseConnection } from "@/lib/db";
+import { checkDatabaseConnection } from "@/lib/db";
 import { jsonOk } from "@/lib/api/response";
 
 export async function GET() {
-  const databaseConfigured = isDatabaseConfigured();
-
-  let databaseConnected = false;
-  if (databaseConfigured) {
-    try {
-      await verifyDatabaseConnection();
-      databaseConnected = true;
-    } catch (error) {
-      databaseConnected = false;
-      console.error("[health] database check failed:", error);
-    }
-  }
+  const connection = await checkDatabaseConnection();
 
   return jsonOk({
     status: "ok",
-    databaseConfigured,
-    databaseConnected,
+    databaseConfigured: connection.diagnostics.configured,
+    databaseConnected: connection.connected,
+    databaseError: connection.error,
     timestamp: new Date().toISOString(),
   });
 }

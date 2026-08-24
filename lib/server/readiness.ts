@@ -1,5 +1,8 @@
 import { getAppEnvironment, getEnvironmentProfile } from "@/lib/env";
-import { isDatabaseConfigured, verifyDatabaseConnection } from "@/lib/db";
+import {
+  checkDatabaseConnection,
+  type DatabaseConnectionCheck,
+} from "@/lib/db";
 import {
   BootstrapFailedError,
   ensureApplicationInitialized,
@@ -16,6 +19,14 @@ export interface ReadinessReport {
     migrationsApplied: boolean;
     bootstrapComplete: boolean;
   };
+  database?: {
+    host: string | null;
+    port: string | null;
+    database: string | null;
+    sslmode: string | null;
+    normalizedFromEnv: boolean;
+    error: string | null;
+  };
   bootstrap?: {
     failedStage: string | null;
     error: string | null;
@@ -23,20 +34,32 @@ export interface ReadinessReport {
   timestamp: string;
 }
 
+function buildDatabaseReport(
+  connection: DatabaseConnectionCheck
+): ReadinessReport["database"] {
+  return {
+    host: connection.diagnostics.host ?? null,
+    port: connection.diagnostics.port ?? null,
+    database: connection.diagnostics.database ?? null,
+    sslmode: connection.diagnostics.sslmode ?? null,
+    normalizedFromEnv: connection.diagnostics.normalizedFromEnv ?? false,
+    error: connection.error,
+  };
+}
+
 export async function getReadinessReport(): Promise<ReadinessReport> {
   const appEnv = getAppEnvironment();
   const profile = getEnvironmentProfile(appEnv);
-  const databaseConfigured = isDatabaseConfigured();
+  const connection = await checkDatabaseConnection();
+  const databaseConfigured = connection.diagnostics.configured;
 
-  let databaseConnected = false;
+  let databaseConnected = connection.connected;
   let migrationsApplied = false;
   let bootstrapComplete = false;
   let bootstrapFailure: ReadinessReport["bootstrap"];
 
-  if (databaseConfigured) {
+  if (databaseConnected) {
     try {
-      await verifyDatabaseConnection();
-      databaseConnected = true;
       migrationsApplied = await verifyMigrationsVerifiedStage();
 
       try {
@@ -61,11 +84,18 @@ export async function getReadinessReport(): Promise<ReadinessReport> {
         }
       }
     } catch (error) {
-      databaseConnected = false;
       migrationsApplied = false;
       bootstrapComplete = false;
-      console.error("[readiness] database check failed:", error);
+      bootstrapFailure = {
+        failedStage: "migrations_verified",
+        error:
+          error instanceof Error
+            ? error.message
+            : "Migration verification failed.",
+      };
     }
+  } else if (connection.error) {
+    console.error("[readiness] database connection failed:", connection.error);
   }
 
   const checks = {
@@ -81,6 +111,7 @@ export async function getReadinessReport(): Promise<ReadinessReport> {
     status: ready ? "ready" : "not_ready",
     environment: appEnv,
     checks,
+    database: buildDatabaseReport(connection),
     bootstrap: bootstrapFailure,
     timestamp: new Date().toISOString(),
   };

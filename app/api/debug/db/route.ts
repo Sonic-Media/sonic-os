@@ -1,5 +1,10 @@
 import { NextResponse } from "next/server";
-import { isDatabaseConfigured, prisma, verifyDatabaseConnection } from "@/lib/db";
+import {
+  checkDatabaseConnection,
+  getDatabaseUrlDiagnostics,
+  isDatabaseConfigured,
+  prisma,
+} from "@/lib/db";
 
 function redactDatabaseUrl(connectionString: string | undefined): string | null {
   if (!connectionString?.trim()) {
@@ -19,11 +24,31 @@ function redactDatabaseUrl(connectionString: string | undefined): string | null 
 
 export async function GET() {
   const databaseUrl = redactDatabaseUrl(process.env.DATABASE_URL);
+  const diagnostics = getDatabaseUrlDiagnostics();
 
   if (!isDatabaseConfigured()) {
     return NextResponse.json({
       connected: false,
       databaseUrl,
+      diagnostics,
+      connectionError: "DATABASE_URL is not configured.",
+      branchCount: 0,
+      userCount: 0,
+      staffCount: 0,
+      roleCount: 0,
+      productCount: 0,
+      saleCount: 0,
+    });
+  }
+
+  const connection = await checkDatabaseConnection();
+
+  if (!connection.connected) {
+    return NextResponse.json({
+      connected: false,
+      databaseUrl,
+      diagnostics: connection.diagnostics,
+      connectionError: connection.error,
       branchCount: 0,
       userCount: 0,
       staffCount: 0,
@@ -34,8 +59,6 @@ export async function GET() {
   }
 
   try {
-    await verifyDatabaseConnection();
-
     const [
       branchCount,
       userCount,
@@ -55,6 +78,8 @@ export async function GET() {
     return NextResponse.json({
       connected: true,
       databaseUrl,
+      diagnostics: connection.diagnostics,
+      connectionError: null,
       branchCount,
       userCount,
       staffCount,
@@ -68,6 +93,9 @@ export async function GET() {
     return NextResponse.json({
       connected: false,
       databaseUrl,
+      diagnostics: connection.diagnostics,
+      connectionError:
+        error instanceof Error ? error.message : "Database query failed.",
       branchCount: 0,
       userCount: 0,
       staffCount: 0,
