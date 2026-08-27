@@ -1,4 +1,5 @@
 import { mapStaffActionRecord } from "@/lib/server/json-fields";
+import { normalizeUserRole } from "@/lib/auth/validation";
 import { computeProductStatus } from "@/lib/stock/product-status";
 import type { Entry, Expense, Staff } from "@/types";
 import type { AppUser, UserRole } from "@/types/auth";
@@ -265,7 +266,7 @@ export function mapUserToAppUser(user: UserWithRelations): AppUser {
     id: user.id,
     username: user.username,
     displayName: user.displayName,
-    role: user.role.slug as UserRole,
+    role: normalizeUserRole(user.role.slug),
     passwordHash: user.passwordHash,
     branch: user.branch.code,
     active: user.active,

@@ -3,7 +3,8 @@ import { headers, cookies } from "next/headers";
 import { ApiError } from "@/lib/api/errors";
 import { prisma } from "@/lib/db";
 import { isValidSignedSessionToken } from "@/lib/server/security/session-token";
-import type { AuthSession, UserRole } from "@/types/auth";
+import { normalizeUserRole } from "@/lib/auth/validation";
+import type { AuthSession } from "@/types/auth";
 import type { Branch } from "@/types";
 
 export const SESSION_COOKIE_NAME = "sonic-os-session-token";
@@ -37,13 +38,11 @@ async function readSessionFromDatabase(
     return null;
   }
 
-  const roleSlug = session.user.role.slug as UserRole;
-
   return {
     userId: session.user.id,
     username: session.user.username,
     displayName: session.user.displayName,
-    role: roleSlug,
+    role: normalizeUserRole(session.user.role.slug),
     branch: session.user.branch.code as Branch,
     staffId: session.user.staffId ?? undefined,
     locked: session.locked,

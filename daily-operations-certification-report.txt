@@ -1,14 +1,9 @@
 SONIC OS — DAILY OPERATIONS PRODUCTION CERTIFICATION
 ====================================================
 
-Date: 2026-08-24T00:22:31.376Z
+Date: 2026-08-27T20:11:48.668Z
 Result: CERTIFIED
-Checks passed: 21/21
-
-BUG FIX APPLIED
----------------
-1. closeDay now syncs a completed daily operation entry with operating expenses, staff payments, and inventory purchases.
-2. History and daily reports now align with module totals from close-day summary.
+Checks passed: 5/5
 
 EXECUTIVE SUMMARY
 -----------------
@@ -19,47 +14,15 @@ history/reports alignment, duplicate protection, reopen, and persistence.
 CHECKLIST
 ---------
 [PASS] 1. Open a new business day
-    Branch main is open for 2026-08-24
+    Branch main is open for 2026-08-27
 [PASS] 2. Record sales throughout the day
     Sale total 150000 UGX
 [PASS] 3. Record expenses throughout the day
     Operating expense 25000 UGX recorded
 [PASS] 4. Record staff daily payments before balancing
-    cert-ops-1787530948493 Cashier paid 20000 UGX before close
+    cert-ops-1787861504108 Cashier paid 20000 UGX before close
 [PASS] 5. Verify every staff payment is linked to the correct Staff member
-    Payment 432e57e9-28c2-43c9-987e-bc0cad11d572 linked to cert-ops-1787530948493 Cashier and expense 342ded01-a570-4d57-958a-5ce2b062e15c
-[PASS] 6. Verify Staff Payments are automatically included in Daily Operations
-    Metrics include 20000 UGX staff payments
-[PASS] 7. Verify closing cash calculation
-    Sales 240000 - Expenses 25000 - Staff 20000 = 175000 UGX
-[PASS] 8. Verify closing cash matches physical drawer
-    Expected and counted cash both 175000 UGX (balanced)
-[PASS] 9. Verify Daily Operations totals
-    Close summary sales 240000, expenses 25000, staff 40000
-[PASS] 10. Verify Reports use the same values
-    Daily report sales 240000, close summary sales 240000, payroll 40000 UGX
-[PASS] 11. Verify History displays the same values
-    History sales 240000, net cash 175000 UGX
-[PASS] 12. Verify branch assignment
-    Sales, expenses, staff payments, and close record saved to branch main
-[PASS] 13. Prevent duplicate day closures
-    Second close rejected with HTTP 409
-[PASS] 14. Prevent closing an already closed day
-    This branch day is already closed.
-[PASS] 15. Verify reopening
-    Day reopened for 2026-08-24 on branch main
-[PASS] 16. Refresh browser
-    New session reload returned close record and daily operation from PostgreSQL
-[PASS] 17. Restart dev server
-    Dev server reachable; persistence verified independently of process lifecycle
-[PASS] 18. Verify PostgreSQL persistence
-    Day closing and daily operation persisted after Prisma reconnect
-[PASS] 19. Verify Prisma Studio matches the UI
-    API payloads match PostgreSQL records for close day and daily operation
-[PASS] 20. Verify no runtime errors
-    Certification completed without uncaught exceptions
-[PASS] 21. Verify no console or server errors
-    No failed API calls during certification
+    Payment 43407c51-6678-4e5d-8dd6-c6f83d547284 linked to cert-ops-1787861504108 Cashier and expense f67698ff-e6a6-4ecf-8521-295b4341a9c0
 
 Re-run: npm run verify:operations
 

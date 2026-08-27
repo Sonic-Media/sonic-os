@@ -70,6 +70,7 @@ export function StockProductDialog({
   const [form, setForm] = useState(() => createFormState(mode, product));
   const [errors, setErrors] = useState<Record<string, string | undefined>>({});
   const [formError, setFormError] = useState<string | undefined>();
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   function updateField<K extends keyof typeof form>(
     field: K,
@@ -82,6 +83,8 @@ export function StockProductDialog({
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
+    if (isSubmitting) return;
+
     setFormError(undefined);
 
     const buyingPrice = parsePositivePrice(form.buyingPrice);
@@ -111,47 +114,55 @@ export function StockProductDialog({
       return;
     }
 
-    if (mode === "add") {
-      const input: StockProductInput = {
-        name: form.name,
-        category: form.category as StockProductCategory,
-        sku: form.sku,
-        buyingPrice: buyingPrice!,
-        sellingPrice: sellingPrice!,
-        minimumStockLevel: minimumStockLevel!,
-        notes: form.notes,
-      };
+    setIsSubmitting(true);
 
-      const result = await addProduct(input);
-      if (!result.success) {
-        setErrors(result.errors);
-        setFormError(result.errors.form);
+    try {
+      if (mode === "add") {
+        const input: StockProductInput = {
+          name: form.name,
+          category: form.category as StockProductCategory,
+          sku: form.sku,
+          buyingPrice: buyingPrice!,
+          sellingPrice: sellingPrice!,
+          minimumStockLevel: minimumStockLevel!,
+          notes: form.notes,
+        };
+
+        const result = await addProduct(input);
+        if (!result.success) {
+          setErrors(result.errors);
+          setFormError(result.errors.form);
+          return;
+        }
+
+        onSuccess?.(result.product);
         return;
       }
 
-      onSuccess?.(result.product);
-      return;
-    } else if (product) {
-      const input: StockProductUpdateInput = {
-        name: form.name,
-        category: form.category as StockProductCategory,
-        sku: form.sku,
-        buyingPrice: buyingPrice!,
-        sellingPrice: sellingPrice!,
-        minimumStockLevel: minimumStockLevel!,
-        notes: form.notes,
-      };
+      if (product) {
+        const input: StockProductUpdateInput = {
+          name: form.name,
+          category: form.category as StockProductCategory,
+          sku: form.sku,
+          buyingPrice: buyingPrice!,
+          sellingPrice: sellingPrice!,
+          minimumStockLevel: minimumStockLevel!,
+          notes: form.notes,
+        };
 
-      const result = await updateProduct(product.id, input);
-      if (!result.success) {
-        setErrors(result.errors);
-        setFormError(result.errors.form);
-        return;
+        const result = await updateProduct(product.id, input);
+        if (!result.success) {
+          setErrors(result.errors);
+          setFormError(result.errors.form);
+          return;
+        }
       }
+
+      onSuccess?.();
+      onClose();
+    } finally {
+      setIsSubmitting(false);
     }
-
-    onSuccess?.();
-    onClose();
   }
 
   return (
@@ -162,14 +173,25 @@ export function StockProductDialog({
           ? "Add a new product to your global catalog. Opening stock is recorded after creation."
           : "Update item details. Stock levels can only change through stock movements."
       }
-      onClose={onClose}
+      onClose={isSubmitting ? () => undefined : onClose}
       className="max-w-xl"
       footer={
         <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-          <Button type="button" variant="secondary" onClick={onClose}>
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={onClose}
+            disabled={isSubmitting}
+          >
             Cancel
           </Button>
-          <Button type="submit" form="stock-product-form">
+          <Button
+            type="submit"
+            form="stock-product-form"
+            loading={isSubmitting}
+            loadingLabel={mode === "add" ? "Adding..." : "Saving..."}
+            disabled={isSubmitting}
+          >
             {mode === "add" ? "Add Item" : "Save Changes"}
           </Button>
         </div>

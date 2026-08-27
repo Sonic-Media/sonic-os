@@ -96,13 +96,13 @@ export function StaffWelcomeCard() {
           </p>
         </div>
         <div>
-          <StaffSectionLabel>Started</StaffSectionLabel>
+          <StaffSectionLabel>Shift Start Time</StaffSectionLabel>
           <p className="mt-2 text-lg font-semibold tabular-nums text-white">
             {formatClockTime(currentAttendance?.lastClockInAt) || "—"}
           </p>
         </div>
         <div>
-          <StaffSectionLabel>Shop</StaffSectionLabel>
+          <StaffSectionLabel>Shop Status</StaffSectionLabel>
           <div className="mt-2">
             <StaffStatusBadge tone="success">
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />

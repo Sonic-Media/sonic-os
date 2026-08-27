@@ -1,3 +1,4 @@
+import { isOwnerRole } from "@/lib/auth/validation";
 import type { StaffModule } from "@/types/staff-role";
 import type { UserRole } from "@/types/auth";
 import { roleHasModuleAccess } from "@/lib/staff/permissions";
@@ -22,7 +23,7 @@ export function roleHasServerPermission(
   role: UserRole,
   permission: ServerPermission
 ): boolean {
-  if (role === "owner") return true;
+  if (isOwnerRole(role)) return true;
 
   if (OWNER_PERMISSIONS.includes(permission)) {
     return false;
@@ -47,6 +48,7 @@ export function roleCanAccessApiPath(
   pathname: string,
   method: string
 ): boolean {
+  if (isOwnerRole(role)) return true;
   if (
     method === "GET" &&
     (pathname === "/api/stock/products" ||
@@ -121,6 +123,7 @@ const API_MODULE_PREFIXES: Array<[string, StaffModule]> = [
 ];
 
 const OWNER_ONLY_PREFIXES = [
+  "/api/admin",
   "/api/users",
   "/api/roles",
   "/api/daily-operations/import",

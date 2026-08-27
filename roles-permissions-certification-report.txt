@@ -1,5 +1,5 @@
 Sonic OS Roles & Permissions Certification Report
-Generated: 2026-08-24T00:21:12.137Z
+Generated: 2026-08-27T20:10:58.412Z
 Certified Owner, Branch Manager, and Cashier sidebar visibility, URL blocking, workflow APIs, and 403 enforcement.
 
 [PASS] 1. Cashier sidebar shows only Today's Operations and Accessory Sales — Today's Operations, Accessory Sales
@@ -14,7 +14,7 @@ Certified Owner, Branch Manager, and Cashier sidebar visibility, URL blocking, w
 [PASS] 10. Cashier can record operating expenses inside Today's Operations — Operating expense 5000 UGX recorded in daily operations
 [PASS] 11. Cashier can record staff payments — Staff payment 10000 UGX recorded
 [PASS] 12. Cashier can record movie revenue and savings — Movie revenue 250000 UGX, savings 30000 UGX
-[PASS] 13. Cashier can close the business day — Day closed with expected cash 355000 UGX
+[PASS] 13. Cashier can close the business day — Day closed with expected cash 265000 UGX
 [PASS] 14. Cashier receives 403 Forbidden on unauthorized APIs — 8 endpoints blocked with forbidden code
 [PASS] 15. Branch Manager can access staff read APIs but not Users, Roles, or Settings — reports, stock, purchases, staff GET allowed; users/roles/settings/staff POST blocked
 [PASS] 16. Owner API access remains unrestricted — users, roles, settings, and branches APIs allowed

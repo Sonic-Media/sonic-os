@@ -17,6 +17,7 @@ interface StaffCashSummaryCardProps {
   expanded?: boolean;
   onExpandedChange?: (expanded: boolean) => void;
   readOnly?: boolean;
+  collapsible?: boolean;
 }
 
 function SummaryRow({
@@ -70,6 +71,7 @@ export function StaffCashSummaryCard({
   expanded,
   onExpandedChange,
   readOnly = false,
+  collapsible = true,
 }: StaffCashSummaryCardProps) {
   const totalRevenue = movieRevenue + accessorySales;
   const remainingCash = netCash - savingsAllocation;
@@ -107,7 +109,7 @@ export function StaffCashSummaryCard({
         valueClassName="text-amber-200/90"
       />
       <SummaryRow
-        label="My Wage"
+        label="Daily Wage"
         animatedValue={staffPayouts}
         valueClassName="text-amber-200/90"
       />
@@ -119,7 +121,7 @@ export function StaffCashSummaryCard({
       ) : null}
       <div className="my-2 h-px bg-white/[0.06]" />
       <SummaryRow
-        label="Remaining Cash"
+        label="Cash To Hand In"
         animatedValue={remainingCash}
         valueClassName={remainingCash < 0 ? "text-red-400" : "text-blue-200"}
         large
@@ -142,11 +144,12 @@ export function StaffCashSummaryCard({
       accent="cash"
       title="Cash Summary"
       description="Live totals — updates automatically as you work."
-      expanded={expanded}
-      onExpandedChange={onExpandedChange}
+      expanded={collapsible ? expanded : true}
+      onExpandedChange={collapsible ? onExpandedChange : undefined}
+      collapsible={collapsible}
       collapsedPreview={
         <div>
-          <StaffSectionLabel>Remaining Cash</StaffSectionLabel>
+          <StaffSectionLabel>Cash To Hand In</StaffSectionLabel>
           <div className="mt-2">{collapsedPreview}</div>
         </div>
       }

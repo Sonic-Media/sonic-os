@@ -5,9 +5,9 @@ import {
   listPriceChanges,
 } from "@/lib/server/services/stock-service";
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    const priceChanges = await withDatabase(() => listPriceChanges());
+    const priceChanges = await withDatabase(() => listPriceChanges(), { request });
     return jsonOk(priceChanges);
   } catch (error) {
     return handleRouteError(error);
@@ -17,7 +17,9 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const priceChange = await withDatabase(() => createPriceChange(body));
+    const priceChange = await withDatabase(() => createPriceChange(body), {
+      request,
+    });
     return jsonCreated(priceChange);
   } catch (error) {
     return handleRouteError(error);

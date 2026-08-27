@@ -17,8 +17,9 @@ import {
   SESSION_COOKIE_NAME,
   getSessionFromRequest,
 } from "@/lib/server/session";
+import { normalizeUserRole } from "@/lib/auth/validation";
 import { loginSchema } from "@/lib/validation/auth";
-import type { AuthSession, UserRole } from "@/types/auth";
+import type { AuthSession } from "@/types/auth";
 import type { Branch } from "@/types";
 
 const SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 14;
@@ -42,7 +43,7 @@ function mapSession(
     userId: session.user.id,
     username: session.user.username,
     displayName: session.user.displayName,
-    role: session.user.role.slug as UserRole,
+    role: normalizeUserRole(session.user.role.slug),
     branch: session.user.branch.code as Branch,
     staffId: session.user.staffId ?? undefined,
     locked: session.locked,

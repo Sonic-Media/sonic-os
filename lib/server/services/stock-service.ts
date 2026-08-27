@@ -1,6 +1,9 @@
 import { ApiError } from "@/lib/api/errors";
 import { prisma } from "@/lib/db";
 import { getBranchIdForSession } from "@/lib/server/branch-lookup";
+import { recordDeleteAudit } from "@/lib/server/data-protection/audit";
+import { assertDestructiveApiAllowed } from "@/lib/server/data-protection/guards";
+import { softDeleteManyByProductId } from "@/lib/server/data-protection/soft-delete";
 import { getCategoryIdBySlug } from "@/lib/server/product-category-lookup";
 import { toJsonField } from "@/lib/server/json-fields";
 import {
@@ -172,6 +175,9 @@ export async function updateProduct(
 }
 
 export async function deleteProduct(id: string): Promise<void> {
+  assertDestructiveApiAllowed("Product deletion");
+
+  const session = await requireSession();
   const existing = await prisma.product.findUnique({ where: { id } });
   if (!existing) {
     throw new ApiError("Product not found.", {
@@ -193,10 +199,10 @@ export async function deleteProduct(id: string): Promise<void> {
   }
 
   await prisma.$transaction(async (tx) => {
-    await tx.stockMovement.deleteMany({ where: { productId: id } });
-    await tx.stockPriceChange.deleteMany({ where: { productId: id } });
-    await tx.product.delete({ where: { id } });
+    await softDeleteManyByProductId(id, tx);
   });
+
+  await recordDeleteAudit(session, "stock", id, existing as Record<string, unknown>);
 }
 
 export async function listMovements(): Promise<StockMovement[]> {

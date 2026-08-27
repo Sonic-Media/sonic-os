@@ -69,10 +69,11 @@ export async function verifyOwnerUserStage(): Promise<boolean> {
     FROM "User" u
     INNER JOIN "Role" r ON r.id = u."roleId"
     WHERE r.slug = 'owner'
+      AND u.username = ${DEFAULT_OWNER_USERNAME}
       AND u.active = true
   `;
 
-  return Number(rows[0]?.count ?? 0) >= 1;
+  return Number(rows[0]?.count ?? 0) === 1;
 }
 
 export async function verifyOwnerStaffStage(): Promise<boolean> {

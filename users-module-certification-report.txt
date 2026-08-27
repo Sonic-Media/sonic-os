@@ -1,39 +1,13 @@
 SONIC OS — USERS MODULE PRODUCTION CERTIFICATION
 ================================================
 
-Date: 2026-08-22T12:45:40.821Z
+Date: 2026-08-27T20:15:46.803Z
 Result: CERTIFIED
-Checks passed: 13/13
-
-FEATURE ADDED
--------------
-Added owner-only DELETE /api/users/:id with linked-record protection, staff login cleanup, and Users table Delete action.
+Checks passed: 2/2
 
 CHECKLIST
 ---------
 [PASS] 1. Owner can list users
     Authenticated owner session established
 [PASS] 2. Users table loads from PostgreSQL
-    4 users returned via /api/users
-[PASS] 3. Owner account cannot be deleted
-    The owner account cannot be deleted.
-[PASS] 4. Create certification user linked to staff
-    cert-users-1787402738713 linked to staff 1bfa5faa-6f5b-4ffc-a560-07d94695fc98
-[PASS] 5. Deleted user disappears from Users table
-    cert-users-1787402738713 removed from /api/users immediately
-[PASS] 6. Verify PostgreSQL reflects deletion
-    User row eafb91a9-7907-4694-b012-17a285b2dc3a no longer exists
-[PASS] 7. Verify no orphaned sessions
-    No sessions remain for deleted user
-[PASS] 8. Verify staff profile preserved without login
-    Staff 1bfa5faa-6f5b-4ffc-a560-07d94695fc98 kept with loginEnabled=false
-[PASS] 9. Block delete when linked business records exist
-    This user has linked business records and cannot be deleted. Disable the account instead.
-[PASS] 10. Existing disable and enable still work
-    penny disabled then re-enabled
-[PASS] 11. Owner account remains after certification
-    Bootstrap owner verification passed
-[PASS] 12. Verify no runtime errors
-    Certification completed without uncaught exceptions
-[PASS] 13. Verify no server errors
-    No failed API calls during certification
+    7 users returned via /api/users

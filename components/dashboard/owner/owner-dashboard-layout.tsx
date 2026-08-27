@@ -10,6 +10,7 @@ import { MissionControlStaffStatus } from "@/components/dashboard/owner/mission-
 import { TodayTimeline } from "@/components/dashboard/owner/today-timeline";
 import { PageContainer } from "@/components/shared/layout/page-container";
 import { useBranchState } from "@/hooks/use-branch-state";
+import { useOwnerDashboardRefresh } from "@/hooks/use-owner-dashboard-refresh";
 import { uiSpacing } from "@/lib/ui/design-tokens";
 import { cn } from "@/lib/utils";
 
@@ -18,6 +19,7 @@ interface OwnerDashboardLayoutProps {
 }
 
 export function OwnerDashboardLayout({ displayName }: OwnerDashboardLayoutProps) {
+  useOwnerDashboardRefresh();
   const branchState = useBranchState();
   const isClosed = branchState.status === "closed";
 

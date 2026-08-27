@@ -1,3 +1,4 @@
+import { isOwnerRole } from "@/lib/auth/validation";
 import type { StaffModule, StaffRoleId } from "@/types/staff-role";
 import type { UserRole } from "@/types/auth";
 import {
@@ -23,12 +24,12 @@ export function getModuleForPath(pathname: string): StaffModule | null {
 }
 
 function resolveStaffRole(role: UserRole): StaffRoleId | null {
-  if (role === "owner") return null;
+  if (isOwnerRole(role)) return null;
   return migrateLegacyAuthRole(role);
 }
 
 export function roleHasModuleAccess(role: UserRole, module: StaffModule): boolean {
-  if (role === "owner") return true;
+  if (isOwnerRole(role)) return true;
 
   const staffRole = resolveStaffRole(role);
   if (!staffRole) return false;
@@ -38,7 +39,7 @@ export function roleHasModuleAccess(role: UserRole, module: StaffModule): boolea
 }
 
 export function getDefaultRouteForStaffRole(role: UserRole): string {
-  if (role === "owner" || migrateLegacyAuthRole(role) === "branch-manager") {
+  if (isOwnerRole(role) || migrateLegacyAuthRole(role) === "branch-manager") {
     return "/";
   }
 

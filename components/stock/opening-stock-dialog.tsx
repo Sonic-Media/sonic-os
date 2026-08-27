@@ -25,6 +25,7 @@ export function OpeningStockDialog({
   const { recordMovement } = useStock();
   const [quantity, setQuantity] = useState("0");
   const [errors, setErrors] = useState<Record<string, string | undefined>>({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   function handleSkip() {
     onComplete?.();
@@ -33,6 +34,7 @@ export function OpeningStockDialog({
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
+    if (isSubmitting) return;
 
     const parsedQuantity = parsePositiveInteger(quantity);
     if (parsedQuantity === null) {
@@ -45,36 +47,53 @@ export function OpeningStockDialog({
       return;
     }
 
-    const result = await recordMovement({
-      productId: product.id,
-      movement: "in",
-      quantity: parsedQuantity,
-      reason: "Opening Balance",
-      branch: defaultBranch,
-      notes: "Initial stock on item creation",
-    });
+    setIsSubmitting(true);
 
-    if (!result.success) {
-      setErrors(result.errors);
-      return;
+    try {
+      const result = await recordMovement({
+        productId: product.id,
+        movement: "in",
+        quantity: parsedQuantity,
+        reason: "Opening Balance",
+        branch: defaultBranch,
+        notes: "Initial stock on item creation",
+      });
+
+      if (!result.success) {
+        setErrors(result.errors);
+        return;
+      }
+
+      onComplete?.();
+      onClose();
+    } finally {
+      setIsSubmitting(false);
     }
-
-    onComplete?.();
-    onClose();
   }
 
   return (
     <StockDialog
       title="Opening Stock"
       description={`Set the opening balance for ${product.name}. This is recorded as a stock-in movement.`}
-      onClose={handleSkip}
+      onClose={isSubmitting ? () => undefined : handleSkip}
       className="max-w-lg"
       footer={
         <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-          <Button type="button" variant="secondary" onClick={handleSkip}>
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={handleSkip}
+            disabled={isSubmitting}
+          >
             Skip
           </Button>
-          <Button type="submit" form="opening-stock-form">
+          <Button
+            type="submit"
+            form="opening-stock-form"
+            loading={isSubmitting}
+            loadingLabel="Saving..."
+            disabled={isSubmitting}
+          >
             Save Opening Stock
           </Button>
         </div>

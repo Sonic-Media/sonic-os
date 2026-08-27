@@ -7,6 +7,8 @@ import { getBranchIdByCode } from "@/lib/server/branch-lookup";
 import { mapStaffToEntity } from "@/lib/server/mappers/entities";
 import { getRoleIdBySlug } from "@/lib/server/role-lookup";
 import { requireSession } from "@/lib/server/session";
+import { recordDeleteAudit } from "@/lib/server/data-protection/audit";
+import { assertDestructiveApiAllowed } from "@/lib/server/data-protection/guards";
 import { migrateLegacyAuthRole } from "@/lib/staff/roles";
 import type { Branch, Staff } from "@/types";
 import type { StaffInput, StaffRoleId, StaffStatus } from "@/types/staff-role";
@@ -323,13 +325,33 @@ export async function deactivateStaff(id: string): Promise<Staff> {
 }
 
 export async function deleteStaff(id: string): Promise<void> {
-  await getStaffRecord(id);
+  assertDestructiveApiAllowed("Staff deletion");
+
+  const session = await requireSession();
+  const existing = await getStaffRecord(id);
   await assertStaffNotReferenced(id);
 
   await prisma.$transaction(async (tx) => {
-    await tx.user.deleteMany({ where: { staffId: id } });
-    await tx.staff.delete({ where: { id } });
+    await tx.user.updateMany({
+      where: { staffId: id },
+      data: { active: false },
+    });
+    await tx.staff.update({
+      where: { id },
+      data: {
+        deletedAt: new Date(),
+        active: false,
+        status: "inactive",
+      },
+    });
   });
+
+  await recordDeleteAudit(
+    session,
+    "staff",
+    id,
+    existing as unknown as Record<string, unknown>
+  );
 }
 
 export async function linkStaffUser(

@@ -8,6 +8,7 @@ import {
   getPoolConfig,
   resolveDatabaseUrl,
 } from "@/lib/db/connection";
+import { softDeleteExtension } from "@/lib/server/data-protection/soft-delete";
 
 export {
   formatDatabaseConnectionError,
@@ -33,13 +34,15 @@ function createPrismaClient(connectionString: string): PrismaClient {
   globalForPrisma.databaseUrl = connectionString;
 
   const adapter = new PrismaPg(pool);
-  return new PrismaClient({
+  const baseClient = new PrismaClient({
     adapter,
     log:
       process.env.NODE_ENV === "development"
         ? ["error", "warn"]
         : ["error"],
   });
+
+  return baseClient.$extends(softDeleteExtension()) as unknown as PrismaClient;
 }
 
 function resetCachedClient(): void {

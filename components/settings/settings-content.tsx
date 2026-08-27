@@ -9,6 +9,7 @@ import { formatCurrency } from "@/lib/format";
 import { parseAmount } from "@/lib/amounts";
 import { StaffSection } from "@/components/settings/staff-section";
 import { ExpenseTemplatesSection } from "@/components/settings/expense-templates-section";
+import { DataProtectionSection } from "@/components/settings/data-protection-section";
 import { useExpenseTemplates } from "@/context/expense-templates-context";
 import { useAuth } from "@/context/auth-context";
 import type { Branch } from "@/types";
@@ -73,6 +74,8 @@ export function SettingsContent() {
           onChange={(e) => updateSettings({ ownerName: e.target.value })}
         />
       </Card>
+
+      {canManageUsers && <DataProtectionSection />}
 
       {canManageUsers && (
         <Card>

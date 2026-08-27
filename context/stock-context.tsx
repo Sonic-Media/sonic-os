@@ -113,6 +113,8 @@ export function StockProvider({ children }: { children: React.ReactNode }) {
   const [loadError, setLoadError] = useState<string | null>(null);
   const hasLoaded = useRef(false);
   const lastStockAccess = useRef<boolean | null>(null);
+  const productMutationInFlight = useRef(false);
+  const movementInFlight = useRef(false);
   const productsRef = useRef(products);
   const movementsRef = useRef(movements);
   const priceChangesRef = useRef(priceChanges);
@@ -262,6 +264,12 @@ export function StockProvider({ children }: { children: React.ReactNode }) {
 
   const addProduct = useCallback(
     async (input: StockProductInput): Promise<StockValidationResult> => {
+      if (productMutationInFlight.current) {
+        return createValidationResult({
+          form: "This item is already being saved. Please wait.",
+        });
+      }
+
       if (!isAuthenticated) {
         return createValidationResult({
           form: "Authentication required.",
@@ -272,6 +280,8 @@ export function StockProvider({ children }: { children: React.ReactNode }) {
       if (hasValidationErrors(errors)) {
         return createValidationResult(errors);
       }
+
+      productMutationInFlight.current = true;
 
       try {
         const product = await runOnApi(async () => {
@@ -285,6 +295,8 @@ export function StockProvider({ children }: { children: React.ReactNode }) {
         return createValidationResult({
           form: getDataSourceErrorMessage(error),
         });
+      } finally {
+        productMutationInFlight.current = false;
       }
     },
     [isAuthenticated, refreshStockFromApi]
@@ -305,6 +317,14 @@ export function StockProvider({ children }: { children: React.ReactNode }) {
         return createValidationResult(errors);
       }
 
+      if (productMutationInFlight.current) {
+        return createValidationResult({
+          form: "This item is already being saved. Please wait.",
+        });
+      }
+
+      productMutationInFlight.current = true;
+
       try {
         const product = await runOnApi(async () => {
           const updated = await updateStockProductApi(id, input);
@@ -317,6 +337,8 @@ export function StockProvider({ children }: { children: React.ReactNode }) {
         return createValidationResult({
           form: getDataSourceErrorMessage(error),
         });
+      } finally {
+        productMutationInFlight.current = false;
       }
     },
     [refreshStockFromApi]
@@ -376,6 +398,14 @@ export function StockProvider({ children }: { children: React.ReactNode }) {
         return createValidationResult({ form: SHOP_NOT_OPENED_MESSAGE });
       }
 
+      if (movementInFlight.current) {
+        return createValidationResult({
+          form: "This stock movement is already being saved. Please wait.",
+        });
+      }
+
+      movementInFlight.current = true;
+
       try {
         await runOnApi(async () => {
           const actor = resolveCurrentStaffAction(input.branch);
@@ -391,6 +421,8 @@ export function StockProvider({ children }: { children: React.ReactNode }) {
         return createValidationResult({
           form: getDataSourceErrorMessage(error),
         });
+      } finally {
+        movementInFlight.current = false;
       }
     },
     [refreshStockFromApi, session?.role]

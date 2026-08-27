@@ -33,6 +33,7 @@ interface AuditLogContextValue {
   criteria: AuditLogFilterCriteria;
   setCriteria: (patch: Partial<AuditLogFilterCriteria>) => void;
   filteredRecords: AuditLogRecord[];
+  refreshAuditLog: () => Promise<void>;
 }
 
 const AuditLogContext = createContext<AuditLogContextValue | null>(null);
@@ -114,8 +115,17 @@ export function AuditLogProvider({ children }: { children: React.ReactNode }) {
       criteria,
       setCriteria,
       filteredRecords,
+      refreshAuditLog: refreshAuditLogFromApi,
     }),
-    [records, isLoaded, loadError, criteria, setCriteria, filteredRecords]
+    [
+      records,
+      isLoaded,
+      loadError,
+      criteria,
+      setCriteria,
+      filteredRecords,
+      refreshAuditLogFromApi,
+    ]
   );
 
   return (

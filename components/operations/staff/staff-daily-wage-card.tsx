@@ -5,7 +5,6 @@ import { Button } from "@/components/shared/ui/button";
 import { Input } from "@/components/shared/ui/input";
 import { StaffOperationCard } from "@/components/operations/staff/staff-operation-card";
 import {
-  StaffCollapsedSummary,
   StaffSectionLabel,
   StaffStatusBadge,
   StaffSuccessFlash,
@@ -110,11 +109,11 @@ export function StaffDailyWageCard({
   return (
     <StaffOperationCard
       accent="default"
-      title="My Daily Cut"
+      title="Daily Wage"
       description={
         isRecorded
           ? undefined
-          : "Record your own daily wage before closing the day."
+          : "Record your daily wage before closing the day."
       }
       expanded={isRecorded ? false : expanded}
       onExpandedChange={isRecorded ? undefined : onExpandedChange}
@@ -122,11 +121,11 @@ export function StaffDailyWageCard({
       headerAction={<StaffSuccessFlash show={showSuccess} />}
       collapsedPreview={
         isRecorded ? (
-          <div className="flex flex-wrap items-center gap-3">
-            <StaffCollapsedSummary
-              primary={formatCurrency(existingPayment!.amount)}
-            />
-            <StaffStatusBadge tone="success">✓ Recorded</StaffStatusBadge>
+          <div className="space-y-1">
+            <StaffStatusBadge tone="success">✓ Daily wage recorded</StaffStatusBadge>
+            <p className="text-lg font-bold tabular-nums text-white">
+              {formatCurrency(existingPayment!.amount)}
+            </p>
           </div>
         ) : (
           <span className="text-sm text-zinc-500">Not recorded yet</span>
@@ -139,6 +138,13 @@ export function StaffDailyWageCard({
         <p className="text-sm text-zinc-400">
           No staff profile is linked to your account for this branch.
         </p>
+      ) : isRecorded ? (
+        <div className="rounded-2xl border border-emerald-500/15 bg-emerald-500/[0.05] px-5 py-4">
+          <StaffStatusBadge tone="success">✓ Daily wage recorded</StaffStatusBadge>
+          <p className="mt-3 text-2xl font-bold tabular-nums text-white">
+            {formatCurrency(existingPayment!.amount)}
+          </p>
+        </div>
       ) : (
         <div className="space-y-5">
           <StaffSectionLabel>Daily Amount</StaffSectionLabel>
@@ -161,7 +167,7 @@ export function StaffDailyWageCard({
             disabled={isSaving || isRecorded}
             className="w-full"
           >
-            Record Daily Cut
+            Record Daily Wage
           </Button>
         </div>
       )}

@@ -118,6 +118,7 @@ model Staff {
   loginEnabled     Boolean           @default(false)
   status           String            @default("active")
   active           Boolean           @default(true)
+  deletedAt        DateTime?
   phone            String?
   email            String?
   dailyWage        Int?
@@ -139,6 +140,7 @@ model Staff {
   @@index([status])
   @@index([active])
   @@index([name])
+  @@index([deletedAt])
 }
 
 model AppSetting {
@@ -225,6 +227,7 @@ model Product {
   minimumStockLevel Int                 @default(0)
   notes             String?
   status            String              @default("in-stock")
+  deletedAt         DateTime?
   createdAt         DateTime            @default(now())
   updatedAt         DateTime            @updatedAt
   movements         StockMovement[]
@@ -236,6 +239,7 @@ model Product {
   @@index([status])
   @@index([name])
   @@index([categoryId, status])
+  @@index([deletedAt])
 }
 
 model StockMovement {
@@ -250,6 +254,7 @@ model StockMovement {
   branchId    String   @db.Uuid
   branch      Branch   @relation(fields: [branchId], references: [id], onUpdate: Cascade, onDelete: Restrict)
   notes       String?
+  deletedAt   DateTime?
   createdBy   Json?
   createdAt   DateTime @default(now())
 
@@ -259,6 +264,7 @@ model StockMovement {
   @@index([movement])
   @@index([date, createdAt])
   @@index([branchId, date])
+  @@index([deletedAt])
 }
 
 model StockPriceChange {
@@ -312,6 +318,7 @@ model Sale {
   completedBy   Json?
   notes         String?
   status        String         @default("completed")
+  deletedAt     DateTime?
   createdAt     DateTime       @default(now())
   items         SaleLineItem[]
 
@@ -323,6 +330,7 @@ model Sale {
   @@index([createdAt])
   @@index([branchId, date])
   @@index([branchId, status, date])
+  @@index([deletedAt])
 }
 
 model SaleLineItem {
@@ -429,6 +437,7 @@ model ExpenseRecord {
   createdBy        Json?
   paidBy           Json?
   notes            String?
+  deletedAt        DateTime?
   staffPayment     StaffPayment?
   createdAt        DateTime        @default(now())
   updatedAt        DateTime        @updatedAt
@@ -440,6 +449,7 @@ model ExpenseRecord {
   @@index([branchId, date])
   @@index([createdAt])
   @@index([branchId, date, createdAt])
+  @@index([deletedAt])
 }
 
 model DayClosing {
@@ -533,4 +543,22 @@ model StaffPayment {
   @@index([date])
   @@index([branchId, date])
   @@index([createdAt])
+}
+
+model BackupRecord {
+  id             String   @id @default(uuid()) @db.Uuid
+  createdAt      DateTime @default(now())
+  trigger        String
+  createdById    String?
+  createdByName  String?
+  manifestPath   String
+  filePath       String
+  fileSizeBytes  BigInt?
+  compressed     Boolean  @default(true)
+  status         String   @default("completed")
+  error          String?
+
+  @@index([createdAt])
+  @@index([status])
+  @@index([trigger])
 }

@@ -1,4 +1,4 @@
-import { prisma } from "@/lib/db";
+import { getAdminPrismaClient, disconnectAdminPrismaClient } from "@/lib/db/admin-prisma";
 import {
   DEFAULT_BRANCH_CODE,
   DEFAULT_BRANCH_NAME,
@@ -68,35 +68,38 @@ export interface ProductionInitializationVerification {
   retainedSettings: boolean;
 }
 
-async function countTables(tableNames: readonly string[]): Promise<TableCounts> {
+async function countTables(
+  tableNames: readonly string[],
+  client: ReturnType<typeof getAdminPrismaClient> = getAdminPrismaClient()
+): Promise<TableCounts> {
   const counters: Record<string, () => Promise<number>> = {
-    staffPayment: () => prisma.staffPayment.count(),
-    expenseRecord: () => prisma.expenseRecord.count(),
-    sale: () => prisma.sale.count(),
-    saleLineItem: () => prisma.saleLineItem.count(),
-    customer: () => prisma.customer.count(),
-    purchase: () => prisma.purchase.count(),
-    purchaseLineItem: () => prisma.purchaseLineItem.count(),
-    dailyOperation: () => prisma.dailyOperation.count(),
-    dailyOperationExpense: () => prisma.dailyOperationExpense.count(),
-    dayClosing: () => prisma.dayClosing.count(),
-    stockMovement: () => prisma.stockMovement.count(),
-    stockPriceChange: () => prisma.stockPriceChange.count(),
-    product: () => prisma.product.count(),
-    supplier: () => prisma.supplier.count(),
-    auditLogEntry: () => prisma.auditLogEntry.count(),
-    activityLog: () => prisma.activityLog.count(),
-    authAuditLog: () => prisma.authAuditLog.count(),
-    session: () => prisma.session.count(),
-    role: () => prisma.role.count(),
-    branch: () => prisma.branch.count(),
-    user: () => prisma.user.count(),
-    userPreference: () => prisma.userPreference.count(),
-    staff: () => prisma.staff.count(),
-    appSetting: () => prisma.appSetting.count(),
-    expenseTemplate: () => prisma.expenseTemplate.count(),
-    productCategory: () => prisma.productCategory.count(),
-    expenseCategory: () => prisma.expenseCategory.count(),
+    staffPayment: () => client.staffPayment.count(),
+    expenseRecord: () => client.expenseRecord.count(),
+    sale: () => client.sale.count(),
+    saleLineItem: () => client.saleLineItem.count(),
+    customer: () => client.customer.count(),
+    purchase: () => client.purchase.count(),
+    purchaseLineItem: () => client.purchaseLineItem.count(),
+    dailyOperation: () => client.dailyOperation.count(),
+    dailyOperationExpense: () => client.dailyOperationExpense.count(),
+    dayClosing: () => client.dayClosing.count(),
+    stockMovement: () => client.stockMovement.count(),
+    stockPriceChange: () => client.stockPriceChange.count(),
+    product: () => client.product.count(),
+    supplier: () => client.supplier.count(),
+    auditLogEntry: () => client.auditLogEntry.count(),
+    activityLog: () => client.activityLog.count(),
+    authAuditLog: () => client.authAuditLog.count(),
+    session: () => client.session.count(),
+    role: () => client.role.count(),
+    branch: () => client.branch.count(),
+    user: () => client.user.count(),
+    userPreference: () => client.userPreference.count(),
+    staff: () => client.staff.count(),
+    appSetting: () => client.appSetting.count(),
+    expenseTemplate: () => client.expenseTemplate.count(),
+    productCategory: () => client.productCategory.count(),
+    expenseCategory: () => client.expenseCategory.count(),
   };
 
   const entries = await Promise.all(
@@ -113,7 +116,9 @@ async function countTables(tableNames: readonly string[]): Promise<TableCounts> 
 }
 
 export async function runProductionInitialization(): Promise<ProductionInitializationReport> {
-  const deletedCounts = await prisma.$transaction(async (tx) => {
+  const admin = getAdminPrismaClient();
+
+  const deletedCounts = await admin.$transaction(async (tx) => {
     const staffPayment = await tx.staffPayment.deleteMany();
     const expenseRecord = await tx.expenseRecord.deleteMany();
     const sale = await tx.sale.deleteMany();
@@ -155,8 +160,10 @@ export async function runProductionInitialization(): Promise<ProductionInitializ
     };
   });
 
-  const preserved = await countTables(PRESERVED_TABLES);
-  const verification = await verifyProductionInitializationState();
+  const preserved = await countTables(PRESERVED_TABLES, admin);
+  const verification = await verifyProductionInitializationState(admin);
+
+  await disconnectAdminPrismaClient();
 
   return {
     deleted: deletedCounts,
@@ -175,10 +182,12 @@ function userCanAuthenticate(passwordHash: string, active: boolean): boolean {
   );
 }
 
-export async function verifyProductionInitializationState(): Promise<ProductionInitializationVerification> {
+export async function verifyProductionInitializationState(
+  client: ReturnType<typeof getAdminPrismaClient> = getAdminPrismaClient()
+): Promise<ProductionInitializationVerification> {
   const errors: string[] = [];
 
-  const clearedAfter = await countTables(CLEARED_TABLES);
+  const clearedAfter = await countTables(CLEARED_TABLES, client);
   let operationalRecordCount = 0;
 
   for (const table of CLEARED_TABLES) {
@@ -196,22 +205,22 @@ export async function verifyProductionInitializationState(): Promise<ProductionI
 
   const [users, staff, branch, productCategories, expenseCategories, settings] =
     await Promise.all([
-      prisma.user.findMany({
+      client.user.findMany({
         where: { active: true },
         include: { role: true, branch: true },
         orderBy: { username: "asc" },
       }),
-      prisma.staff.findMany({
+      client.staff.findMany({
         where: { active: true },
         include: { role: true, branch: true },
         orderBy: { name: "asc" },
       }),
-      prisma.branch.findFirst({
+      client.branch.findFirst({
         where: { code: DEFAULT_BRANCH_CODE },
       }),
-      prisma.productCategory.count({ where: { active: true } }),
-      prisma.expenseCategory.count(),
-      prisma.appSetting.findUnique({ where: { id: "default" } }),
+      client.productCategory.count({ where: { active: true } }),
+      client.expenseCategory.count(),
+      client.appSetting.findUnique({ where: { id: "default" } }),
     ]);
 
   for (const username of REQUIRED_USERNAMES) {

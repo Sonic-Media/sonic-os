@@ -2,13 +2,14 @@
 
 import { useMemo, useState } from "react";
 import { DuplicateEntryDialog } from "@/components/entry/duplicate-entry-dialog";
-import { StaffAccessorySalesCard } from "@/components/operations/staff/staff-accessory-sales-card";
-import { StaffCashSummaryCard } from "@/components/operations/staff/staff-cash-summary-card";
 import { StaffDailyWageCard } from "@/components/operations/staff/staff-daily-wage-card";
 import { StaffEndOfDayCard } from "@/components/operations/staff/staff-end-of-day-card";
 import { StaffExpensesCard } from "@/components/operations/staff/staff-expenses-card";
+import { StaffRecentTransactionsCard } from "@/components/operations/staff/staff-recent-transactions-card";
 import { StaffRevenueCard } from "@/components/operations/staff/staff-revenue-card";
+import { StaffTodayActivityCard } from "@/components/operations/staff/staff-today-activity-card";
 import { StaffWelcomeCard } from "@/components/operations/staff/staff-welcome-card";
+import { StaffCashSummaryCard } from "@/components/operations/staff/staff-cash-summary-card";
 import { useToast } from "@/context/toast-context";
 import { useEntryForm } from "@/hooks/use-entry-form";
 import { useStaffCloseDay } from "@/hooks/use-staff-close-day";
@@ -21,12 +22,7 @@ import { uiSpacing } from "@/lib/ui/design-tokens";
 import { cn } from "@/lib/utils";
 import type { Branch, Entry } from "@/types";
 
-type StaffWorkflowSection =
-  | "accessory-sales"
-  | "expenses"
-  | "daily-wage"
-  | "cash-summary"
-  | "end-of-day";
+type StaffWorkflowSection = "expenses" | "daily-wage" | "end-of-day";
 
 interface StaffOperationsWorkspaceProps {
   branch: Branch;
@@ -34,15 +30,12 @@ interface StaffOperationsWorkspaceProps {
 }
 
 function resolveInitialSection({
-  hasSales,
   hasExpenses,
   wageRecorded,
 }: {
-  hasSales: boolean;
   hasExpenses: boolean;
   wageRecorded: boolean;
 }): StaffWorkflowSection {
-  if (!hasSales) return "accessory-sales";
   if (!hasExpenses) return "expenses";
   if (!wageRecorded) return "daily-wage";
   return "end-of-day";
@@ -106,11 +99,26 @@ export function StaffOperationsWorkspace({
     StaffWorkflowSection | null
   >(() =>
     resolveInitialSection({
-      hasSales: accessorySalesCount > 0,
       hasExpenses: expenseCount > 0,
       wageRecorded,
     })
   );
+
+  const moviesSold = movieRevenue > 0 ? 1 : 0;
+  const movieTransactionMeta = useMemo(() => {
+    if (movieRevenue <= 0) {
+      return { time: undefined, sortKey: 0 };
+    }
+
+    if (entry?.time) {
+      return {
+        time: entry.time,
+        sortKey: entry.timestamp ?? 0,
+      };
+    }
+
+    return { time: undefined, sortKey: 0 };
+  }, [entry?.time, entry?.timestamp, movieRevenue]);
 
   function expandSection(section: StaffWorkflowSection | null) {
     setExpandedSection(section);
@@ -152,19 +160,22 @@ export function StaffOperationsWorkspace({
         accessorySales={accessorySales}
       />
 
-      <StaffAccessorySalesCard
+      <StaffTodayActivityCard
+        moviesSold={moviesSold}
+        accessoriesSold={accessorySalesCount}
         date={form.date}
-        expanded={expandedSection === "accessory-sales"}
-        onExpandedChange={(open) =>
-          expandSection(open ? "accessory-sales" : null)
-        }
         onSaleComplete={() => {
           if (expenseCount === 0) {
             expandSection("expenses");
-          } else {
-            expandSection(null);
           }
         }}
+      />
+
+      <StaffRecentTransactionsCard
+        date={form.date}
+        movieRevenue={movieRevenue}
+        movieTime={movieTransactionMeta.time}
+        movieSortKey={movieTransactionMeta.sortKey}
       />
 
       <StaffExpensesCard
@@ -190,15 +201,16 @@ export function StaffOperationsWorkspace({
         staffPayouts={staffPayouts}
         netCash={balance}
         savingsAllocation={parseAmount(form.savingsAllocation)}
-        expanded={expandedSection === "cash-summary"}
-        onExpandedChange={(open) => expandSection(open ? "cash-summary" : null)}
+        collapsible={false}
       />
 
       <StaffEndOfDayCard
         form={form}
         movieRevenue={movieRevenue}
+        accessorySales={accessorySales}
         totalExpenses={totalExpenses}
         staffPayouts={staffPayouts}
+        cashToHandIn={remainingCash}
         accessorySalesCount={accessorySalesCount}
         isClosing={isClosing || isSaving}
         closeError={closeError ?? saveError}

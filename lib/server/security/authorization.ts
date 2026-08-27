@@ -1,4 +1,5 @@
 import { ApiError } from "@/lib/api/errors";
+import { isOwnerRole } from "@/lib/auth/validation";
 import type { AuthSession } from "@/types/auth";
 import type { StaffModule } from "@/types/staff-role";
 import {
@@ -8,7 +9,7 @@ import {
 } from "@/lib/server/security/permissions";
 
 export function requireOwner(session: AuthSession): void {
-  if (session.role !== "owner") {
+  if (!isOwnerRole(session.role)) {
     throw new ApiError("Owner access required.", {
       status: 403,
       code: "forbidden",

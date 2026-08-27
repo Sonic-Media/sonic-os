@@ -1,6 +1,12 @@
 import "dotenv/config";
 
 import { createDatabaseBackup } from "@/lib/backup/backup";
+import { PRODUCTION_CONFIRM_RESET } from "@/lib/data-protection/constants";
+import {
+  isProductionMode,
+  requireDestructiveOpsAllowed,
+  requireProductionConfirmationToken,
+} from "@/lib/env/production-mode";
 import {
   getProductionResetPreview,
   runProductionReset,
@@ -8,6 +14,20 @@ import {
 
 function hasFlag(flag: string): boolean {
   return process.argv.includes(flag);
+}
+
+function readConfirmationFlag(): string | undefined {
+  const inline = process.argv.find((arg) => arg.startsWith("--confirmation="));
+  if (inline) {
+    return inline.slice("--confirmation=".length);
+  }
+
+  const index = process.argv.indexOf("--confirmation");
+  if (index >= 0) {
+    return process.argv[index + 1];
+  }
+
+  return undefined;
 }
 
 function printCounts(label: string, counts: Record<string, number>) {
@@ -21,12 +41,39 @@ async function main() {
   const confirmed = hasFlag("--yes") || hasFlag("-y");
   const skipBackup = hasFlag("--skip-backup");
   const resetOnly = hasFlag("--reset-only");
+  const confirmation = readConfirmationFlag();
 
   if (!confirmed) {
     console.error(
       "Production reset requires explicit confirmation. Re-run with --yes."
     );
+    console.error(
+      "Prefer `npm run db:safe-reset` for the final pre-production transactional wipe."
+    );
     process.exit(1);
+  }
+
+  try {
+    requireDestructiveOpsAllowed("Production reset");
+  } catch (error) {
+    console.error(
+      error instanceof Error ? error.message : "Reset blocked in production mode."
+    );
+    process.exit(1);
+  }
+
+  if (isProductionMode()) {
+    try {
+      requireProductionConfirmationToken(
+        confirmation,
+        PRODUCTION_CONFIRM_RESET
+      );
+    } catch (error) {
+      console.error(
+        error instanceof Error ? error.message : "Confirmation required."
+      );
+      process.exit(1);
+    }
   }
 
   if (!resetOnly) {

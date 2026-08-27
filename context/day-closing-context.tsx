@@ -74,6 +74,7 @@ export interface DayClosingValidationResult {
 interface DayClosingContextValue {
   closings: DayClosingRecord[];
   isLoaded: boolean;
+  refreshClosings: () => Promise<void>;
   isBranchDayClosed: (branch: Branch, date?: string) => boolean;
   isBranchDayOpened: (branch: Branch, date?: string) => boolean;
   needsShopOpening: (branch: Branch, date?: string) => boolean;
@@ -510,6 +511,7 @@ export function DayClosingProvider({ children }: { children: React.ReactNode }) 
     () => ({
       closings,
       isLoaded,
+      refreshClosings: refreshClosingsFromApi,
       isBranchDayClosed: isBranchDayClosedFn,
       isBranchDayOpened: isBranchDayOpenedFn,
       needsShopOpening: needsShopOpeningFn,
@@ -523,6 +525,7 @@ export function DayClosingProvider({ children }: { children: React.ReactNode }) 
     [
       closings,
       isLoaded,
+      refreshClosingsFromApi,
       isBranchDayClosedFn,
       isBranchDayOpenedFn,
       needsShopOpeningFn,

@@ -7,8 +7,17 @@ if [ "${RUN_MIGRATIONS:-true}" = "true" ]; then
 fi
 
 if [ "${RUN_SEED:-false}" = "true" ]; then
-  echo "[sonic-os] Seeding database..."
-  npx prisma db seed
+  if [ "${APP_MODE:-}" = "production" ] || [ "${APP_ENV:-}" = "production" ]; then
+    if [ "${ALLOW_PRODUCTION_SEED:-false}" != "true" ]; then
+      echo "[sonic-os] Seeding skipped — disabled in production mode."
+    else
+      echo "[sonic-os] Seeding database (ALLOW_PRODUCTION_SEED=true)..."
+      npx prisma db seed
+    fi
+  else
+    echo "[sonic-os] Seeding database..."
+    npx prisma db seed
+  fi
 fi
 
 echo "[sonic-os] Starting application..."

@@ -14,6 +14,8 @@ import {
   assertStaffOperationalRole,
 } from "@/lib/server/day-closing-guards";
 import { getBranchCodeById } from "@/lib/server/branch-lookup";
+import { recordDeleteAudit } from "@/lib/server/data-protection/audit";
+import { assertDestructiveApiAllowed } from "@/lib/server/data-protection/guards";
 import { recordTransactionAudit } from "@/lib/server/transaction-audit";
 import { AUDIT_ACTIONS } from "@/lib/audit-log/constants";
 import {
@@ -394,10 +396,21 @@ export async function deleteExpense(id: string): Promise<void> {
 
   const session = await requireSession();
   assertStaffOperationalRole(session);
+  assertDestructiveApiAllowed("Expense deletion");
   const branch = await getBranchCodeById(existing.branchId);
   await assertBranchDayOpenForWrite(branch, existing.date);
 
-  await prisma.expenseRecord.delete({ where: { id } });
+  await prisma.expenseRecord.update({
+    where: { id },
+    data: { deletedAt: new Date() },
+  });
+
+  await recordDeleteAudit(
+    session,
+    "expenses",
+    id,
+    existing as Record<string, unknown>
+  );
 }
 
 export async function upsertStaffPaymentExpense(

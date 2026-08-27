@@ -35,6 +35,7 @@ export function StockMovementDialog({
   const [reason, setReason] = useState("");
   const [notes, setNotes] = useState("");
   const [errors, setErrors] = useState<Record<string, string | undefined>>({});
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const productOptions = useMemo(
     () =>
@@ -60,6 +61,7 @@ export function StockMovementDialog({
 
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
+    if (isSubmitting) return;
 
     const parsedQuantity = parsePositiveInteger(quantity);
     const nextErrors: Record<string, string | undefined> = {};
@@ -90,23 +92,29 @@ export function StockMovementDialog({
       return;
     }
 
-    const result = await recordMovement({
-      productId,
-      movement: movementType,
-      quantity: parsedQuantity!,
-      reason,
-      branch: defaultBranch,
-      notes,
-    });
+    setIsSubmitting(true);
 
-    if (!result.success) {
-      setErrors(result.errors);
-      return;
+    try {
+      const result = await recordMovement({
+        productId,
+        movement: movementType,
+        quantity: parsedQuantity!,
+        reason,
+        branch: defaultBranch,
+        notes,
+      });
+
+      if (!result.success) {
+        setErrors(result.errors);
+        return;
+      }
+
+      onBranchChange?.(defaultBranch);
+      onSuccess?.();
+      onClose();
+    } finally {
+      setIsSubmitting(false);
     }
-
-    onBranchChange?.(defaultBranch);
-    onSuccess?.();
-    onClose();
   }
 
   return (
@@ -117,14 +125,25 @@ export function StockMovementDialog({
           ? "Record incoming stock for an item."
           : "Record outgoing stock. Quantity cannot exceed current stock."
       }
-      onClose={onClose}
+      onClose={isSubmitting ? () => undefined : onClose}
       className="max-w-lg"
       footer={
         <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-          <Button type="button" variant="secondary" onClick={onClose}>
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={onClose}
+            disabled={isSubmitting}
+          >
             Cancel
           </Button>
-          <Button type="submit" form="stock-movement-form">
+          <Button
+            type="submit"
+            form="stock-movement-form"
+            loading={isSubmitting}
+            loadingLabel="Saving..."
+            disabled={isSubmitting}
+          >
             Record {movementType === "in" ? "Stock In" : "Stock Out"}
           </Button>
         </div>

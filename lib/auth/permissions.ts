@@ -1,4 +1,5 @@
 import type { UserRole } from "@/types/auth";
+import { isOwnerRole } from "@/lib/auth/validation";
 import {
   getDefaultRouteForStaffRole,
   getModuleForPath,
@@ -33,7 +34,7 @@ export const USER_ROLE_LABELS: Record<UserRole, string> = {
 export const USER_ROLE_OPTIONS = STAFF_ROLE_OPTIONS;
 
 export function canAccessRoute(role: UserRole, pathname: string): boolean {
-  if (role === "owner") return true;
+  if (isOwnerRole(role)) return true;
 
   if (pathname === "/login" || pathname === "/lock") return true;
 
@@ -65,22 +66,22 @@ export function getDefaultRouteForRole(role: UserRole): string {
 }
 
 export function canManageUsers(role: UserRole): boolean {
-  return role === "owner";
+  return isOwnerRole(role);
 }
 
 export function canImportHistoricalData(role: UserRole): boolean {
-  return role === "owner";
+  return isOwnerRole(role);
 }
 
 export function canManageRoles(role: UserRole): boolean {
-  return role === "owner";
+  return isOwnerRole(role);
 }
 
 export function canViewAuditLog(role: UserRole): boolean {
-  return role === "owner";
+  return isOwnerRole(role);
 }
 
 export function getRoleLabel(role: UserRole): string {
-  if (role === "owner") return "Owner";
+  if (isOwnerRole(role)) return "Owner";
   return getStaffRoleName(migrateLegacyAuthRole(role));
 }

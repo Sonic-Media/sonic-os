@@ -1,14 +1,9 @@
 SONIC OS — EXPENSES MODULE PRODUCTION CERTIFICATION
 =================================================
 
-Date: 2026-08-24T00:19:43.636Z
+Date: 2026-08-27T20:11:50.224Z
 Result: CERTIFIED
 Checks passed: 20/20
-
-BUG FIX APPLIED
----------------
-1. expenses-service: resolve staffId/staffName/staffRole from logged-in user when createdBy is omitted.
-2. expenses-service: enforce shared validateExpenseRecordInput on create/update (empty description, invalid amount, etc.).
 
 EXECUTIVE SUMMARY
 -----------------
@@ -21,7 +16,7 @@ CHECKLIST
 [PASS] 1. Create expenses in every supported category
     18 default categories exercised
 [PASS] 2. Verify custom expense categories
-    Created "cert-expenses-1787530780706 Custom Ops" and recorded expense d275712d-a45a-43b1-a4f1-2c99a6d4ec12
+    Created "cert-expenses-1787861503070 Custom Ops" and recorded expense fbb57c9b-f0b6-4867-8c9d-c5ca5d92cbc6
 [PASS] 3. Verify expense totals
     Today's operating expenses total 117800 UGX
 [PASS] 4. Verify Daily Operations updates
@@ -31,11 +26,11 @@ CHECKLIST
 [PASS] 6. Verify branch assignment
     All certification expenses saved to branch main (Kansanga)
 [PASS] 7. Verify staff attribution
-    All certification expenses attributed to cert-expenses-1787530780706 Cashier
+    All certification expenses attributed to cert-expenses-1787861503070 Cashier
 [PASS] 8. Edit expenses
     Updated Rent amount to 5500
 [PASS] 9. Delete expenses
-    Deleted expense d275712d-a45a-43b1-a4f1-2c99a6d4ec12
+    Deleted expense fbb57c9b-f0b6-4867-8c9d-c5ca5d92cbc6
 [PASS] 10. Prevent invalid values
     Negative amount and missing fields rejected (Amount must be greater than zero.)
 [PASS] 11. Verify date filtering

@@ -67,6 +67,7 @@ interface PurchasingContextValue {
   metrics: PurchasingDashboardMetrics;
   isLoaded: boolean;
   loadError: string | null;
+  refreshPurchases: () => Promise<void>;
   getPurchaseById: (id: string) => Purchase | undefined;
   getSupplierById: (id: string) => Supplier | undefined;
   addSupplier: (input: SupplierInput) => PurchaseValidationResult;
@@ -375,6 +376,7 @@ export function PurchasingProvider({
       metrics,
       isLoaded,
       loadError,
+      refreshPurchases: refreshPurchasesFromApi,
       getPurchaseById,
       getSupplierById,
       addSupplier,
@@ -388,6 +390,7 @@ export function PurchasingProvider({
       metrics,
       isLoaded,
       loadError,
+      refreshPurchasesFromApi,
       getPurchaseById,
       getSupplierById,
       addSupplier,

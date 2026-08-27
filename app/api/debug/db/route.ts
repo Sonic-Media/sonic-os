@@ -5,6 +5,7 @@ import {
   isDatabaseConfigured,
   prisma,
 } from "@/lib/db";
+import { assertDebugEndpointAllowed } from "@/lib/server/data-protection/guards";
 
 function redactDatabaseUrl(connectionString: string | undefined): string | null {
   if (!connectionString?.trim()) {
@@ -23,6 +24,12 @@ function redactDatabaseUrl(connectionString: string | undefined): string | null 
 }
 
 export async function GET() {
+  try {
+    assertDebugEndpointAllowed();
+  } catch {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
+
   const databaseUrl = redactDatabaseUrl(process.env.DATABASE_URL);
   const diagnostics = getDatabaseUrlDiagnostics();
 

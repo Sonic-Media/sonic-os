@@ -3,6 +3,7 @@ import { jsonError } from "@/lib/api/response";
 import { ApiError } from "@/lib/api/errors";
 import { isDatabaseConfigured } from "@/lib/db";
 import { ensureApplicationInitialized } from "@/lib/server/bootstrap";
+import { isOwnerRole } from "@/lib/auth/validation";
 import {
   requireOwner,
   requirePermission,
@@ -58,6 +59,10 @@ function enforceAccessControl(
   options?: SecureRouteOptions
 ): void {
   if (options?.skipAccessControl) {
+    return;
+  }
+
+  if (isOwnerRole(session.role)) {
     return;
   }
 

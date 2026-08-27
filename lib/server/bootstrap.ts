@@ -4,6 +4,7 @@ import {
   isApplicationBootstrapped,
   runApplicationBootstrap,
 } from "@/lib/server/bootstrap/pipeline";
+import { runRbacRepairStage } from "@/lib/server/bootstrap/stages";
 import {
   BootstrapFailedError,
   createBootstrapReport,
@@ -33,6 +34,20 @@ export {
 export { runApplicationBootstrap, isApplicationBootstrapped };
 
 let bootstrapPromise: Promise<void> | null = null;
+let backupSchedulerStarted = false;
+
+async function initializeApplicationData(): Promise<void> {
+  await ensureApplicationBootstrapped();
+  await runRbacRepairStage();
+
+  if (!backupSchedulerStarted) {
+    backupSchedulerStarted = true;
+    const { startDailyBackupScheduler } = await import(
+      "@/lib/server/backup/scheduler"
+    );
+    startDailyBackupScheduler();
+  }
+}
 
 export async function ensureApplicationInitialized(): Promise<void> {
   if (!isDatabaseConfigured()) {
@@ -40,7 +55,7 @@ export async function ensureApplicationInitialized(): Promise<void> {
   }
 
   if (!bootstrapPromise) {
-    bootstrapPromise = ensureApplicationBootstrapped().catch((error) => {
+    bootstrapPromise = initializeApplicationData().catch((error) => {
       bootstrapPromise = null;
       throw error;
     });

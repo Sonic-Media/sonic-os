@@ -69,6 +69,7 @@ interface SalesContextValue {
   metrics: SalesDashboardMetrics;
   isLoaded: boolean;
   loadError: string | null;
+  refreshSales: () => Promise<void>;
   getCustomerById: (id: string) => Customer | undefined;
   addCustomer: (input: CustomerInput) => SaleValidationResult;
   updateCustomer: (
@@ -398,6 +399,7 @@ export function SalesProvider({ children }: { children: React.ReactNode }) {
       metrics,
       isLoaded,
       loadError,
+      refreshSales: refreshSalesFromApi,
       getCustomerById,
       addCustomer,
       updateCustomer,
@@ -410,6 +412,7 @@ export function SalesProvider({ children }: { children: React.ReactNode }) {
       metrics,
       isLoaded,
       loadError,
+      refreshSalesFromApi,
       getCustomerById,
       addCustomer,
       updateCustomer,

@@ -60,6 +60,7 @@ interface StaffPaymentsContextValue {
   payments: StaffPaymentRecord[];
   isLoaded: boolean;
   loadError: string | null;
+  refreshPayments: () => Promise<void>;
   getPaymentById: (id: string) => StaffPaymentRecord | undefined;
   getPaymentByExpenseId: (expenseId: string) => StaffPaymentRecord | undefined;
   getPaymentsForBranchDate: (branch: Branch, date: string) => StaffPaymentRecord[];
@@ -271,6 +272,7 @@ export function StaffPaymentsProvider({
       payments,
       isLoaded,
       loadError,
+      refreshPayments: refreshPaymentsFromApi,
       getPaymentById,
       getPaymentByExpenseId,
       getPaymentsForBranchDate,
@@ -281,6 +283,7 @@ export function StaffPaymentsProvider({
       payments,
       isLoaded,
       loadError,
+      refreshPaymentsFromApi,
       getPaymentById,
       getPaymentByExpenseId,
       getPaymentsForBranchDate,

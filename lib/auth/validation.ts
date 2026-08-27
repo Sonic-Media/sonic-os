@@ -117,12 +117,21 @@ export function validatePasswordReset(
 }
 
 export function isUserRole(value: unknown): value is UserRole {
-  if (value === "owner") return true;
-  return isStaffRoleId(value);
+  const role = normalizeUserRole(value);
+  return role === "owner" || isStaffRoleId(role);
 }
 
 export function normalizeUserRole(value: unknown): UserRole {
-  if (value === "owner") return "owner";
-  if (isStaffRoleId(value)) return value;
+  if (typeof value === "string") {
+    const slug = value.trim().toLowerCase();
+    if (slug === "owner") return "owner";
+    if (isStaffRoleId(slug)) return slug;
+    return migrateLegacyAuthRole(slug);
+  }
+
   return migrateLegacyAuthRole(value);
+}
+
+export function isOwnerRole(value: unknown): value is "owner" {
+  return normalizeUserRole(value) === "owner";
 }

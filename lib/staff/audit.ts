@@ -34,6 +34,10 @@ function mapAuditLogToStaffAudit(record: AuditLogRecord): StaffAuditRecord {
 
 export function syncStaffAuditCacheFromAuditLog(records: AuditLogRecord[]): void {
   auditRecordCache = records.map(mapAuditLogToStaffAudit);
+
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent(AUDIT_LOG_UPDATED_EVENT));
+  }
 }
 
 export function mergeStaffAuditRecords(records: StaffAuditRecord[]): void {

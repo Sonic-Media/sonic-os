@@ -350,6 +350,11 @@ export async function runSettingsStage(): Promise<void> {
   });
 }
 
+export async function runRbacRepairStage(): Promise<void> {
+  await runRolesStage();
+  await runOwnerUserStage();
+}
+
 export async function runStartupCompleteStage(): Promise<void> {
   return;
 }
