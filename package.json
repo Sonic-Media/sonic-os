@@ -30,6 +30,7 @@
     "verify:roles": "tsx scripts/verify-roles-permissions-module.ts",
     "verify:branch-isolation": "tsx scripts/verify-branch-isolation.ts",
     "verify:branch-operations": "tsx scripts/verify-branch-operations-isolation.ts",
+    "verify:attendance": "tsx scripts/verify-attendance-flow.ts",
     "db:studio": "prisma studio",
     "db:backup": "tsx scripts/backup-database.ts",
     "db:backup:schedule": "tsx scripts/scheduled-backup.ts",
