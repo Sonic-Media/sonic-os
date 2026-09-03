@@ -131,6 +131,15 @@ export function toPublicErrorMessage(error: unknown): {
       };
     }
 
+    if (error.message.includes("does not exist in the current database")) {
+      return {
+        status: 503,
+        code: "database_unavailable",
+        message:
+          "Database schema is out of date. Redeploy the latest version or run migrations.",
+      };
+    }
+
     const prismaCode =
       "code" in error && typeof error.code === "string" ? error.code : null;
     if (prismaCode?.startsWith("P")) {
