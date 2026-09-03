@@ -112,8 +112,7 @@ export function DayClosingProvider({ children }: { children: React.ReactNode }) 
   const [closings, setClosings] = useState<DayClosingRecord[]>([]);
   const [isLoaded, setIsLoaded] = useState(false);
   const closingsRef = useRef(closings);
-  const wasAuthenticated = useRef(false);
-  const lastSessionUserId = useRef<string | null>(null);
+  const fetchGenerationRef = useRef(0);
   const { session, isAuthenticated, isLoaded: authLoaded } = useAuth();
   const { settings } = useSettings();
   const { recordStaffPayment } = useStaffPaymentsModule();
@@ -139,24 +138,10 @@ export function DayClosingProvider({ children }: { children: React.ReactNode }) 
       setDayClosingsCache([]);
       setClosings([]);
       setIsLoaded(true);
-      wasAuthenticated.current = false;
-      lastSessionUserId.current = null;
       return;
     }
 
-    const sessionUserId = session?.userId ?? null;
-    const shouldRefresh =
-      !wasAuthenticated.current ||
-      lastSessionUserId.current !== sessionUserId;
-
-    wasAuthenticated.current = true;
-    lastSessionUserId.current = sessionUserId;
-
-    if (!shouldRefresh) {
-      setIsLoaded(true);
-      return;
-    }
-
+    const generation = ++fetchGenerationRef.current;
     setIsLoaded(false);
 
     queueMicrotask(() => {
@@ -166,7 +151,9 @@ export function DayClosingProvider({ children }: { children: React.ReactNode }) 
         } catch (error) {
           console.error(getDataSourceErrorMessage(error));
         } finally {
-          setIsLoaded(true);
+          if (generation === fetchGenerationRef.current) {
+            setIsLoaded(true);
+          }
         }
       })();
     });
