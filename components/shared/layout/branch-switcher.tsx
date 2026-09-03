@@ -1,19 +1,23 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useActiveBranch } from "@/context/active-branch-context";
+import { useBranch } from "@/context/branch-context";
 import { useAuth } from "@/context/auth-context";
-import { useBranches } from "@/context/branches-context";
-import { canSwitchActiveBranch } from "@/lib/branch/access";
 import { cn } from "@/lib/utils";
 
 export function BranchSwitcher({ className }: { className?: string }) {
   const { session } = useAuth();
-  const { activeBranch, setActiveBranch, isLoaded } = useActiveBranch();
-  const { activeBranches, getBranchName } = useBranches();
+  const {
+    activeBranch,
+    setActiveBranch,
+    isLoaded,
+    activeBranches,
+    getBranchName,
+    canSwitchBranch,
+  } = useBranch();
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
-  const canSwitch = session ? canSwitchActiveBranch(session.role) : false;
+  const canSwitch = canSwitchBranch;
 
   const currentName = useMemo(
     () => getBranchName(activeBranch),

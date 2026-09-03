@@ -40,6 +40,7 @@ export interface StockDashboardMetrics {
 export interface StockProduct {
   id: string;
   name: string;
+  branch: Branch;
   category: StockProductCategory;
   sku?: string;
   buyingPrice: number;
@@ -87,6 +88,7 @@ export interface StockProductInput {
   initialStock?: number;
   minimumStockLevel: number;
   notes?: string;
+  branch?: Branch;
 }
 
 export interface StockProductUpdateInput {

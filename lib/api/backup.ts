@@ -11,6 +11,8 @@ export interface BackupRecordSummary {
   fileSizeBytes: number | null;
   compressed: boolean;
   status: string;
+  format: "sql" | "json";
+  storageType: "filesystem" | "database";
   error?: string;
 }
 

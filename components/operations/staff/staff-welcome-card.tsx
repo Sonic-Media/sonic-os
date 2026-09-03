@@ -27,7 +27,7 @@ export function StaffWelcomeCard() {
   const { activeBranch } = useActiveBranch();
   const { getBranchName } = useSettings();
   const { staff } = useStaff();
-  const { getOpenRecord } = useDayClosing();
+  const { getOpenRecord, isBranchDayOpened, isBranchDayClosed } = useDayClosing();
   const { currentAttendance } = useStaffAttendance(today);
   const [now, setNow] = useState(() => new Date());
   const [isClockingOut, setIsClockingOut] = useState(false);
@@ -43,6 +43,8 @@ export function StaffWelcomeCard() {
   );
   const firstName = staffName.split(" ")[0] ?? staffName;
   const onShift = currentAttendance?.presence === "on-shift";
+  const shopOpen = isBranchDayOpened(activeBranch, today);
+  const shopClosed = isBranchDayClosed(activeBranch, today);
   const openRecord = getOpenRecord(activeBranch, today);
   const openedAt = openRecord?.openedAt ?? openRecord?.reopenedAt;
 
@@ -50,6 +52,9 @@ export function StaffWelcomeCard() {
     if (!openedAt) return "Just opened";
     return formatRelativeTime(openedAt);
   }, [openedAt, now]);
+
+  const shopStatusLabel = shopClosed ? "Closed" : shopOpen ? "Open" : "Not Open";
+  const shopStatusTone = shopClosed ? "neutral" : shopOpen ? "success" : "warning";
 
   async function handleClockOut() {
     setIsClockingOut(true);
@@ -104,12 +109,24 @@ export function StaffWelcomeCard() {
         <div>
           <StaffSectionLabel>Shop Status</StaffSectionLabel>
           <div className="mt-2">
-            <StaffStatusBadge tone="success">
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-              Open
+            <StaffStatusBadge tone={shopStatusTone}>
+              <span
+                className={
+                  shopOpen
+                    ? "h-1.5 w-1.5 rounded-full bg-emerald-400"
+                    : shopClosed
+                      ? "h-1.5 w-1.5 rounded-full bg-zinc-400"
+                      : "h-1.5 w-1.5 rounded-full bg-amber-400"
+                }
+              />
+              {shopStatusLabel}
             </StaffStatusBadge>
-            {openedAt ? (
+            {shopOpen && openedAt ? (
               <p className="mt-2 text-xs text-zinc-500">{sessionLabel}</p>
+            ) : onShift && !shopOpen ? (
+              <p className="mt-2 text-xs text-zinc-500">
+                You are on shift; branch not opened
+              </p>
             ) : null}
           </div>
         </div>

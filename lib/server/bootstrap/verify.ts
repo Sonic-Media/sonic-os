@@ -85,6 +85,7 @@ export async function verifyOwnerStaffStage(): Promise<boolean> {
     WHERE s.username = ${DEFAULT_OWNER_USERNAME}
       AND s."branchId" = u."branchId"
       AND s.active = true
+      AND s."deletedAt" IS NULL
   `;
 
   return Number(rows[0]?.count ?? 0) >= 1;

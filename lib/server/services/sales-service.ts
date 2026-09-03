@@ -1,8 +1,8 @@
 import { ApiError } from "@/lib/api/errors";
+import type { BranchIdFilter } from "@/lib/server/branch-scope";
 import { prisma } from "@/lib/db";
 import { Prisma } from "@/lib/prisma";
 import { getBranchIdForSession } from "@/lib/server/branch-lookup";
-import { getBranchProductStockByBranchId } from "@/lib/server/branch-inventory";
 import { mapSaleToEntity } from "@/lib/server/mappers/entities";
 import { getSessionFromRequest, requireSession } from "@/lib/server/session";
 import { applyStockMovement, type ProductCache } from "@/lib/server/stock-transactions";
@@ -150,8 +150,11 @@ function sortSales(sales: Sale[]): Sale[] {
   });
 }
 
-export async function listSales(): Promise<Sale[]> {
+export async function listSales(
+  branchFilter?: BranchIdFilter
+): Promise<Sale[]> {
   const sales = await prisma.sale.findMany({
+    where: branchFilter ? { branchId: branchFilter.branchId } : undefined,
     include: saleInclude,
     orderBy: [{ date: "desc" }, { createdAt: "desc" }],
   });
@@ -194,7 +197,11 @@ export async function completeSale(sale: Sale): Promise<Sale> {
 
     const productIds = [...new Set(sale.items.map((item) => item.productId))];
     const products = await tx.product.findMany({
-      where: { id: { in: productIds } },
+      where: {
+        id: { in: productIds },
+        branchId,
+        deletedAt: null,
+      },
     });
     const productCache: ProductCache = new Map(
       products.map((product) => [product.id, product])
@@ -314,35 +321,28 @@ export async function listBranchProductsForSale(
   );
 
   const products = await prisma.product.findMany({
+    where: {
+      branchId,
+      deletedAt: null,
+      currentStock: { gt: 0 },
+    },
     orderBy: { name: "asc" },
     select: {
       id: true,
       name: true,
       buyingPrice: true,
       sellingPrice: true,
+      currentStock: true,
     },
   });
 
-  const available: BranchSaleProduct[] = [];
-
-  for (const product of products) {
-    const branchStock = await getBranchProductStockByBranchId(
-      branchId,
-      product.id
-    );
-
-    if (branchStock <= 0) continue;
-
-    available.push({
-      id: product.id,
-      name: product.name,
-      buyingPrice: product.buyingPrice,
-      sellingPrice: product.sellingPrice,
-      branchStock,
-    });
-  }
-
-  return available;
+  return products.map((product) => ({
+    id: product.id,
+    name: product.name,
+    buyingPrice: product.buyingPrice,
+    sellingPrice: product.sellingPrice,
+    branchStock: product.currentStock,
+  }));
 }
 
 export function sortSaleEntities(sales: Sale[]): Sale[] {

@@ -118,6 +118,34 @@ export async function withDatabase<T>(
   return handler();
 }
 
+export async function withSessionDatabase<T>(
+  handler: (session: AuthSession) => Promise<T>,
+  options?: SecureRouteOptions
+): Promise<T> {
+  ensureDatabaseConfigured();
+  await ensureApplicationInitialized();
+
+  const pathname = await resolveRequestPathFromContext(options?.request);
+
+  if (options?.request && !options.skipCsrf) {
+    assertCsrfProtection(options.request, pathname);
+  } else if (!options?.skipCsrf && pathname.startsWith("/api/")) {
+    await assertCsrfProtectionFromHeaders(pathname);
+  }
+
+  if (options?.requireAuth === false) {
+    throw new ApiError("Session is required.", {
+      status: 401,
+      code: "unauthorized",
+    });
+  }
+
+  const session = await requireSession();
+  enforceAccessControl(session, pathname, options);
+
+  return handler(session);
+}
+
 export function handleRouteError(
   error: unknown,
   context?: { requestId?: string; method?: string; pathname?: string }

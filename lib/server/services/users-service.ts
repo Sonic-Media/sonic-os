@@ -6,7 +6,7 @@ import {
   mapUserToAppUser,
   type UserWithRelations,
 } from "@/lib/server/mappers/entities";
-import { hashPassword } from "@/lib/server/password";
+import { hashPassword, verifyPassword } from "@/lib/server/password";
 import { getRoleIdBySlug } from "@/lib/server/role-lookup";
 import { getSessionFromRequest } from "@/lib/server/session";
 import { recordSecurityAuditInTransaction } from "@/lib/server/security/audit";
@@ -23,6 +23,13 @@ const resetPasswordSchema = z.object({
 const userInclude = {
   role: true,
   branch: true,
+  staff: {
+    select: {
+      loginEnabled: true,
+      deletedAt: true,
+      active: true,
+    },
+  },
 } as const;
 
 const USERNAME_PATTERN = /^[a-z0-9._-]+$/;
@@ -240,14 +247,42 @@ export async function resetUserPassword(
   password: unknown
 ): Promise<AppUser> {
   const parsed = resetPasswordSchema.parse({ password });
-  await requireUserWithRelations(id);
+  const existing = await requireUserWithRelations(id);
 
   const passwordHash = await hashPassword(parsed.password);
 
-  const user = await prisma.user.update({
-    where: { id },
-    data: { passwordHash },
-    include: userInclude,
+  const user = await prisma.$transaction(async (tx) => {
+    const updated = await tx.user.update({
+      where: { id },
+      data: { passwordHash },
+      include: userInclude,
+    });
+
+    const verified = await verifyPassword(parsed.password, updated.passwordHash);
+    if (!verified) {
+      throw new ApiError("Password reset failed verification.", {
+        status: 500,
+        code: "password_verify_failed",
+      });
+    }
+
+    if (existing.staffId) {
+      await tx.staff.update({
+        where: { id: existing.staffId },
+        data: { loginEnabled: true },
+      });
+    }
+
+    return updated.staffId
+      ? {
+          ...updated,
+          staff: {
+            loginEnabled: true,
+            deletedAt: updated.staff?.deletedAt ?? null,
+            active: updated.staff?.active ?? true,
+          },
+        }
+      : updated;
   });
 
   return mapUserToAppUser(user);
@@ -274,6 +309,13 @@ export async function disableUser(id: string): Promise<AppUser> {
       include: userInclude,
     });
 
+    if (existing.staffId) {
+      await tx.staff.update({
+        where: { id: existing.staffId },
+        data: { loginEnabled: false },
+      });
+    }
+
     if (session) {
       await recordSecurityAuditInTransaction(
         tx,
@@ -283,19 +325,48 @@ export async function disableUser(id: string): Promise<AppUser> {
       );
     }
 
-    return updated;
+    return updated.staffId
+      ? {
+          ...updated,
+          staff: {
+            loginEnabled: false,
+            deletedAt: updated.staff?.deletedAt ?? null,
+            active: updated.staff?.active ?? true,
+          },
+        }
+      : updated;
   });
 
   return mapUserToAppUser(user);
 }
 
 export async function enableUser(id: string): Promise<AppUser> {
-  await requireUserWithRelations(id);
+  const existing = await requireUserWithRelations(id);
 
-  const user = await prisma.user.update({
-    where: { id },
-    data: { active: true },
-    include: userInclude,
+  const user = await prisma.$transaction(async (tx) => {
+    const updated = await tx.user.update({
+      where: { id },
+      data: { active: true },
+      include: userInclude,
+    });
+
+    if (existing.staffId) {
+      await tx.staff.update({
+        where: { id: existing.staffId },
+        data: { loginEnabled: true },
+      });
+    }
+
+    return updated.staffId
+      ? {
+          ...updated,
+          staff: {
+            loginEnabled: true,
+            deletedAt: updated.staff?.deletedAt ?? null,
+            active: updated.staff?.active ?? true,
+          },
+        }
+      : updated;
   });
 
   return mapUserToAppUser(user);

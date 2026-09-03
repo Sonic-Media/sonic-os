@@ -1,4 +1,5 @@
 import { ApiError } from "@/lib/api/errors";
+import { BootstrapFailedError } from "@/lib/server/bootstrap/types";
 import { ZodError } from "zod";
 
 export interface RequestLogContext {
@@ -86,12 +87,39 @@ export function toPublicErrorMessage(error: unknown): {
     };
   }
 
+  if (error instanceof BootstrapFailedError) {
+    return {
+      status: 503,
+      code: "bootstrap_failed",
+      message: error.message,
+      details:
+        process.env.NODE_ENV === "development"
+          ? { stage: error.stage, stack: error.stack }
+          : { stage: error.stage },
+    };
+  }
+
   if (error instanceof ZodError) {
     return {
       status: 400,
       code: "validation_error",
       message: "Validation failed.",
       details: error.flatten(),
+    };
+  }
+
+  if (process.env.NODE_ENV === "development" && error instanceof Error) {
+    const prismaError = error as Error & { code?: string; meta?: unknown };
+    return {
+      status: 500,
+      code: prismaError.code ?? "internal_error",
+      message: error.message,
+      details: {
+        name: error.name,
+        stack: error.stack,
+        ...(prismaError.code ? { prismaCode: prismaError.code } : {}),
+        ...(prismaError.meta !== undefined ? { prismaMeta: prismaError.meta } : {}),
+      },
     };
   }
 

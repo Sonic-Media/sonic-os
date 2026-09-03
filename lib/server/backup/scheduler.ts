@@ -1,4 +1,5 @@
 import { isProductionMode } from "@/lib/env/production-mode";
+import { isServerlessRuntime } from "@/lib/backup/runtime";
 import { triggerDatabaseBackup } from "@/lib/server/backup/backup-service";
 
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
@@ -45,6 +46,13 @@ async function runScheduledBackupSafely(): Promise<void> {
 }
 
 export function startDailyBackupScheduler(): void {
+  if (isServerlessRuntime()) {
+    console.info(
+      "[sonic-os] Daily backup scheduler skipped on serverless (use Vercel Cron at /api/cron/backup)."
+    );
+    return;
+  }
+
   if (schedulerStarted || !shouldStartDailyBackupScheduler()) {
     return;
   }

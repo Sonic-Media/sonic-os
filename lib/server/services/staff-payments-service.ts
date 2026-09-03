@@ -1,4 +1,5 @@
 import { randomUUID } from "crypto";
+import type { BranchIdFilter } from "@/lib/server/branch-scope";
 import { ApiError } from "@/lib/api/errors";
 import { prisma } from "@/lib/db";
 import { getBranchIdByCode } from "@/lib/server/branch-lookup";
@@ -22,8 +23,11 @@ import type { Branch } from "@/types";
 
 const paymentInclude = { branch: true } as const;
 
-export async function listStaffPayments(): Promise<StaffPayment[]> {
+export async function listStaffPayments(
+  branchFilter?: BranchIdFilter
+): Promise<StaffPayment[]> {
   const payments = await prisma.staffPayment.findMany({
+    where: branchFilter ? { branchId: branchFilter.branchId } : undefined,
     include: paymentInclude,
     orderBy: [{ date: "desc" }, { createdAt: "desc" }],
   });

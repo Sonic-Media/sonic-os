@@ -1,5 +1,6 @@
 import { jsonCreated, jsonOk } from "@/lib/api/response";
-import { handleRouteError, withDatabase } from "@/lib/server/route-handler";
+import { resolveOperationsListFilter } from "@/lib/server/branch-scope";
+import { handleRouteError, withDatabase, withSessionDatabase } from "@/lib/server/route-handler";
 import {
   closeDay,
   listDayClosings,
@@ -9,7 +10,10 @@ import {
 
 export async function GET(request: Request) {
   try {
-    const closings = await withDatabase(() => listDayClosings(), { request });
+    const closings = await withSessionDatabase(async (session) => {
+      const branchFilter = await resolveOperationsListFilter(session);
+      return listDayClosings(branchFilter);
+    }, { request });
     return jsonOk(closings);
   } catch (error) {
     return handleRouteError(error);

@@ -8,6 +8,8 @@ import {
   DEFAULT_BRANCH_CODE,
   DEFAULT_BRANCH_NAME,
   DEFAULT_EXPENSE_TEMPLATES,
+  SALAAMA_BRANCH_CODE,
+  SALAAMA_BRANCH_NAME,
 } from "@/lib/constants";
 import {
   checkDatabaseConnection,
@@ -46,27 +48,45 @@ export async function runMigrationsVerifiedStage(): Promise<void> {
   resetPrismaClientCache();
 }
 
+const PRODUCTION_BRANCHES = [
+  { code: DEFAULT_BRANCH_CODE, name: DEFAULT_BRANCH_NAME },
+  { code: SALAAMA_BRANCH_CODE, name: SALAAMA_BRANCH_NAME },
+] as const;
+
 export async function runBranchesStage(): Promise<void> {
-  const existing = await prisma.branch.findUnique({
-    where: { code: DEFAULT_BRANCH_CODE },
-  });
-
-  if (existing) {
-    return;
+  for (const branch of PRODUCTION_BRANCHES) {
+    await prisma.branch.upsert({
+      where: { code: branch.code },
+      update: {
+        name: branch.name,
+        active: true,
+      },
+      create: {
+        name: branch.name,
+        code: branch.code,
+        active: true,
+      },
+    });
   }
 
-  const branchCount = await prisma.branch.count();
-  if (branchCount > 0) {
-    return;
-  }
-
-  await prisma.branch.create({
-    data: {
-      name: DEFAULT_BRANCH_NAME,
-      code: DEFAULT_BRANCH_CODE,
-      active: true,
-    },
+  const settings = await prisma.appSetting.findUnique({
+    where: { id: "default" },
   });
+
+  if (settings) {
+    const branchNames = {
+      ...(typeof settings.branchNames === "object" && settings.branchNames !== null
+        ? (settings.branchNames as Record<string, string>)
+        : {}),
+      [DEFAULT_BRANCH_CODE]: DEFAULT_BRANCH_NAME,
+      [SALAAMA_BRANCH_CODE]: SALAAMA_BRANCH_NAME,
+    };
+
+    await prisma.appSetting.update({
+      where: { id: "default" },
+      data: { branchNames },
+    });
+  }
 
   clearBranchLookupCache();
 }
@@ -200,28 +220,42 @@ export async function runOwnerStaffStage(): Promise<void> {
     throw new Error("Owner user does not have the owner role.");
   }
 
-  const existingStaff = await prisma.staff.findUnique({
-    where: { username: DEFAULT_OWNER_USERNAME },
-  });
-
-  if (existingStaff) {
-    const ownerName = DEFAULT_APP_SETTINGS.ownerName;
-    if (existingStaff.name !== ownerName) {
-      await prisma.staff.update({
-        where: { id: existingStaff.id },
-        data: { name: ownerName },
-      });
-    }
-    return;
-  }
-
   const staffRole = await prisma.role.findUniqueOrThrow({
     where: { slug: OWNER_STAFF_ROLE_SLUG },
   });
 
+  const ownerName = DEFAULT_APP_SETTINGS.ownerName;
+  const existingStaff =
+    (await prisma.staff.findUnique({
+      where: { username: DEFAULT_OWNER_USERNAME },
+    })) ??
+    (await prisma.staff.findFirst({
+      where: {
+        username: DEFAULT_OWNER_USERNAME,
+        deletedAt: { not: null },
+      },
+    }));
+
+  if (existingStaff) {
+    await prisma.staff.update({
+      where: { id: existingStaff.id },
+      data: {
+        name: ownerName,
+        username: DEFAULT_OWNER_USERNAME,
+        branchId: ownerUser.branchId,
+        roleId: staffRole.id,
+        loginEnabled: true,
+        status: "active",
+        active: true,
+        deletedAt: null,
+      },
+    });
+    return;
+  }
+
   await prisma.staff.create({
     data: {
-      name: DEFAULT_APP_SETTINGS.ownerName,
+      name: ownerName,
       username: DEFAULT_OWNER_USERNAME,
       branchId: ownerUser.branchId,
       roleId: staffRole.id,

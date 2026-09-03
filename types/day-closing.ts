@@ -3,6 +3,8 @@ import type { StaffRoleId } from "@/types/staff-role";
 
 export type DayClosingStatus = "open" | "closed";
 
+export type DayClosingLiveStatus = DayClosingStatus | "waiting";
+
 export type CashReconciliationStatus = "balanced" | "short" | "over";
 
 export interface DayClosingStaffPayout {
@@ -66,7 +68,7 @@ export interface DayClosingStatusInfo {
   branch: Branch;
   branchName: string;
   date: string;
-  status: DayClosingStatus;
+  status: DayClosingLiveStatus;
   openedByName?: string;
   openedAt?: string;
   closedByName?: string;

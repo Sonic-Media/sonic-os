@@ -14,7 +14,7 @@ import { getDashboardChartData } from "@/lib/chart-data";
 import { getDashboardAnalytics } from "@/lib/report-insights";
 import { filterByBranchField } from "@/lib/active-branch/filters";
 import { branchCodesReferToSameInventory } from "@/lib/branch/codes";
-import { useActiveBranch } from "@/context/active-branch-context";
+import { useBranch } from "@/context/branch-context";
 import { useAuth } from "@/context/auth-context";
 import { useEntriesContext } from "@/context/entries-context";
 import { useSettings } from "@/context/settings-context";
@@ -26,7 +26,7 @@ export function useDashboard() {
   const { settings, branches, isLoaded: settingsLoaded } = useSettings();
   const { staff, isLoaded: staffLoaded } = useStaff();
   const { session } = useAuth();
-  const { activeBranch, isLoaded: branchLoaded } = useActiveBranch();
+  const { activeBranch, isLoaded: branchLoaded } = useBranch();
   const [period, setPeriod] = useState<DashboardPeriod>("daily");
   const [ownerSubtitle] = useState(() => getRandomRoleSubtitle("owner"));
   const today = getTodayISO();
@@ -34,8 +34,9 @@ export function useDashboard() {
 
   const data = useMemo(() => {
     const branchEntries = filterByBranchField(entries, activeBranch);
-    const activeBranchConfig = branches.find((branch) => branch.id === activeBranch);
-    const scopedBranches = activeBranchConfig ? [activeBranchConfig] : branches;
+    const scopedBranches = branches.filter((branch) =>
+      branchCodesReferToSameInventory(branch.id, activeBranch)
+    );
     const branchIds = scopedBranches.map((branch) => branch.id);
     const todayEntries = filterEntriesByDate(branchEntries, today);
     const summary = aggregateEntries(todayEntries, { branchIds });

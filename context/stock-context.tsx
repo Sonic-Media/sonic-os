@@ -50,6 +50,7 @@ import { recordStaffAction } from "@/lib/staff/audit";
 import { resolveCurrentStaffAction } from "@/lib/staff/session";
 import { roleHasModuleAccess } from "@/lib/staff/permissions";
 import { useAuth } from "@/context/auth-context";
+import { useBranch } from "@/context/branch-context";
 import type { Branch } from "@/types";
 import {
   DAY_CLOSED_EDIT_MESSAGE,
@@ -104,6 +105,7 @@ function createValidationResult(
 
 export function StockProvider({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoaded: authLoaded, session } = useAuth();
+  const { activeBranch } = useBranch();
   const canAccessStockModule =
     session !== null && roleHasModuleAccess(session.role, "stock");
   const [products, setProducts] = useState<StockProduct[]>([]);
@@ -113,6 +115,7 @@ export function StockProvider({ children }: { children: React.ReactNode }) {
   const [loadError, setLoadError] = useState<string | null>(null);
   const hasLoaded = useRef(false);
   const lastStockAccess = useRef<boolean | null>(null);
+  const lastFetchedBranch = useRef<Branch | null>(null);
   const productMutationInFlight = useRef(false);
   const movementInFlight = useRef(false);
   const productsRef = useRef(products);
@@ -175,13 +178,15 @@ export function StockProvider({ children }: { children: React.ReactNode }) {
 
     if (
       hasLoaded.current &&
-      lastStockAccess.current === canAccessStockModule
+      lastStockAccess.current === canAccessStockModule &&
+      lastFetchedBranch.current === activeBranch
     ) {
       return;
     }
 
     hasLoaded.current = true;
     lastStockAccess.current = canAccessStockModule;
+    lastFetchedBranch.current = activeBranch;
 
     queueMicrotask(() => {
       void (async () => {
@@ -225,7 +230,7 @@ export function StockProvider({ children }: { children: React.ReactNode }) {
         }
       })();
     });
-  }, [authLoaded, isAuthenticated, canAccessStockModule]);
+  }, [authLoaded, isAuthenticated, canAccessStockModule, activeBranch]);
 
   const lookup = useMemo(
     () => new Map(products.map((product) => [product.id, product])),
@@ -299,7 +304,7 @@ export function StockProvider({ children }: { children: React.ReactNode }) {
         productMutationInFlight.current = false;
       }
     },
-    [isAuthenticated, refreshStockFromApi]
+    [activeBranch, isAuthenticated, refreshStockFromApi]
   );
 
   const updateProduct = useCallback(

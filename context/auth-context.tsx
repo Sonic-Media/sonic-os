@@ -74,7 +74,7 @@ interface AuthContextValue {
   recordAction: (action: string, detail: string) => void;
   addUser: (input: AppUserInput) => Promise<AuthValidationResult>;
   updateUser: (id: string, input: AppUserUpdateInput) => AuthValidationResult;
-  resetUserPassword: (id: string, password: string) => AuthValidationResult;
+  resetUserPassword: (id: string, password: string) => Promise<AuthValidationResult>;
   disableUser: (id: string) => AuthValidationResult;
   enableUser: (id: string) => void;
   deleteUser: (id: string) => Promise<AuthValidationResult>;
@@ -307,7 +307,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   );
 
   const resetUserPassword = useCallback(
-    (id: string, password: string): AuthValidationResult => {
+    async (id: string, password: string): Promise<AuthValidationResult> => {
       const existing = usersRef.current.find((user) => user.id === id);
       if (!existing) {
         return createValidationResult({ form: "User not found." });
@@ -318,19 +318,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return createValidationResult(errors);
       }
 
-      void (async () => {
-        try {
-          await resetUserPasswordApi(id, password);
-          await refreshUsersFromApi();
-        } catch (error) {
-          console.error(
-            "[auth] reset password failed:",
-            getDataSourceErrorMessage(error)
-          );
-        }
-      })();
-
-      return createValidationResult({});
+      try {
+        await resetUserPasswordApi(id, password);
+        await refreshUsersFromApi();
+        return createValidationResult({});
+      } catch (error) {
+        return createValidationResult({
+          form: getAuthErrorMessage(error, "Unable to reset password."),
+        });
+      }
     },
     [refreshUsersFromApi]
   );

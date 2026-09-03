@@ -12,6 +12,7 @@ import {
 import type { ChartExpenseCategory } from "@/lib/chart-data";
 import { getTodayISO } from "@/lib/dates";
 import { useEntriesContext } from "@/context/entries-context";
+import { useBranch } from "@/context/branch-context";
 import { useSettings } from "@/context/settings-context";
 import { useStaff } from "@/context/staff-context";
 import type { Branch, DashboardPeriod } from "@/types";
@@ -28,6 +29,7 @@ function getDefaultCustomRange(): CustomDateRange {
 
 export function useInteractiveAnalytics() {
   const { entries, isLoaded: entriesLoaded } = useEntriesContext();
+  const { activeBranch, isLoaded: branchLoaded } = useBranch();
   const { settings, isLoaded: settingsLoaded } = useSettings();
   const { staff, isLoaded: staffLoaded } = useStaff();
 
@@ -36,7 +38,7 @@ export function useInteractiveAnalytics() {
     getDefaultCustomRange
   );
   const [metricFocus, setMetricFocus] = useState<MetricFocus>("all");
-  const [branchFilter, setBranchFilter] = useState<Branch | null>(null);
+  const [branchFilter, setBranchFilter] = useState<Branch | null>(activeBranch);
   const [staffFilter, setStaffFilter] = useState<string | null>(null);
   const [expenseCategory, setExpenseCategory] =
     useState<ChartExpenseCategory | null>(null);
@@ -44,6 +46,11 @@ export function useInteractiveAnalytics() {
   const [drillDown, setDrillDown] = useState<DrillDownView>("none");
   const [kpiDrawer, setKpiDrawer] = useState<MetricFocus | "none">("none");
   const [isTransitioning, startTransition] = useTransition();
+
+  useEffect(() => {
+    if (!branchLoaded) return;
+    setBranchFilter(activeBranch);
+  }, [activeBranch, branchLoaded]);
 
   const computed = useMemo(
     () =>
@@ -94,11 +101,11 @@ export function useInteractiveAnalytics() {
   const resetFilters = useCallback(() => {
     setTimeFilter("daily");
     setMetricFocus("all");
-    setBranchFilter(null);
+    setBranchFilter(activeBranch);
     setStaffFilter(null);
     setExpenseCategory(null);
     setComparePrevious(false);
-  }, []);
+  }, [activeBranch]);
 
   const clearFilters = resetFilters;
 
@@ -143,7 +150,6 @@ export function useInteractiveAnalytics() {
     timeFilter !== "daily" ||
     comparePrevious ||
     metricFocus !== "all" ||
-    branchFilter !== null ||
     staffFilter !== null ||
     expenseCategory !== null;
 
@@ -160,7 +166,7 @@ export function useInteractiveAnalytics() {
 
   return useMemo(
     () => ({
-      isLoaded: entriesLoaded && settingsLoaded && staffLoaded,
+      isLoaded: entriesLoaded && settingsLoaded && staffLoaded && branchLoaded,
       isTransitioning,
       timeFilter,
       setTimeFilter,
@@ -197,6 +203,7 @@ export function useInteractiveAnalytics() {
       entriesLoaded,
       settingsLoaded,
       staffLoaded,
+      branchLoaded,
       isTransitioning,
       timeFilter,
       customRange,

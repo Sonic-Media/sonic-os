@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useMemo } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { DayClosedBanner } from "@/components/operations/day-closed-banner";
 import { OpenShopPage } from "@/components/operations/open-shop-page";
 import { OperationsReadOnlyView } from "@/components/operations/operations-read-only-view";
@@ -34,8 +34,17 @@ function TodayOperationsContent() {
     isLoaded: closingLoaded,
   } = useDayClosing();
   const { currentAttendance } = useStaffAttendance(today);
+  const [shiftGateCleared, setShiftGateCleared] = useState(false);
 
   const isOwner = session?.role === "owner";
+
+  useEffect(() => {
+    setShiftGateCleared(false);
+  }, [activeBranch, today]);
+
+  const handleShiftGateComplete = useCallback(async () => {
+    setShiftGateCleared(true);
+  }, []);
 
   const { completedEntry, draftEntry } = useMemo(() => {
     if (!isLoaded) {
@@ -57,6 +66,8 @@ function TodayOperationsContent() {
   const isDayClosed = isBranchDayClosed(activeBranch, today);
   const shopNeedsOpening = needsShopOpening(activeBranch, today);
   const staffOnShift = currentAttendance?.presence === "on-shift";
+  const showStartShiftGate = shopNeedsOpening && !shiftGateCleared;
+  const showClockInGate = !shopNeedsOpening && !staffOnShift && !shiftGateCleared;
 
   if (isOwner) {
     return (
@@ -106,18 +117,18 @@ function TodayOperationsContent() {
     );
   }
 
-  if (shopNeedsOpening) {
+  if (showStartShiftGate) {
     return (
       <PageContainer className="lg:max-w-5xl">
-        <OpenShopPage mode="start-shift" />
+        <OpenShopPage mode="start-shift" onComplete={handleShiftGateComplete} />
       </PageContainer>
     );
   }
 
-  if (!staffOnShift) {
+  if (showClockInGate) {
     return (
       <PageContainer className="lg:max-w-5xl">
-        <OpenShopPage mode="clock-in" />
+        <OpenShopPage mode="clock-in" onComplete={handleShiftGateComplete} />
       </PageContainer>
     );
   }

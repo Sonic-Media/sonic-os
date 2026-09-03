@@ -6,8 +6,7 @@ import { ToastProvider } from "@/context/toast-context";
 import { EntriesProvider } from "@/context/entries-context";
 import { ExpenseTemplatesProvider } from "@/context/expense-templates-context";
 import { AuthProvider } from "@/context/auth-context";
-import { BranchesProvider } from "@/context/branches-context";
-import { ActiveBranchProvider } from "@/context/active-branch-context";
+import { BranchProvider } from "@/context/branch-context";
 import { StockProvider } from "@/context/stock-context";
 import { SalesProvider } from "@/context/sales-context";
 import { PurchasingProvider } from "@/context/purchasing-context";
@@ -45,8 +44,7 @@ export default function RootLayout({
         <AuthProvider>
         <SettingsProvider>
           <AuditLogProvider>
-          <BranchesProvider>
-          <ActiveBranchProvider>
+          <BranchProvider>
           <ExpenseTemplatesProvider>
             <StaffProvider>
               <EntriesProvider>
@@ -70,8 +68,7 @@ export default function RootLayout({
               </EntriesProvider>
             </StaffProvider>
           </ExpenseTemplatesProvider>
-          </ActiveBranchProvider>
-          </BranchesProvider>
+          </BranchProvider>
           </AuditLogProvider>
         </SettingsProvider>
         </AuthProvider>

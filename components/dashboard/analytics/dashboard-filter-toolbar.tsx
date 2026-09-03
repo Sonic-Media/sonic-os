@@ -1,10 +1,9 @@
 "use client";
 
 import { Input } from "@/components/shared/ui/input";
+import { ActiveBranchLabel } from "@/components/shared/layout/active-branch-label";
 import { useDashboardContext } from "@/context/dashboard-context";
-import { BRANCH_IDS } from "@/lib/constants";
 import type { AnalyticsTimeFilter } from "@/lib/analytics-view";
-import type { Branch } from "@/types";
 import { cn } from "@/lib/utils";
 
 const PERIOD_OPTIONS: { value: AnalyticsTimeFilter; label: string }[] = [
@@ -63,26 +62,15 @@ export function DashboardFilterToolbar({ className }: DashboardFilterToolbarProp
     setTimeFilter,
     customRange,
     setCustomRange,
-    branchFilter,
-    setBranchFilter,
     staffFilter,
     setStaffFilter,
     comparePrevious,
     setComparePrevious,
     resetFilters,
-    branchNames,
     staff,
   } = useDashboardContext();
 
   const activeStaff = staff.filter((member) => member.active);
-
-  const branchOptions = [
-    { value: "all", label: "All Branches" },
-    ...BRANCH_IDS.map((branchId) => ({
-      value: branchId,
-      label: branchNames[branchId],
-    })),
-  ];
 
   const staffOptions = [
     { value: "all", label: "All Staff" },
@@ -102,14 +90,7 @@ export function DashboardFilterToolbar({ className }: DashboardFilterToolbarProp
           options={PERIOD_OPTIONS}
         />
 
-        <FilterSelect
-          label="Branch"
-          value={branchFilter ?? "all"}
-          onChange={(value) =>
-            setBranchFilter(value === "all" ? null : (value as Branch))
-          }
-          options={branchOptions}
-        />
+        <ActiveBranchLabel variant="badge" />
 
         <FilterSelect
           label="Staff"

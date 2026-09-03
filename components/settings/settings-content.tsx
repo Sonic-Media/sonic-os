@@ -4,7 +4,6 @@ import { Input } from "@/components/shared/ui/input";
 import { Button } from "@/components/shared/ui/button";
 import { Card } from "@/components/shared/ui/card";
 import { useSettings } from "@/context/settings-context";
-import { BRANCH_IDS } from "@/lib/constants";
 import { formatCurrency } from "@/lib/format";
 import { parseAmount } from "@/lib/amounts";
 import { StaffSection } from "@/components/settings/staff-section";
@@ -15,7 +14,7 @@ import { useAuth } from "@/context/auth-context";
 import type { Branch } from "@/types";
 
 export function SettingsContent() {
-  const { settings, updateSettings, version } = useSettings();
+  const { settings, updateSettings, version, branches } = useSettings();
   const { updateTemplate } = useExpenseTemplates();
   const { canManageUsers, canImportHistoricalData, canManageRoles, canViewAuditLog } = useAuth();
 
@@ -40,12 +39,12 @@ export function SettingsContent() {
             value={settings.businessName}
             onChange={(e) => updateSettings({ businessName: e.target.value })}
           />
-          {BRANCH_IDS.map((branchId) => (
+          {branches.map((branch) => (
             <Input
-              key={branchId}
-              label={`${settings.branchNames[branchId]} Branch Name`}
-              value={settings.branchNames[branchId]}
-              onChange={(e) => updateBranchName(branchId, e.target.value)}
+              key={branch.id}
+              label={`${settings.branchNames[branch.id]} Branch Name`}
+              value={settings.branchNames[branch.id]}
+              onChange={(e) => updateBranchName(branch.id, e.target.value)}
             />
           ))}
           <Input
@@ -76,6 +75,21 @@ export function SettingsContent() {
       </Card>
 
       {canManageUsers && <DataProtectionSection />}
+
+      {canManageUsers && (
+        <Card>
+          <h3 className="mb-3 text-sm font-medium uppercase tracking-wide text-zinc-500">
+            Maintenance
+          </h3>
+          <p className="mb-4 text-sm text-zinc-400">
+            Owner-only maintenance tools for backups and controlled business
+            data resets.
+          </p>
+          <Button href="/settings/maintenance" variant="secondary">
+            Open Maintenance
+          </Button>
+        </Card>
+      )}
 
       {canManageUsers && (
         <Card>

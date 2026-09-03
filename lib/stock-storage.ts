@@ -53,6 +53,13 @@ function normalizePositiveNumber(value: unknown, fallback = 0): number {
   return value;
 }
 
+function normalizeBranch(value: unknown) {
+  if (typeof value === "string" && value.trim()) {
+    return normalizeBranchCode(value);
+  }
+  return normalizeBranchCode("main");
+}
+
 function normalizeStockProduct(value: unknown): StockProduct | null {
   if (!value || typeof value !== "object") return null;
 
@@ -66,6 +73,7 @@ function normalizeStockProduct(value: unknown): StockProduct | null {
   const product: StockProduct = {
     id,
     name,
+    branch: normalizeBranch(raw.branch),
     category: normalizeCategory(raw.category),
     sku: normalizeOptionalString(raw.sku),
     buyingPrice: normalizePositiveNumber(raw.buyingPrice),

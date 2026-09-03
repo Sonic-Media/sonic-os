@@ -41,6 +41,7 @@ model Branch {
   stockMovements StockMovement[]
   staffPayments  StaffPayment[]
   dayClosings    DayClosing[]
+  products       Product[]
 
   @@index([active])
   @@index([name])
@@ -58,6 +59,7 @@ model User {
   staffId      String?         @unique @db.Uuid
   staff        Staff?          @relation(fields: [staffId], references: [id], onUpdate: Cascade, onDelete: SetNull)
   active       Boolean         @default(true)
+  lastLoginAt  DateTime?
   createdAt    DateTime        @default(now())
   updatedAt    DateTime        @updatedAt
   sessions     Session[]
@@ -220,7 +222,9 @@ model Product {
   name              String
   categoryId        String              @db.Uuid
   category          ProductCategory     @relation(fields: [categoryId], references: [id], onUpdate: Cascade, onDelete: Restrict)
-  sku               String?             @unique
+  branchId          String              @db.Uuid
+  branch            Branch              @relation(fields: [branchId], references: [id], onUpdate: Cascade, onDelete: Restrict)
+  sku               String?
   buyingPrice       Int                 @default(0)
   sellingPrice      Int                 @default(0)
   currentStock      Int                 @default(0)
@@ -235,10 +239,13 @@ model Product {
   saleLineItems     SaleLineItem[]
   purchaseLineItems PurchaseLineItem[]
 
+  @@unique([branchId, sku])
+  @@index([branchId])
   @@index([categoryId])
   @@index([status])
   @@index([name])
   @@index([categoryId, status])
+  @@index([branchId, status])
   @@index([deletedAt])
 }
 
@@ -557,8 +564,12 @@ model BackupRecord {
   compressed     Boolean  @default(true)
   status         String   @default("completed")
   error          String?
+  storageType    String   @default("filesystem")
+  payload        Bytes?
+  manifestJson   Json?
 
   @@index([createdAt])
   @@index([status])
   @@index([trigger])
+  @@index([storageType])
 }

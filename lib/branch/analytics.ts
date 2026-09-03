@@ -1,3 +1,4 @@
+import { branchCodesReferToSameInventory } from "@/lib/branch/codes";
 import { calculateExpenses, calculateSavingsFromTotals } from "@/lib/amounts";
 import {
   computeInventoryValueByBranch,
@@ -15,6 +16,9 @@ import type { StockMovement, StockProduct } from "@/types/stock";
 
 const RECENT_ACTIVITY_LIMIT = 10;
 
+function recordMatchesBranch(recordBranch: string, branchCode: string): boolean {
+  return branchCodesReferToSameInventory(recordBranch, branchCode);
+}
 function computeBranchNetQuantity(
   branchCode: string,
   productId: string,
@@ -23,7 +27,8 @@ function computeBranchNetQuantity(
   return movements
     .filter(
       (movement) =>
-        movement.productId === productId && movement.branch === branchCode
+        movement.productId === productId &&
+        recordMatchesBranch(movement.branch, branchCode)
     )
     .reduce(
       (sum, movement) =>
@@ -40,7 +45,7 @@ function computeTodayModuleProfit(branchCode: string, sales: Sale[], today: stri
       (sale) =>
         sale.date === today &&
         sale.status === "completed" &&
-        sale.branch === branchCode
+        recordMatchesBranch(sale.branch, branchCode)
     )
     .reduce((sum, sale) => sum + sale.profit, 0);
 }
@@ -55,7 +60,7 @@ function computeTodayEntryProfit(
       (entry) =>
         entry.date === today &&
         entry.status === "completed" &&
-        entry.branch === branchCode
+        recordMatchesBranch(entry.branch, branchCode)
     )
     .reduce((sum, entry) => {
       const expenses = calculateExpenses(entry);
@@ -70,7 +75,7 @@ function computeTodayExpenses(
   today: string
 ): number {
   const moduleExpenses = expenses
-    .filter((expense) => expense.date === today && expense.branch === branch.code)
+    .filter((expense) => expense.date === today && recordMatchesBranch(expense.branch, branch.code))
     .reduce((sum, expense) => sum + expense.amount, 0);
 
   const entryExpenses = entries
@@ -78,7 +83,7 @@ function computeTodayExpenses(
       (entry) =>
         entry.date === today &&
         entry.status === "completed" &&
-        entry.branch === branch.code
+        recordMatchesBranch(entry.branch, branch.code)
     )
     .reduce((sum, entry) => sum + calculateExpenses(entry), 0);
 
@@ -96,7 +101,7 @@ function computeTopSellingProduct(
     if (
       sale.date !== today ||
       sale.status !== "completed" ||
-      sale.branch !== branchCode
+      !recordMatchesBranch(sale.branch, branchCode)
     ) {
       continue;
     }
@@ -133,7 +138,7 @@ function computeTopCustomer(
     if (
       sale.date !== today ||
       sale.status !== "completed" ||
-      sale.branch !== branchCode ||
+      !recordMatchesBranch(sale.branch, branchCode) ||
       !sale.customerName
     ) {
       continue;
@@ -191,7 +196,7 @@ function buildRecentActivity(
   const activity: BranchActivityItem[] = [];
 
   for (const sale of sales) {
-    if (sale.branch !== branch.code) continue;
+    if (!recordMatchesBranch(sale.branch, branch.code)) continue;
 
     activity.push({
       id: sale.id,
@@ -204,7 +209,7 @@ function buildRecentActivity(
   }
 
   for (const purchase of purchases) {
-    if (purchase.branch !== branch.code) continue;
+    if (!recordMatchesBranch(purchase.branch, branch.code)) continue;
 
     activity.push({
       id: purchase.id,
@@ -217,7 +222,7 @@ function buildRecentActivity(
   }
 
   for (const expense of expenses) {
-    if (expense.branch !== branch.code) continue;
+    if (!recordMatchesBranch(expense.branch, branch.code)) continue;
 
     activity.push({
       id: expense.id,
@@ -230,7 +235,7 @@ function buildRecentActivity(
   }
 
   for (const entry of entries) {
-    if (entry.branch !== branch.code) continue;
+    if (!recordMatchesBranch(entry.branch, branch.code)) continue;
 
     activity.push({
       id: entry.id,
@@ -243,7 +248,7 @@ function buildRecentActivity(
   }
 
   for (const movement of movements) {
-    if (movement.branch !== branch.code) continue;
+    if (!recordMatchesBranch(movement.branch, branch.code)) continue;
 
     activity.push({
       id: movement.id,
@@ -308,7 +313,8 @@ export function computeBranchAnalytics(
     topSellingProduct: computeTopSellingProduct(branch.code, sales, today),
     topCustomer: computeTopCustomer(branch.code, sales, today),
     staffCount: staff.filter(
-      (member) => member.active && member.branch === branch.code
+      (member) =>
+        member.active && recordMatchesBranch(member.branch, branch.code)
     ).length,
     lowStock: computeLowStockCount(branch, products, movements),
     recentActivity: buildRecentActivity(
@@ -342,7 +348,7 @@ export function buildBranchTrendChartData(
   const grouped = new Map<string, { sales: number; expenses: number }>();
 
   for (const sale of sales) {
-    if (sale.status !== "completed" || sale.branch !== branchCode) continue;
+    if (sale.status !== "completed" || !recordMatchesBranch(sale.branch, branchCode)) continue;
 
     const existing = grouped.get(sale.date) ?? { sales: 0, expenses: 0 };
     existing.sales += sale.total;
@@ -350,7 +356,7 @@ export function buildBranchTrendChartData(
   }
 
   for (const entry of entries) {
-    if (entry.status !== "completed" || entry.branch !== branchCode) continue;
+    if (entry.status !== "completed" || !recordMatchesBranch(entry.branch, branchCode)) continue;
 
     const existing = grouped.get(entry.date) ?? { sales: 0, expenses: 0 };
     existing.sales += entry.sales;

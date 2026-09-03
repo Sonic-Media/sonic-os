@@ -193,11 +193,10 @@ export function getActiveStaffAttendance(
   auditRecords: StaffAuditRecord[] = getStaffAuditRecords()
 ): StaffAttendanceStatus[] {
   return staff
-    .filter(
-      (member) =>
-        member.active && matchesBranch(member.branch, branch)
+    .filter((member) => member.active)
+    .map((member) =>
+      getStaffAttendanceStatus(member, dateISO, auditRecords, branch)
     )
-    .map((member) => getStaffAttendanceStatus(member, dateISO, auditRecords))
     .filter((status) => status.presence === "on-shift")
     .sort((left, right) =>
       (left.shiftStartedAt ?? "").localeCompare(right.shiftStartedAt ?? "")

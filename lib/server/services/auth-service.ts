@@ -1,7 +1,8 @@
 import { cookies } from "next/headers";
 import { ApiError } from "@/lib/api/errors";
+import { isOwnerRole } from "@/lib/auth/validation";
 import { prisma } from "@/lib/db";
-import { hashPassword, verifyPassword } from "@/lib/server/password";
+import { hashPassword, isLegacyPasswordHash, verifyPassword } from "@/lib/server/password";
 import { recordSecurityAuditInTransaction } from "@/lib/server/security/audit";
 import {
   getClearSessionCookieOptions,
@@ -24,6 +25,22 @@ import type { Branch } from "@/types";
 
 const SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 14;
 const LOGIN_RATE_LIMIT = { limit: 10, windowMs: 15 * 60 * 1000 };
+const GENERIC_LOGIN_ERROR = "Invalid username or password.";
+
+function isDevelopmentAuth(): boolean {
+  return process.env.NODE_ENV === "development";
+}
+
+function loginErrorMessage(detail: string): string {
+  return isDevelopmentAuth() ? detail : GENERIC_LOGIN_ERROR;
+}
+
+type LoginFailureReason =
+  | "user_not_found"
+  | "incorrect_password"
+  | "login_disabled"
+  | "user_inactive"
+  | "user_deleted";
 
 function mapSession(
   session: {
@@ -109,45 +126,108 @@ export async function login(
   const username = parsed.username.trim().toLowerCase();
 
   const user = await prisma.user.findFirst({
-    where: { username, active: true },
+    where: { username },
     include: {
       role: true,
       branch: true,
+      staff: {
+        select: {
+          loginEnabled: true,
+          deletedAt: true,
+          active: true,
+        },
+      },
     },
   });
 
-  if (!user) {
-    await recordFailedLogin(username, "Invalid username or password.");
-    throw new ApiError("Invalid username or password.", {
+  const rejectLogin = async (
+    reason: LoginFailureReason,
+    detail: string,
+    context?: { userId: string; branchCode: string }
+  ): Promise<never> => {
+    await recordFailedLogin(username, detail, context);
+    throw new ApiError(loginErrorMessage(detail), {
       status: 401,
-      code: "invalid_credentials",
+      code: reason,
+    });
+  };
+
+  if (!user) {
+    throw await rejectLogin("user_not_found", "User not found.");
+  }
+
+  const resolvedUser = user;
+
+  if (resolvedUser.staff?.deletedAt) {
+    throw await rejectLogin("user_deleted", "User deleted.", {
+      userId: resolvedUser.id,
+      branchCode: resolvedUser.branch.code,
     });
   }
 
-  const valid = await verifyPassword(parsed.password, user.passwordHash);
-  if (!valid) {
-    await recordFailedLogin(username, "Invalid username or password.", {
-      userId: user.id,
-      branchCode: user.branch.code,
+  if (!resolvedUser.active) {
+    throw await rejectLogin("user_inactive", "User inactive.", {
+      userId: resolvedUser.id,
+      branchCode: resolvedUser.branch.code,
     });
-    throw new ApiError("Invalid username or password.", {
-      status: 401,
-      code: "invalid_credentials",
+  }
+
+  if (resolvedUser.staff && !resolvedUser.staff.active) {
+    throw await rejectLogin("user_inactive", "User inactive.", {
+      userId: resolvedUser.id,
+      branchCode: resolvedUser.branch.code,
+    });
+  }
+
+  if (resolvedUser.staff && !resolvedUser.staff.loginEnabled) {
+    throw await rejectLogin("login_disabled", "Login disabled.", {
+      userId: resolvedUser.id,
+      branchCode: resolvedUser.branch.code,
+    });
+  }
+
+  if (!resolvedUser.passwordHash.trim()) {
+    throw await rejectLogin("incorrect_password", "Incorrect password.", {
+      userId: resolvedUser.id,
+      branchCode: resolvedUser.branch.code,
+    });
+  }
+
+  const valid = await verifyPassword(parsed.password, resolvedUser.passwordHash);
+  if (!valid) {
+    throw await rejectLogin("incorrect_password", "Incorrect password.", {
+      userId: resolvedUser.id,
+      branchCode: resolvedUser.branch.code,
     });
   }
 
   const token = createSignedSessionToken();
   const expiresAt = new Date(Date.now() + SESSION_TTL_MS);
+  const now = new Date();
+  const shouldUpgradePasswordHash = isLegacyPasswordHash(resolvedUser.passwordHash);
+  const upgradedPasswordHash = shouldUpgradePasswordHash
+    ? await hashPassword(parsed.password)
+    : null;
 
   const session = await prisma.$transaction(async (tx) => {
     await tx.session.deleteMany({
-      where: { userId: user.id },
+      where: { userId: resolvedUser.id },
+    });
+
+    await tx.user.update({
+      where: { id: resolvedUser.id },
+      data: {
+        lastLoginAt: now,
+        ...(upgradedPasswordHash
+          ? { passwordHash: upgradedPasswordHash }
+          : {}),
+      },
     });
 
     const created = await tx.session.create({
       data: {
         token,
-        userId: user.id,
+        userId: resolvedUser.id,
         expiresAt,
       },
       include: {
@@ -164,11 +244,11 @@ export async function login(
       tx,
       null,
       "login",
-      `${user.displayName} signed in`,
+      `${resolvedUser.displayName} signed in`,
       {
-        userId: user.id,
-        username: user.username,
-        branchCode: user.branch.code,
+        userId: resolvedUser.id,
+        username: resolvedUser.username,
+        branchCode: resolvedUser.branch.code,
       }
     );
 
@@ -318,14 +398,27 @@ export async function updateActiveBranchPreference(
   userId: string,
   branchCode: string
 ): Promise<void> {
+  const normalized = branchCode.trim().toLowerCase();
+  const branch = await prisma.branch.findUnique({
+    where: { code: normalized },
+    select: { id: true, active: true },
+  });
+
+  if (!branch?.active) {
+    throw new ApiError("Branch not found or inactive.", {
+      status: 404,
+      code: "branch_not_found",
+    });
+  }
+
   await prisma.userPreference.upsert({
     where: { userId },
     create: {
       userId,
-      activeBranchCode: branchCode.toLowerCase(),
+      activeBranchCode: normalized,
     },
     update: {
-      activeBranchCode: branchCode.toLowerCase(),
+      activeBranchCode: normalized,
     },
   });
 }

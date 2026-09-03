@@ -3,6 +3,7 @@
 import type { AppUser } from "@/types/auth";
 import { USER_ROLE_LABELS } from "@/lib/auth/permissions";
 import { useBranches } from "@/context/branches-context";
+import { formatLastLogin } from "@/lib/format";
 import { Card } from "@/components/shared/ui/card";
 import { Button } from "@/components/shared/ui/button";
 
@@ -13,6 +14,14 @@ interface UsersTableProps {
   onDisable: (user: AppUser) => void;
   onEnable: (user: AppUser) => void;
   onDelete: (user: AppUser) => void;
+}
+
+function LoginEnabledBadge({ enabled }: { enabled: boolean }) {
+  return (
+    <span className={enabled ? "text-emerald-400" : "text-red-400"}>
+      {enabled ? "🟢 Enabled" : "🔴 Disabled"}
+    </span>
+  );
 }
 
 export function UsersTable({
@@ -36,7 +45,7 @@ export function UsersTable({
   return (
     <Card className="overflow-hidden p-0">
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[920px] text-left text-sm">
+        <table className="w-full min-w-[1180px] text-left text-sm">
           <thead>
             <tr className="border-b border-zinc-800/80 bg-zinc-900/80">
               <th className="px-5 py-4 text-xs font-medium uppercase tracking-wide text-zinc-500">
@@ -50,6 +59,15 @@ export function UsersTable({
               </th>
               <th className="px-5 py-4 text-xs font-medium uppercase tracking-wide text-zinc-500">
                 Branch
+              </th>
+              <th className="px-5 py-4 text-xs font-medium uppercase tracking-wide text-zinc-500">
+                Branch Code
+              </th>
+              <th className="px-5 py-4 text-xs font-medium uppercase tracking-wide text-zinc-500">
+                Login Enabled
+              </th>
+              <th className="px-5 py-4 text-xs font-medium uppercase tracking-wide text-zinc-500">
+                Last Login
               </th>
               <th className="px-5 py-4 text-xs font-medium uppercase tracking-wide text-zinc-500">
                 Status
@@ -74,6 +92,15 @@ export function UsersTable({
                 </td>
                 <td className="px-5 py-4 text-zinc-400">
                   {getBranchName(user.branch)}
+                </td>
+                <td className="px-5 py-4 font-mono text-xs uppercase text-zinc-400">
+                  {user.branchCode}
+                </td>
+                <td className="px-5 py-4">
+                  <LoginEnabledBadge enabled={user.loginEnabled} />
+                </td>
+                <td className="px-5 py-4 text-zinc-400">
+                  {formatLastLogin(user.lastLoginAt)}
                 </td>
                 <td className="px-5 py-4">
                   <span

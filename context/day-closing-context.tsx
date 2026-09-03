@@ -212,14 +212,16 @@ export function DayClosingProvider({ children }: { children: React.ReactNode }) 
     (branch: BranchEntity, date = getTodayISO()): DayClosingStatusInfo => {
       const closed = findClosedDayRecord(branch.code, date, closingsRef.current);
       const open = findOpenDayRecord(branch.code, date, closingsRef.current);
+      const isOpen = checkBranchDayOpened(branch.code, date, closingsRef.current);
+      const status = closed ? "closed" : isOpen ? "open" : "waiting";
 
       return {
         branch: branch.code,
         branchName: branch.name,
         date,
-        status: closed ? "closed" : "open",
+        status,
         openedByName: open?.openedByName,
-        openedAt: open?.openedAt,
+        openedAt: open?.openedAt ?? open?.reopenedAt,
         closedByName: closed?.closedByName,
         closedAt: closed?.closedAt,
       };

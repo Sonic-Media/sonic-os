@@ -1,11 +1,10 @@
 "use client";
 
-import { useBranches } from "@/context/branches-context";
-import { useStockBranch } from "@/hooks/use-stock-branch";
+import { ActiveBranchLabel } from "@/components/shared/layout/active-branch-label";
+import { useBranch } from "@/context/branch-context";
 
 export function StockBranchBar() {
-  const { getBranchName } = useBranches();
-  const { activeBranch } = useStockBranch();
+  const { getBranchName, activeBranch } = useBranch();
 
   return (
     <div className="mb-4 rounded-2xl border border-zinc-800/80 bg-zinc-900/60 p-4">
@@ -18,9 +17,7 @@ export function StockBranchBar() {
             {getBranchName(activeBranch)}
           </p>
         </div>
-        <p className="text-xs text-zinc-500">
-          Stock actions and opening balances use the sidebar branch.
-        </p>
+        <ActiveBranchLabel label="Switch branch in sidebar" className="text-right" />
       </div>
     </div>
   );

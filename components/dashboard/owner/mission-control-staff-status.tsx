@@ -1,11 +1,8 @@
 "use client";
 
 import { useMemo } from "react";
-import { useActiveBranch } from "@/context/active-branch-context";
-import { useStaff } from "@/context/staff-context";
 import { useStaffAttendance } from "@/hooks/use-staff-attendance";
 import { useStaffPayments } from "@/hooks/use-staff-payments";
-import { getActiveStaffForBranch } from "@/lib/staff-storage";
 import { formatClockTime } from "@/lib/staff/attendance";
 import { getTodayISO } from "@/lib/dates";
 import {
@@ -17,45 +14,25 @@ import { cn } from "@/lib/utils";
 
 export function MissionControlStaffStatus() {
   const today = getTodayISO();
-  const { activeBranch } = useActiveBranch();
-  const { activeStaff } = useStaff();
-  const { getAttendanceForStaff } = useStaffAttendance(today);
+  const { activeOnShift } = useStaffAttendance(today);
   const { todayStatuses } = useStaffPayments();
 
   const cards = useMemo(() => {
-    return getActiveStaffForBranch(activeStaff, activeBranch)
-      .map((member) => {
-        const attendance = getAttendanceForStaff(member.id);
-        const status = todayStatuses.find((item) => item.staffId === member.id);
-        const hasActivity =
-          attendance &&
-          (attendance.presence === "on-shift" ||
-            attendance.sessions.length > 0 ||
-            attendance.lastClockInAt);
+    return activeOnShift.map((attendance) => {
+      const status = todayStatuses.find(
+        (item) => item.staffId === attendance.staffId
+      );
 
-        if (!hasActivity) return null;
-
-        return {
-          staffId: member.id,
-          staffName: member.name,
-          onShift: attendance?.presence === "on-shift",
-          clockLabel: attendance?.presence === "on-shift"
-            ? formatClockTime(attendance.lastClockInAt)
-            : formatClockTime(attendance?.lastClockOutAt),
-          clockCaption:
-            attendance?.presence === "on-shift" ? "Clocked In" : "Clocked Out",
-          lastActivity: status?.lastActivityLabel ?? "No activity yet",
-        };
-      })
-      .filter(Boolean) as Array<{
-      staffId: string;
-      staffName: string;
-      onShift: boolean;
-      clockLabel: string;
-      clockCaption: string;
-      lastActivity: string;
-    }>;
-  }, [activeBranch, activeStaff, getAttendanceForStaff, todayStatuses]);
+      return {
+        staffId: attendance.staffId,
+        staffName: attendance.staffName,
+        onShift: true,
+        clockLabel: formatClockTime(attendance.lastClockInAt),
+        clockCaption: "Clocked In",
+        lastActivity: status?.lastActivityLabel ?? "No activity yet",
+      };
+    });
+  }, [activeOnShift, todayStatuses]);
 
   return (
     <section className="space-y-4">

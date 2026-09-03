@@ -1,5 +1,7 @@
 import { ApiError } from "@/lib/api/errors";
 import { BRANCH_IDS } from "@/lib/constants";
+import type { BranchIdFilter } from "@/lib/server/branch-scope";
+import { resolveBranchListFilter } from "@/lib/server/branch-scope";
 import { prisma } from "@/lib/db";
 import { getTodayISO } from "@/lib/dates";
 import { isStaffRoleId } from "@/lib/staff/roles";
@@ -130,13 +132,17 @@ export async function listStaffForSession(): Promise<Staff[]> {
     return listStaff();
   }
 
-  const staffRole = migrateLegacyAuthRole(session.role);
-  if (staffRole === "branch-manager") {
+  const branchFilter = await resolveBranchListFilter(session);
+  if (!branchFilter) {
     return listStaff();
   }
 
-  const linked = await getLinkedStaffForUser(session.userId);
-  return linked ? [linked] : [];
+  const staff = await prisma.staff.findMany({
+    where: { branchId: branchFilter.branchId },
+    include: staffInclude,
+  });
+
+  return sortStaff(staff.map(mapStaffToEntity));
 }
 
 export async function getLinkedStaffForUser(userId: string): Promise<Staff | null> {

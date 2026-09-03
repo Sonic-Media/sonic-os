@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/shared/ui/button";
 import { ShiftGreeting } from "@/components/shared/ux/shift-greeting";
 import {
@@ -37,9 +38,13 @@ import { resolveStaffDisplayName } from "@/lib/ux/user-display";
 import { cn } from "@/lib/utils";
 
 type ShiftGateMode = "start-shift" | "clock-in";
+type ShiftGatePhase = "form" | "success";
+
+const SUCCESS_DISPLAY_MS = 1000;
 
 interface OpenShopPageProps {
   mode?: ShiftGateMode;
+  onComplete?: () => void | Promise<void>;
 }
 
 function formatCurrentTime(date: Date): string {
@@ -48,18 +53,21 @@ function formatCurrentTime(date: Date): string {
 
 export function OpenShopPage({
   mode = "start-shift",
+  onComplete,
 }: OpenShopPageProps) {
+  const router = useRouter();
   const today = useTodayISO();
   const { session } = useAuth();
   const { activeBranch } = useActiveBranch();
   const { getBranchName, settings } = useSettings();
   const { staff } = useStaff();
-  const { closings, openDay } = useDayClosing();
-  const { currentAttendance } = useStaffAttendance(today);
+  const { closings, openDay, refreshClosings } = useDayClosing();
   const { success: toastSuccess } = useToast();
   const now = useShopScheduleNow();
+  const [phase, setPhase] = useState<ShiftGatePhase>("form");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | undefined>();
+  const completionStarted = useRef(false);
 
   const staffName = useMemo(
     () => resolveStaffDisplayName(session, staff),
@@ -82,10 +90,52 @@ export function OpenShopPage({
   const canOpenNow = useShopCanOpenNow(now);
   const scheduleAllowsOpen = isStartShift ? canOpenNow : true;
   const actionLabel = isStartShift ? "Open Shop" : "Clock In";
-  const isOnShift = currentAttendance?.presence === "on-shift";
+
+  const finalizeShiftGate = useCallback(async () => {
+    if (completionStarted.current) {
+      return;
+    }
+    completionStarted.current = true;
+
+    try {
+      await refreshClosings();
+      if (onComplete) {
+        await onComplete();
+      }
+      router.refresh();
+    } catch (caught) {
+      completionStarted.current = false;
+      const message =
+        caught instanceof Error
+          ? caught.message
+          : "Could not open Today's Operations.";
+      setError(message);
+      setPhase("form");
+      throw caught;
+    }
+  }, [onComplete, refreshClosings, router]);
+
+  useEffect(() => {
+    if (phase !== "success") {
+      completionStarted.current = false;
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      void finalizeShiftGate().catch(() => {
+        // Error state is handled in finalizeShiftGate.
+      });
+    }, SUCCESS_DISPLAY_MS);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [finalizeShiftGate, phase]);
 
   async function handleSubmit() {
-    if (!canStart || isSubmitting || !scheduleAllowsOpen) return;
+    if (!canStart || isSubmitting || !scheduleAllowsOpen || phase === "success") {
+      return;
+    }
 
     setIsSubmitting(true);
     setError(undefined);
@@ -111,7 +161,9 @@ export function OpenShopPage({
           );
           return;
         }
+
         toastSuccess("Shop Opened");
+        setPhase("success");
         return;
       }
 
@@ -122,13 +174,15 @@ export function OpenShopPage({
         );
         return;
       }
+
       toastSuccess("Clocked In");
+      setPhase("success");
     } finally {
       setIsSubmitting(false);
     }
   }
 
-  if (isOnShift) {
+  if (phase === "success") {
     return (
       <div className="mx-auto flex min-h-[60vh] max-w-lg items-center justify-center py-10">
         <StaffCard accent="revenue" className="w-full text-center">
@@ -142,6 +196,11 @@ export function OpenShopPage({
           <p className="mt-6 text-sm text-zinc-500">
             Opening Today&apos;s Operations...
           </p>
+          {error ? (
+            <p className="mt-4 whitespace-pre-line text-sm text-red-400">
+              {error}
+            </p>
+          ) : null}
         </StaffCard>
       </div>
     );

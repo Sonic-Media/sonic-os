@@ -1,6 +1,7 @@
 import type { Prisma } from "@/lib/generated/prisma/client";
 import { randomUUID } from "crypto";
 import { z } from "zod";
+import type { BranchIdFilter } from "@/lib/server/branch-scope";
 import { ApiError } from "@/lib/api/errors";
 import { prisma } from "@/lib/db";
 import { syncClosedDayDailyOperation } from "@/lib/day-closing/sync-daily-operation";
@@ -159,12 +160,16 @@ async function mapDayClosingRecord(record: {
   return mapDayClosing(record, branchCode as Branch);
 }
 
-export async function listDayClosings(): Promise<DayClosingRecord[]> {
+export async function listDayClosings(
+  branchFilter?: BranchIdFilter
+): Promise<DayClosingRecord[]> {
   const records = await prisma.dayClosing.findMany({
+    where: branchFilter ? { branchId: branchFilter.branchId } : undefined,
+    include: { branch: true },
     orderBy: [{ date: "desc" }, { updatedAt: "desc" }],
   });
 
-  return Promise.all(records.map((record) => mapDayClosingRecord(record)));
+  return records.map((record) => mapDayClosing(record, record.branch.code as Branch));
 }
 
 async function resolveActorDisplayName(

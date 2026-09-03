@@ -40,14 +40,21 @@ export const ACTIVE_BRANCH_STORAGE_KEY = "sonic-os-active-branch";
 
 export const DEFAULT_BRANCH_CODE = "main";
 export const DEFAULT_BRANCH_NAME = "Kansanga";
+export const SALAAMA_BRANCH_CODE = "salaama";
+export const SALAAMA_BRANCH_NAME = "Salaama";
 
-export const BRANCH_IDS: Branch[] = [DEFAULT_BRANCH_CODE];
+/** @deprecated Prefer active branch codes from BranchesProvider / DB. */
+export const BRANCH_IDS: Branch[] = [
+  DEFAULT_BRANCH_CODE,
+  SALAAMA_BRANCH_CODE,
+];
 
 export const DEFAULT_APP_SETTINGS: AppSettings = {
   businessName: "Sonic",
   ownerName: "Kevin",
   branchNames: {
     [DEFAULT_BRANCH_CODE]: DEFAULT_BRANCH_NAME,
+    [SALAAMA_BRANCH_CODE]: SALAAMA_BRANCH_NAME,
   },
   defaultLunchAmount: 3000,
 };

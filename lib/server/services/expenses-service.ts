@@ -1,5 +1,6 @@
 import { randomUUID } from "crypto";
 import { ApiError } from "@/lib/api/errors";
+import type { BranchIdFilter } from "@/lib/server/branch-scope";
 import { prisma } from "@/lib/db";
 import { Prisma } from "@/lib/prisma";
 import { getBranchIdForSession } from "@/lib/server/branch-lookup";
@@ -219,8 +220,11 @@ export async function deleteCategory(id: string): Promise<void> {
   await prisma.expenseCategory.delete({ where: { id } });
 }
 
-export async function listExpenses(): Promise<ExpenseRecord[]> {
+export async function listExpenses(
+  branchFilter?: BranchIdFilter
+): Promise<ExpenseRecord[]> {
   const expenses = await prisma.expenseRecord.findMany({
+    where: branchFilter ? { branchId: branchFilter.branchId } : undefined,
     include: expenseInclude,
     orderBy: [{ date: "desc" }, { createdAt: "desc" }],
   });

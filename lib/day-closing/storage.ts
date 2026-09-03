@@ -64,7 +64,8 @@ export function getOpenDayRecord(
     (record) =>
       matchesBranch(record.branch, branch) &&
       record.date === date &&
-      record.status === "open"
+      record.status === "open" &&
+      !!(record.openedAt || record.reopenedAt)
   );
 }
 
@@ -112,7 +113,16 @@ export function upsertDayClosingRecord(
   record: DayClosingRecord,
   records: DayClosingRecord[] = cachedClosings
 ): DayClosingRecord[] {
-  return [record, ...records.filter((item) => item.id !== record.id)];
+  return [
+    record,
+    ...records.filter(
+      (item) =>
+        item.id !== record.id &&
+        !(
+          matchesBranch(item.branch, record.branch) && item.date === record.date
+        )
+    ),
+  ];
 }
 
 export const DAY_CLOSED_EDIT_MESSAGE =

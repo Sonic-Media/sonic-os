@@ -1,3 +1,4 @@
+import type { BranchIdFilter } from "@/lib/server/branch-scope";
 import { ApiError } from "@/lib/api/errors";
 import { prisma } from "@/lib/db";
 import type { Prisma } from "@/lib/prisma";
@@ -188,8 +189,11 @@ export async function deleteSupplier(id: string): Promise<void> {
   await prisma.supplier.delete({ where: { id } });
 }
 
-export async function listPurchases(): Promise<Purchase[]> {
+export async function listPurchases(
+  branchFilter?: BranchIdFilter
+): Promise<Purchase[]> {
   const purchases = await prisma.purchase.findMany({
+    where: branchFilter ? { branchId: branchFilter.branchId } : undefined,
     include: purchaseInclude,
     orderBy: [{ date: "desc" }, { createdAt: "desc" }],
   });
@@ -228,7 +232,11 @@ export async function createPurchase(
 
   const productIds = mergedItems.map((item) => item.productId);
   const products = await prisma.product.findMany({
-    where: { id: { in: productIds } },
+    where: {
+      id: { in: productIds },
+      branchId,
+      deletedAt: null,
+    },
   });
   const productById = new Map(products.map((product) => [product.id, product]));
 

@@ -7,8 +7,14 @@ export class DataSourceUnavailableError extends Error {
   }
 }
 
+import { isApiError } from "@/lib/api/errors";
+
 export function getDataSourceErrorMessage(error: unknown): string {
   if (error instanceof DataSourceUnavailableError) {
+    return error.message;
+  }
+
+  if (isApiError(error)) {
     return error.message;
   }
 

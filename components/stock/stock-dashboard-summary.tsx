@@ -1,4 +1,5 @@
 import { StatCard } from "@/components/shared/ui/stat-card";
+import { ActiveBranchLabel } from "@/components/shared/layout/active-branch-label";
 import {
   formatStockCount,
   formatStockCurrency,
@@ -12,13 +13,15 @@ interface StockDashboardSummaryProps {
 export function StockDashboardSummary({ metrics }: StockDashboardSummaryProps) {
   return (
     <section className="grid grid-cols-1 gap-3 mb-8 sm:grid-cols-2 lg:grid-cols-3">
-      <StatCard
-        label="Inventory Value"
-        value={metrics.inventoryValue ?? 0}
-        size="large"
-        formatValue={() => formatStockCurrency(metrics.inventoryValue)}
-        className="sm:col-span-2 lg:col-span-3"
-      />
+      <div className="sm:col-span-2 lg:col-span-3 space-y-2">
+        <ActiveBranchLabel variant="metric" />
+        <StatCard
+          label="Inventory Value"
+          value={metrics.inventoryValue ?? 0}
+          size="large"
+          formatValue={() => formatStockCurrency(metrics.inventoryValue)}
+        />
+      </div>
       <StatCard
         label="Total Products"
         value={metrics.totalProducts ?? 0}

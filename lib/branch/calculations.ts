@@ -52,7 +52,8 @@ export function computeInventoryValueByBranch(
   for (const product of products) {
     const branchMovements = movements.filter(
       (movement) =>
-        movement.productId === product.id && movement.branch === branch.code
+        movement.productId === product.id &&
+        branchCodesReferToSameInventory(movement.branch, branch.code)
     );
 
     const netQuantity = branchMovements.reduce((sum, movement) => {
@@ -76,7 +77,9 @@ export function computeTodayPurchaseCostByBranch(
 ): number {
   return purchases
     .filter(
-      (purchase) => purchase.date === today && purchase.branch === branch.code
+      (purchase) =>
+        purchase.date === today &&
+        branchCodesReferToSameInventory(purchase.branch, branch.code)
     )
     .reduce((sum, purchase) => sum + purchase.totalCost, 0);
 }

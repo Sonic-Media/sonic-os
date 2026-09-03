@@ -1,7 +1,4 @@
-import {
-  DEFAULT_OWNER_PASSWORD_HASH,
-  hashPassword,
-} from "@/lib/auth/password";
+import { hashPassword } from "@/lib/auth/password";
 import { removeLocalStorageItem } from "@/lib/safe-storage";
 import { isUserRole, normalizeUserRole } from "@/lib/auth/validation";
 import type { AppUser, AuthAuditRecord, AuthSession } from "@/types/auth";
@@ -14,9 +11,12 @@ export const DEFAULT_OWNER_USER: AppUser = {
   username: "owner",
   displayName: "Owner",
   role: "owner",
-  passwordHash: DEFAULT_OWNER_PASSWORD_HASH,
   branch: "main",
+  branchCode: "KANS",
   active: true,
+  loginEnabled: true,
+  lastLoginAt: null,
+  passwordSet: true,
   createdAt: DEFAULT_CREATED_AT,
   updatedAt: DEFAULT_CREATED_AT,
 };
@@ -38,10 +38,8 @@ function normalizeAppUser(value: unknown): AppUser | null {
     typeof raw.username === "string" ? raw.username.trim().toLowerCase() : "";
   const displayName =
     typeof raw.displayName === "string" ? raw.displayName.trim() : "";
-  const passwordHash =
-    typeof raw.passwordHash === "string" ? raw.passwordHash : "";
 
-  if (!id || !username || !displayName || !passwordHash) return null;
+  if (!id || !username || !displayName) return null;
 
   const role = normalizeUserRole(raw.role);
   if (!isUserRole(role)) return null;
@@ -53,9 +51,18 @@ function normalizeAppUser(value: unknown): AppUser | null {
     username,
     displayName,
     role,
-    passwordHash,
     branch: normalizeBranch(raw.branch),
+    branchCode:
+      typeof raw.branchCode === "string" && raw.branchCode.trim()
+        ? raw.branchCode.trim().toUpperCase()
+        : normalizeBranch(raw.branch).slice(0, 4).toUpperCase(),
     active: raw.active !== false,
+    loginEnabled: raw.loginEnabled !== false,
+    lastLoginAt:
+      typeof raw.lastLoginAt === "string" && raw.lastLoginAt.trim()
+        ? raw.lastLoginAt
+        : null,
+    passwordSet: raw.passwordSet === true,
     staffId:
       typeof raw.staffId === "string" && raw.staffId.trim()
         ? raw.staffId.trim()

@@ -8,11 +8,11 @@ import { usePurchasing } from "@/context/purchasing-context";
 import { useSales } from "@/context/sales-context";
 import { useStaff } from "@/context/staff-context";
 import { useStock } from "@/context/stock-context";
+import { getDefaultComparisonBranchCodes } from "@/lib/branch/registry";
 import {
   buildBranchComparisonChartData,
   buildBranchTrendChartData,
   computeBranchAnalytics,
-  getDefaultComparisonBranchCodes,
 } from "@/lib/branch/analytics";
 
 export function useBranchAnalytics(branchCode: string) {
@@ -73,10 +73,10 @@ export function useBranchComparison() {
   const { staff } = useStaff();
 
   const comparisonBranches = useMemo(() => {
-    return getDefaultComparisonBranchCodes()
+    return getDefaultComparisonBranchCodes(branches)
       .map((code) => getBranchByCode(code))
       .filter((branch): branch is NonNullable<typeof branch> => Boolean(branch));
-  }, [getBranchByCode]);
+  }, [branches, getBranchByCode]);
 
   const snapshots = useMemo(
     () =>

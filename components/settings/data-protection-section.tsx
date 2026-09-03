@@ -8,6 +8,7 @@ import {
   triggerBackupApi,
   type BackupRecordSummary,
 } from "@/lib/api/backup";
+import { isApiError } from "@/lib/api/errors";
 import { isProductionModeClient } from "@/lib/env/production-mode-client";
 import { PRODUCTION_CONFIRM_DELETE } from "@/lib/data-protection/constants";
 
@@ -42,6 +43,23 @@ function formatDateTime(value: string): string {
   });
 }
 
+function formatBackupLabel(backup: BackupRecordSummary): string {
+  const formatLabel = backup.format === "json" ? "JSON" : "SQL";
+  return `${formatLabel}${backup.compressed ? " (gzip)" : ""}`;
+}
+
+function resolveErrorMessage(error: unknown, fallback: string): string {
+  if (isApiError(error)) {
+    return error.message;
+  }
+
+  if (error instanceof Error && error.message.trim()) {
+    return error.message;
+  }
+
+  return fallback;
+}
+
 export function DataProtectionSection() {
   const [backups, setBackups] = useState<BackupRecordSummary[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -58,9 +76,7 @@ export function DataProtectionSection() {
       const records = await listBackupsApi();
       setBackups(records);
     } catch (caught) {
-      setError(
-        caught instanceof Error ? caught.message : "Could not load backups."
-      );
+      setError(resolveErrorMessage(caught, "Could not load backups."));
     } finally {
       setIsLoading(false);
     }
@@ -73,7 +89,7 @@ export function DataProtectionSection() {
   async function handleBackupNow() {
     if (productionMode) {
       const confirmed = window.confirm(
-        `Create a full PostgreSQL backup now?\n\nProduction mode is active. Type confirmation if prompted.`
+        `Create a database backup now?\n\nProduction mode is active. Type confirmation if prompted.`
       );
       if (!confirmed) {
         return;
@@ -94,12 +110,12 @@ export function DataProtectionSection() {
 
     try {
       const backup = await triggerBackupApi();
-      setSuccess(`Backup completed (${formatBytes(backup.fileSizeBytes)}).`);
+      setSuccess(
+        `Backup created successfully (${formatBackupLabel(backup)}, ${formatBytes(backup.fileSizeBytes)}).`
+      );
       await loadBackups();
     } catch (caught) {
-      setError(
-        caught instanceof Error ? caught.message : "Backup failed."
-      );
+      setError(resolveErrorMessage(caught, "Backup failed."));
     } finally {
       setIsBackingUp(false);
     }
@@ -112,8 +128,9 @@ export function DataProtectionSection() {
       </h3>
 
       <p className="mb-4 text-sm text-zinc-400">
-        PostgreSQL backups run automatically every day in production. Use Backup
-        Now before major changes.
+        Backups run automatically every day in production. On Vercel/Neon, Sonic
+        OS uses a JSON export when pg_dump is unavailable. Use Backup Now before
+        major changes.
       </p>
 
       {productionMode ? (
@@ -143,8 +160,16 @@ export function DataProtectionSection() {
         </Button>
       </div>
 
-      {error ? <p className="mt-4 text-sm text-red-400">{error}</p> : null}
-      {success ? <p className="mt-4 text-sm text-emerald-400">{success}</p> : null}
+      {error ? (
+        <p className="mt-4 rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-300">
+          {error}
+        </p>
+      ) : null}
+      {success ? (
+        <p className="mt-4 rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-300">
+          {success}
+        </p>
+      ) : null}
 
       <div className="mt-6 space-y-2">
         <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">
@@ -168,8 +193,13 @@ export function DataProtectionSection() {
                     {backup.createdByName ? ` · ${backup.createdByName}` : ""}
                   </p>
                   <p className="text-xs text-zinc-500">
-                    {formatDateTime(backup.createdAt)} · {formatBytes(backup.fileSizeBytes)}
+                    {formatDateTime(backup.createdAt)} · {formatBackupLabel(backup)} ·{" "}
+                    {formatBytes(backup.fileSizeBytes)}
+                    {backup.storageType === "database" ? " · stored in database" : ""}
                   </p>
+                  {backup.status === "failed" && backup.error ? (
+                    <p className="mt-1 text-xs text-red-400">{backup.error}</p>
+                  ) : null}
                 </div>
                 <span
                   className={

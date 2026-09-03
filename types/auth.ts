@@ -8,9 +8,12 @@ export interface AppUser {
   username: string;
   displayName: string;
   role: UserRole;
-  passwordHash: string;
   branch: Branch;
+  branchCode: string;
   active: boolean;
+  loginEnabled: boolean;
+  lastLoginAt: string | null;
+  passwordSet: boolean;
   staffId?: string;
   createdAt: string;
   updatedAt: string;

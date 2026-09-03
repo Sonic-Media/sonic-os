@@ -1,5 +1,6 @@
 import { jsonCreated, jsonOk } from "@/lib/api/response";
-import { handleRouteError, withDatabase } from "@/lib/server/route-handler";
+import { resolveBranchListFilter } from "@/lib/server/branch-scope";
+import { handleRouteError, withDatabase, withSessionDatabase } from "@/lib/server/route-handler";
 import {
   createPurchase,
   listPurchases,
@@ -8,7 +9,10 @@ import { normalizeStaffActionRecord } from "@/lib/staff/session";
 
 export async function GET(request: Request) {
   try {
-    const purchases = await withDatabase(() => listPurchases(), { request });
+    const purchases = await withSessionDatabase(async (session) => {
+      const branchFilter = await resolveBranchListFilter(session);
+      return listPurchases(branchFilter);
+    }, { request });
     return jsonOk(purchases);
   } catch (error) {
     return handleRouteError(error);

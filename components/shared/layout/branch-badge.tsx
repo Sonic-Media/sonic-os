@@ -1,7 +1,6 @@
 "use client";
 
-import { useActiveBranch } from "@/context/active-branch-context";
-import { useBranches } from "@/context/branches-context";
+import { useBranch } from "@/context/branch-context";
 import { cn } from "@/lib/utils";
 
 interface BranchBadgeProps {
@@ -9,10 +8,9 @@ interface BranchBadgeProps {
 }
 
 export function BranchBadge({ className }: BranchBadgeProps) {
-  const { activeBranch, isLoaded } = useActiveBranch();
-  const { getBranchName } = useBranches();
+  const { activeBranch, getBranchName, loading } = useBranch();
 
-  if (!isLoaded) return null;
+  if (loading) return null;
 
   return (
     <span

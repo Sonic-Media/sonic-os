@@ -1,13 +1,17 @@
 import { jsonCreated, jsonOk } from "@/lib/api/response";
-import { handleRouteError, withDatabase } from "@/lib/server/route-handler";
+import { resolveOperationsListFilter } from "@/lib/server/branch-scope";
+import { handleRouteError, withDatabase, withSessionDatabase } from "@/lib/server/route-handler";
 import {
   listDailyOperations,
   upsertDailyOperation,
 } from "@/lib/server/services/daily-operations-service";
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    const entries = await withDatabase(() => listDailyOperations());
+    const entries = await withSessionDatabase(async (session) => {
+      const branchFilter = await resolveOperationsListFilter(session);
+      return listDailyOperations(branchFilter);
+    }, { request, module: "operations" });
     return jsonOk(entries);
   } catch (error) {
     return handleRouteError(error);

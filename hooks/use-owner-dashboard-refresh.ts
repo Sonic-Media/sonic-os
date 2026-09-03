@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef } from "react";
+import { useActiveBranch } from "@/context/active-branch-context";
 import { useAuditLog } from "@/context/audit-log-context";
 import { useAuth } from "@/context/auth-context";
 import { useDayClosing } from "@/context/day-closing-context";
@@ -15,6 +16,7 @@ const OWNER_DASHBOARD_REFRESH_MS = 12_000;
 
 export function useOwnerDashboardRefresh(): void {
   const { session, isAuthenticated, isLoaded: authLoaded } = useAuth();
+  const { activeBranch } = useActiveBranch();
   const { refreshAuditLog } = useAuditLog();
   const { refreshClosings } = useDayClosing();
   const { refreshEntries } = useEntriesContext();
@@ -83,5 +85,5 @@ export function useOwnerDashboardRefresh(): void {
       window.removeEventListener("focus", refreshIfVisible);
       document.removeEventListener("visibilitychange", refreshIfVisible);
     };
-  }, [authLoaded, isAuthenticated, session, refreshAll]);
+  }, [activeBranch, authLoaded, isAuthenticated, session, refreshAll]);
 }

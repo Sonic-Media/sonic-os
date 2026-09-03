@@ -1,5 +1,6 @@
 import { mapStaffActionRecord } from "@/lib/server/json-fields";
 import { normalizeUserRole } from "@/lib/auth/validation";
+import { formatBranchShortCode } from "@/lib/branch/short-code";
 import { computeProductStatus } from "@/lib/stock/product-status";
 import type { Entry, Expense, Staff } from "@/types";
 import type { AppUser, UserRole } from "@/types/auth";
@@ -41,10 +42,16 @@ export type UserWithRelations = {
   passwordHash: string;
   active: boolean;
   staffId: string | null;
+  lastLoginAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
   role: RoleRelation;
   branch: BranchRelation;
+  staff?: {
+    loginEnabled: boolean;
+    deletedAt: Date | null;
+    active: boolean;
+  } | null;
 };
 
 type StaffWithRelations = {
@@ -157,6 +164,7 @@ type ProductRecord = {
   id: string;
   name: string;
   category: { slug: string };
+  branch: BranchRelation;
   sku: string | null;
   buyingPrice: number;
   sellingPrice: number;
@@ -262,14 +270,19 @@ type DailyOperationRow = {
 };
 
 export function mapUserToAppUser(user: UserWithRelations): AppUser {
+  const loginEnabled = user.staff ? user.staff.loginEnabled : user.active;
+
   return {
     id: user.id,
     username: user.username,
     displayName: user.displayName,
     role: normalizeUserRole(user.role.slug),
-    passwordHash: user.passwordHash,
     branch: user.branch.code,
+    branchCode: formatBranchShortCode(user.branch.code),
     active: user.active,
+    loginEnabled,
+    lastLoginAt: user.lastLoginAt?.toISOString() ?? null,
+    passwordSet: Boolean(user.passwordHash.trim()),
     staffId: user.staffId ?? undefined,
     createdAt: user.createdAt.toISOString(),
     updatedAt: user.updatedAt.toISOString(),
@@ -400,6 +413,7 @@ export function mapProductToEntity(product: ProductRecord): StockProduct {
   return {
     id: product.id,
     name: product.name,
+    branch: product.branch.code,
     category: product.category.slug as StockProductCategory,
     sku: product.sku ?? undefined,
     buyingPrice: product.buyingPrice,

@@ -1,5 +1,5 @@
 import { jsonCreated, jsonOk } from "@/lib/api/response";
-import { handleRouteError, withDatabase } from "@/lib/server/route-handler";
+import { handleRouteError, withDatabase, withSessionDatabase } from "@/lib/server/route-handler";
 import {
   createPriceChange,
   listPriceChanges,
@@ -7,7 +7,10 @@ import {
 
 export async function GET(request: Request) {
   try {
-    const priceChanges = await withDatabase(() => listPriceChanges(), { request });
+    const priceChanges = await withSessionDatabase(
+      (session) => listPriceChanges(session),
+      { request, module: "stock" }
+    );
     return jsonOk(priceChanges);
   } catch (error) {
     return handleRouteError(error);

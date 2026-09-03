@@ -91,3 +91,38 @@ export function formatNotificationTime(isoDate: string): string {
 
   return formatRelativeTime(isoDate);
 }
+
+export function formatLastLogin(isoDate: string | null | undefined): string {
+  if (!isoDate?.trim()) {
+    return "Never";
+  }
+
+  const date = new Date(isoDate);
+  const timestamp = date.getTime();
+  if (Number.isNaN(timestamp)) {
+    return "Never";
+  }
+
+  const now = new Date();
+  const isToday = date.toDateString() === now.toDateString();
+  if (isToday) {
+    return `Today ${date.toLocaleTimeString("en-UG", {
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+    })}`;
+  }
+
+  const yesterday = new Date(now);
+  yesterday.setDate(yesterday.getDate() - 1);
+  if (date.toDateString() === yesterday.toDateString()) {
+    return "Yesterday";
+  }
+
+  const days = Math.floor((now.getTime() - timestamp) / (1000 * 60 * 60 * 24));
+  if (days >= 1) {
+    return `${days} day${days === 1 ? "" : "s"} ago`;
+  }
+
+  return formatRelativeTime(isoDate);
+}

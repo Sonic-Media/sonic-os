@@ -2,6 +2,7 @@ import { ApiError } from "@/lib/api/errors";
 import {
   PRODUCTION_CONFIRM_DELETE,
   PRODUCTION_CONFIRM_RESET,
+  BUSINESS_DATA_RESET_CONFIRMATION,
 } from "@/lib/data-protection/constants";
 import {
   isProductionMode,
@@ -9,7 +10,7 @@ import {
   requireProductionConfirmationToken,
 } from "@/lib/env/production-mode";
 
-export { PRODUCTION_CONFIRM_DELETE, PRODUCTION_CONFIRM_RESET };
+export { PRODUCTION_CONFIRM_DELETE, PRODUCTION_CONFIRM_RESET, BUSINESS_DATA_RESET_CONFIRMATION };
 
 export function assertDestructiveApiAllowed(action: string): void {
   try {
@@ -73,6 +74,19 @@ export function assertProductionResetConfirmation(
   } catch (error) {
     throw new Error(
       error instanceof Error ? error.message : "Confirmation required."
+    );
+  }
+}
+
+export function assertBusinessDataResetConfirmation(
+  confirmation: string | undefined
+): void {
+  assertDestructiveApiAllowed("Business data reset");
+
+  if (confirmation?.trim() !== BUSINESS_DATA_RESET_CONFIRMATION) {
+    throw new ApiError(
+      `Type "${BUSINESS_DATA_RESET_CONFIRMATION}" exactly to confirm.`,
+      { status: 400, code: "confirmation_required" }
     );
   }
 }

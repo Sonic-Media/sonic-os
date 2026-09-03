@@ -2,8 +2,8 @@
 
 import { FilterChip, FilterChipRow } from "@/components/dashboard/analytics/filter-chip";
 import { Input } from "@/components/shared/ui/input";
+import { ActiveBranchLabel } from "@/components/shared/layout/active-branch-label";
 import { useDashboardContext } from "@/context/dashboard-context";
-import { BRANCH_IDS } from "@/lib/constants";
 import type { AnalyticsTimeFilter } from "@/lib/analytics-view";
 import { cn } from "@/lib/utils";
 
@@ -24,11 +24,8 @@ export function DashboardFilterChips({ className }: DashboardFilterChipsProps) {
     setTimeFilter,
     customRange,
     setCustomRange,
-    branchFilter,
-    setBranchFilter,
     staffFilter,
     setStaffFilter,
-    branchNames,
     staff,
     hasActiveFilters,
     clearFilters,
@@ -77,21 +74,7 @@ export function DashboardFilterChips({ className }: DashboardFilterChipsProps) {
       )}
 
       <FilterChipRow>
-        <FilterChip
-          label="Branch"
-          isActive={branchFilter === null}
-          onClick={() => setBranchFilter(null)}
-        />
-        {BRANCH_IDS.map((branchId) => (
-          <FilterChip
-            key={branchId}
-            label={branchNames[branchId]}
-            isActive={branchFilter === branchId}
-            onClick={() =>
-              setBranchFilter(branchFilter === branchId ? null : branchId)
-            }
-          />
-        ))}
+        <ActiveBranchLabel variant="badge" />
       </FilterChipRow>
 
       <FilterChipRow>

@@ -2,22 +2,26 @@
 
 import { useEffect, useState } from "react";
 import { DEFAULT_BRANCH_CODE } from "@/lib/constants";
-import { useActiveBranch } from "@/context/active-branch-context";
-import { useBranches } from "@/context/branches-context";
+import { useBranch } from "@/context/branch-context";
 import type { Branch } from "@/types";
 
-function isKnownBranch(code: Branch, activeBranches: { code: Branch }[]): boolean {
+function isKnownBranch(
+  code: Branch,
+  activeBranches: { code: Branch }[]
+): boolean {
   return activeBranches.some((branch) => branch.code === code);
 }
 
+/**
+ * Form-scoped branch defaulting to the global active branch.
+ * Used for entity assignment (staff/user home branch), not for switching shop context.
+ */
 export function useFormBranch(initial?: Branch) {
-  const { activeBranch, isLoaded: activeBranchLoaded } = useActiveBranch();
-  const { activeBranches, isLoaded: branchesLoaded } = useBranches();
+  const { activeBranch, activeBranches, isLoaded } = useBranch();
   const [branch, setBranch] = useState<Branch>(initial ?? DEFAULT_BRANCH_CODE);
-  const isReady = activeBranchLoaded && branchesLoaded;
 
   useEffect(() => {
-    if (!isReady) return;
+    if (!isLoaded) return;
 
     setBranch((current) => {
       if (isKnownBranch(current, activeBranches)) {
@@ -30,11 +34,11 @@ export function useFormBranch(initial?: Branch) {
 
       return activeBranch;
     });
-  }, [activeBranch, activeBranches, initial, isReady]);
+  }, [activeBranch, activeBranches, initial, isLoaded]);
 
   return {
     branch,
     setBranch,
-    isReady,
+    isReady: isLoaded,
   };
 }

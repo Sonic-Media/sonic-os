@@ -2,13 +2,13 @@
 
 import { useMemo } from "react";
 import { useStock } from "@/context/stock-context";
-import { useActiveBranch } from "@/context/active-branch-context";
+import { useBranch } from "@/context/branch-context";
 import { computeBranchDashboardMetrics } from "@/lib/stock/calculations";
 import { getTodayISO } from "@/lib/dates";
 
 export function useStockDashboard() {
   const { products, movements } = useStock();
-  const { activeBranch } = useActiveBranch();
+  const { activeBranch } = useBranch();
 
   const metrics = useMemo(
     () =>

@@ -2,8 +2,10 @@
 
 import { useEffect, useState } from "react";
 import { useActiveBranch } from "@/context/active-branch-context";
+import { useDayClosing } from "@/context/day-closing-context";
 import { useSettings } from "@/context/settings-context";
-import { useBranchState } from "@/hooks/use-branch-state";
+import { useActiveBranchOperations } from "@/hooks/use-all-branches-operations";
+import { formatBranchOperationsStatusLabel } from "@/lib/branch/operations-state";
 import { formatClockTime } from "@/lib/staff/attendance";
 import { cn } from "@/lib/utils";
 import { OwnerCard, ownerSectionTitleClass } from "@/components/dashboard/owner/primitives";
@@ -30,24 +32,33 @@ function formatClock(date: Date): string {
   });
 }
 
+function staffWorkingLabel(
+  status: "open" | "closed" | "waiting",
+  staffNames: string[]
+): string {
+  if (staffNames.length === 0) {
+    return status === "waiting" ? "Waiting for staff" : "No one on shift right now";
+  }
+
+  const names = staffNames.join(", ");
+  if (status === "waiting") {
+    return `${names} (on shift; branch not opened)`;
+  }
+
+  return names;
+}
+
 export function MissionControlHero({ displayName }: MissionControlHeroProps) {
   const now = useLiveClock(1000);
   const { activeBranch } = useActiveBranch();
   const { getBranchName } = useSettings();
-  const branchState = useBranchState();
+  const { isLoaded } = useDayClosing();
+  const branchOps = useActiveBranchOperations();
 
   const firstName = displayName.split(" ")[0] ?? displayName;
-  const staffWorking = branchState.activeStaff.map((staff) => staff.staffName);
-
-  const statusLabel =
-    branchState.status === "closed"
-      ? "Closed"
-      : branchState.status === "open"
-        ? "Open"
-        : "Not Open";
-
-  const statusEmoji =
-    branchState.status === "open" ? "🟢" : "⚫";
+  const staffNames = branchOps.activeStaff.map((staff) => staff.staffName);
+  const statusLabel = formatBranchOperationsStatusLabel(branchOps.status);
+  const statusEmoji = branchOps.status === "open" ? "🟢" : "⚫";
 
   return (
     <OwnerCard hero className="overflow-hidden p-0">
@@ -70,27 +81,29 @@ export function MissionControlHero({ displayName }: MissionControlHeroProps) {
             <p
               className={cn(
                 "mt-3 inline-flex items-center gap-2 text-lg font-medium",
-                branchState.status === "open"
+                branchOps.status === "open"
                   ? "text-emerald-400"
-                  : "text-zinc-400"
+                  : branchOps.status === "waiting"
+                    ? "text-amber-400"
+                    : "text-zinc-400"
               )}
             >
               <span aria-hidden>{statusEmoji}</span>
-              {branchState.isLoaded ? statusLabel : "Loading..."}
+              {isLoaded ? statusLabel : "Loading..."}
             </p>
           </div>
 
           <div>
             <p className={ownerSectionTitleClass}>Opened By</p>
             <p className="mt-3 text-lg font-medium text-white">
-              {branchState.openedByName ?? "—"}
+              {branchOps.openedByName ?? "—"}
             </p>
           </div>
 
           <div>
             <p className={ownerSectionTitleClass}>Opened At</p>
             <p className="mt-3 text-lg font-medium tabular-nums text-white">
-              {formatClockTime(branchState.openedAt)}
+              {formatClockTime(branchOps.openedAt)}
             </p>
           </div>
 
@@ -105,11 +118,7 @@ export function MissionControlHero({ displayName }: MissionControlHeroProps) {
           <div className="sm:col-span-2 lg:col-span-3">
             <p className={ownerSectionTitleClass}>Staff Working</p>
             <p className="mt-3 text-lg font-medium text-white">
-              {staffWorking.length > 0
-                ? staffWorking.join(", ")
-                : branchState.status === "waiting"
-                  ? "Waiting for staff"
-                  : "No one on shift right now"}
+              {staffWorkingLabel(branchOps.status, staffNames)}
             </p>
           </div>
         </div>

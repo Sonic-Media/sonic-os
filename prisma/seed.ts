@@ -2,12 +2,10 @@ import { loadEnvFiles } from "../lib/env/load-env";
 
 loadEnvFiles();
 import { DEFAULT_EXPENSE_TEMPLATES } from "../lib/constants";
-import { getPrismaClient } from "../lib/db";
+import { prisma } from "../lib/db";
 import { assertSeedAllowed } from "../lib/server/data-protection/guards";
 import { runApplicationBootstrap } from "../lib/server/bootstrap/pipeline";
 import { PRODUCT_CATEGORY_DEFINITIONS } from "../lib/server/product-category-lookup";
-
-const prisma = getPrismaClient();
 
 async function main() {
   assertSeedAllowed();

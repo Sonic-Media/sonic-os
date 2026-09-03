@@ -1,5 +1,6 @@
 import { randomUUID } from "crypto";
 import { ApiError } from "@/lib/api/errors";
+import type { BranchIdFilter } from "@/lib/server/branch-scope";
 import { prisma } from "@/lib/db";
 import { getBranchIdByCode } from "@/lib/server/branch-lookup";
 import { toJsonField } from "@/lib/server/json-fields";
@@ -51,8 +52,11 @@ function entryToDailyOperationData(entry: Entry, branchId: string) {
   };
 }
 
-export async function listDailyOperations(): Promise<Entry[]> {
+export async function listDailyOperations(
+  branchFilter?: BranchIdFilter
+): Promise<Entry[]> {
   const operations = await prisma.dailyOperation.findMany({
+    where: branchFilter ? { branchId: branchFilter.branchId } : undefined,
     include: dailyOperationInclude,
     orderBy: [{ date: "desc" }, { timestamp: "desc" }],
   });
@@ -62,7 +66,8 @@ export async function listDailyOperations(): Promise<Entry[]> {
 
 export async function listDailyOperationsInPeriod(
   period: ReportPeriod,
-  ref = new Date()
+  ref = new Date(),
+  branchFilter?: BranchIdFilter
 ): Promise<Entry[]> {
   const { start, end } = getPeriodDateBounds(period, ref);
 
@@ -72,6 +77,7 @@ export async function listDailyOperationsInPeriod(
         gte: start,
         lte: end,
       },
+      ...(branchFilter ? { branchId: branchFilter.branchId } : {}),
     },
     include: dailyOperationInclude,
     orderBy: [{ date: "desc" }, { timestamp: "desc" }],

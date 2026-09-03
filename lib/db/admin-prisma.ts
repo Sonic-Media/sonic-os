@@ -46,16 +46,18 @@ export async function disconnectAdminPrismaClient(): Promise<void> {
 export function readBackupManifest(manifestPath: string): {
   createdAt: string;
   compressed: boolean;
-  files: { archive?: string; sql?: string };
-  sizes: { archiveBytes?: number; sqlBytes?: number };
+  engine?: "pg_dump" | "json";
+  files: { archive?: string; sql?: string; json?: string };
+  sizes: { archiveBytes?: number; sqlBytes?: number; jsonBytes?: number };
 } | null {
   try {
     const raw = fs.readFileSync(manifestPath, "utf8");
     return JSON.parse(raw) as {
       createdAt: string;
       compressed: boolean;
-      files: { archive?: string; sql?: string };
-      sizes: { archiveBytes?: number; sqlBytes?: number };
+      engine?: "pg_dump" | "json";
+      files: { archive?: string; sql?: string; json?: string };
+      sizes: { archiveBytes?: number; sqlBytes?: number; jsonBytes?: number };
     };
   } catch {
     return null;
@@ -69,7 +71,8 @@ export function resolveBackupFileFromManifest(manifestPath: string): string | nu
   }
 
   const backupDir = path.dirname(manifestPath);
-  const fileName = manifest.files.archive ?? manifest.files.sql;
+  const fileName =
+    manifest.files.archive ?? manifest.files.sql ?? manifest.files.json;
   if (!fileName) {
     return null;
   }

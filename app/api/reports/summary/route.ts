@@ -1,8 +1,11 @@
 import { ApiError } from "@/lib/api/errors";
 import { aggregateEntries } from "@/lib/aggregations";
 import { jsonOk } from "@/lib/api/response";
+import { isOwnerRole } from "@/lib/auth/validation";
+import { getEquivalentBranchCodes } from "@/lib/branch/codes";
 import { prisma } from "@/lib/db";
-import { handleRouteError, withDatabase } from "@/lib/server/route-handler";
+import { resolveBranchListFilter } from "@/lib/server/branch-scope";
+import { handleRouteError, withSessionDatabase } from "@/lib/server/route-handler";
 import { listDailyOperationsInPeriod } from "@/lib/server/services/daily-operations-service";
 import type { ReportPeriod } from "@/types";
 
@@ -20,9 +23,10 @@ export async function GET(request: Request) {
       });
     }
 
-    const summary = await withDatabase(async () => {
+    const summary = await withSessionDatabase(async (session) => {
+      const branchFilter = await resolveBranchListFilter(session);
       const [entries, branches] = await Promise.all([
-        listDailyOperationsInPeriod(period),
+        listDailyOperationsInPeriod(period, new Date(), branchFilter),
         prisma.branch.findMany({
           where: { active: true },
           select: { code: true },
@@ -30,10 +34,12 @@ export async function GET(request: Request) {
         }),
       ]);
 
-      return aggregateEntries(entries, {
-        branchIds: branches.map((branch) => branch.code),
-      });
-    }, { request });
+      const branchIds = isOwnerRole(session.role)
+        ? branches.map((branch) => branch.code)
+        : getEquivalentBranchCodes(session.branch);
+
+      return aggregateEntries(entries, { branchIds });
+    }, { request, module: "reports" });
 
     return jsonOk(summary);
   } catch (error) {

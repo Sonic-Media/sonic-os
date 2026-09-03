@@ -1,5 +1,5 @@
 import { jsonOk } from "@/lib/api/response";
-import { handleRouteError, withDatabase } from "@/lib/server/route-handler";
+import { handleRouteError, withSessionDatabase } from "@/lib/server/route-handler";
 import {
   deleteProduct,
   updateProduct,
@@ -12,9 +12,10 @@ export async function PATCH(
   try {
     const { id } = await context.params;
     const body = await request.json();
-    const product = await withDatabase(() => updateProduct(id, body), {
-      request,
-    });
+    const product = await withSessionDatabase(
+      (session) => updateProduct(id, body, session),
+      { request, module: "stock" }
+    );
     return jsonOk(product);
   } catch (error) {
     return handleRouteError(error);
@@ -22,12 +23,15 @@ export async function PATCH(
 }
 
 export async function DELETE(
-  _request: Request,
+  request: Request,
   context: { params: Promise<{ id: string }> }
 ) {
   try {
     const { id } = await context.params;
-    await withDatabase(() => deleteProduct(id), { request: _request });
+    await withSessionDatabase(() => deleteProduct(id), {
+      request,
+      module: "stock",
+    });
     return jsonOk(null);
   } catch (error) {
     return handleRouteError(error);

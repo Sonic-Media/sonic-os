@@ -1,9 +1,14 @@
--- Repair incomplete init migration metadata
-UPDATE "_prisma_migrations"
-SET finished_at = started_at,
-    logs = COALESCE(logs, '')
-WHERE migration_name = '20260802100000_init'
-  AND finished_at IS NULL;
+-- Repair incomplete init migration metadata (skip when table is absent, e.g. shadow DB)
+DO $$
+BEGIN
+  IF to_regclass('public."_prisma_migrations"') IS NOT NULL THEN
+    UPDATE "_prisma_migrations"
+    SET finished_at = started_at,
+        logs = COALESCE(logs, '')
+    WHERE migration_name = '20260802100000_init'
+      AND finished_at IS NULL;
+  END IF;
+END $$;
 
 CREATE TABLE "DayClosing" (
     "id" UUID NOT NULL,

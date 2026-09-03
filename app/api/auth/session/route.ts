@@ -8,6 +8,7 @@ import {
   updateActiveBranchPreference,
   getActiveBranchPreference,
 } from "@/lib/server/services/auth-service";
+import { isOwnerRole } from "@/lib/auth/validation";
 import { activeBranchSchema, loginSchema } from "@/lib/validation/auth";
 import { isDatabaseConfigured } from "@/lib/db";
 import { ApiError } from "@/lib/api/errors";
@@ -70,6 +71,12 @@ export async function POST(request: Request) {
 
     if (action === "set-active-branch") {
       const session = await requireSession();
+      if (!isOwnerRole(session.role)) {
+        throw new ApiError("Only the owner can switch branches.", {
+          status: 403,
+          code: "forbidden",
+        });
+      }
       const parsed = activeBranchSchema.parse(body);
       await updateActiveBranchPreference(session.userId, parsed.branchCode);
       return jsonOk({ activeBranchCode: parsed.branchCode.toLowerCase() });

@@ -1,5 +1,5 @@
-import path from "node:path";
 import { z } from "zod";
+import { resolveRuntimeBackupDir } from "@/lib/backup/runtime";
 
 const backupConfigSchema = z.object({
   backupDir: z.string().min(1),
@@ -12,12 +12,7 @@ const backupConfigSchema = z.object({
 export type BackupConfig = z.infer<typeof backupConfigSchema>;
 
 function resolveBackupDir(): string {
-  const configured = process.env.BACKUP_DIR?.trim();
-  if (configured) {
-    return path.resolve(configured);
-  }
-
-  return path.resolve(process.cwd(), "backups");
+  return resolveRuntimeBackupDir();
 }
 
 function resolveScheduleIntervalMs(): number | undefined {

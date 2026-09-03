@@ -11,6 +11,8 @@ import { useAuth } from "@/context/auth-context";
 import { useStaff } from "@/context/staff-context";
 import { USER_ROLE_OPTIONS } from "@/lib/auth/permissions";
 import { getStaffRoleName } from "@/lib/staff/roles";
+import { formatLastLogin } from "@/lib/format";
+import { useBranches } from "@/context/branches-context";
 import type { AppUser, UserRole } from "@/types/auth";
 
 interface UserDialogProps {
@@ -19,9 +21,26 @@ interface UserDialogProps {
   onClose: () => void;
 }
 
+interface ReadOnlyFieldProps {
+  label: string;
+  value: string;
+}
+
+function ReadOnlyField({ label, value }: ReadOnlyFieldProps) {
+  return (
+    <div>
+      <p className="mb-1 text-xs font-medium uppercase tracking-wide text-zinc-500">
+        {label}
+      </p>
+      <p className="text-sm text-zinc-200">{value}</p>
+    </div>
+  );
+}
+
 export function UserDialog({ mode, user, onClose }: UserDialogProps) {
   const { addUser, updateUser } = useAuth();
   const { staff, linkStaffAccount } = useStaff();
+  const { getBranchName } = useBranches();
   const [username, setUsername] = useState(user?.username ?? "");
   const [displayName, setDisplayName] = useState(user?.displayName ?? "");
   const [role, setRole] = useState<UserRole>(user?.role ?? "cashier");
@@ -98,6 +117,34 @@ export function UserDialog({ mode, user, onClose }: UserDialogProps) {
       }
     >
       <form id="user-form" className="space-y-4" onSubmit={handleSubmit}>
+        {mode === "edit" && user && (
+          <div className="grid gap-4 rounded-lg border border-zinc-800/80 bg-zinc-900/40 p-4 sm:grid-cols-2">
+            <ReadOnlyField label="Username" value={user.username} />
+            <ReadOnlyField label="Branch" value={getBranchName(user.branch)} />
+            <ReadOnlyField label="Branch Code" value={user.branchCode} />
+            <ReadOnlyField
+              label="Role"
+              value={USER_ROLE_OPTIONS.find((option) => option.value === user.role)?.label ?? user.role}
+            />
+            <ReadOnlyField
+              label="Status"
+              value={user.active ? "Active" : "Disabled"}
+            />
+            <ReadOnlyField
+              label="Login Enabled"
+              value={user.loginEnabled ? "Yes" : "No"}
+            />
+            <ReadOnlyField
+              label="Last Login"
+              value={formatLastLogin(user.lastLoginAt)}
+            />
+            <ReadOnlyField
+              label="Password Set"
+              value={user.passwordSet ? "Yes" : "No"}
+            />
+          </div>
+        )}
+
         {mode === "add" && (
           <div>
             <Input
@@ -190,17 +237,22 @@ export function ResetPasswordDialog({
   const { resetUserPassword } = useAuth();
   const [password, setPassword] = useState("");
   const [errors, setErrors] = useState<Record<string, string | undefined>>({});
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  function handleSubmit(event: React.FormEvent) {
+  async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
 
-    const result = resetUserPassword(user.id, password);
+    const result = await resetUserPassword(user.id, password);
     if (!result.success) {
       setErrors(result.errors);
+      setSuccessMessage(null);
       return;
     }
 
-    onClose();
+    setErrors({});
+    setSuccessMessage("✔ Password updated successfully.");
+    setIsSubmitting(false);
   }
 
   return (
@@ -212,27 +264,44 @@ export function ResetPasswordDialog({
       footer={
         <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
           <Button type="button" variant="secondary" onClick={onClose}>
-            Cancel
+            {successMessage ? "Close" : "Cancel"}
           </Button>
-          <Button type="submit" form="reset-password-form">
-            Reset Password
-          </Button>
+          {!successMessage && (
+            <Button
+              type="submit"
+              form="reset-password-form"
+              disabled={isSubmitting}
+            >
+              Reset Password
+            </Button>
+          )}
         </div>
       }
     >
-      <form id="reset-password-form" className="space-y-4" onSubmit={handleSubmit}>
-        <div>
-          <Input
-            label="New Password"
-            type="password"
-            value={password}
-            onChange={(event) => {
-              setPassword(event.target.value);
-              setErrors((current) => ({ ...current, password: undefined }));
-            }}
-          />
-          <StockFieldError message={errors.password} />
-        </div>
+      <form
+        id="reset-password-form"
+        className="space-y-4"
+        onSubmit={(event) => {
+          setIsSubmitting(true);
+          void handleSubmit(event).finally(() => setIsSubmitting(false));
+        }}
+      >
+        {successMessage ? (
+          <p className="text-sm text-emerald-400">{successMessage}</p>
+        ) : (
+          <div>
+            <Input
+              label="New Password"
+              type="password"
+              value={password}
+              onChange={(event) => {
+                setPassword(event.target.value);
+                setErrors((current) => ({ ...current, password: undefined }));
+              }}
+            />
+            <StockFieldError message={errors.password} />
+          </div>
+        )}
         <StockFieldError message={errors.form} />
       </form>
     </StockDialog>
