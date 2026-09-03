@@ -349,8 +349,16 @@ export function getRotatingShiftGreeting(
     weekdayExtras.length > 0 ? [...pool, ...weekdayExtras] : pool;
   const seed = `${dateKey}-${context}-${scenario}-${firstName}`;
   const picked = pickFromPool(combinedPool, seed);
+  const greeting = formatGreeting(picked, firstName);
 
-  return formatGreeting(picked, firstName);
+  if (context === "start-shift") {
+    return {
+      ...greeting,
+      subtitle: "Ready for another day?",
+    };
+  }
+
+  return greeting;
 }
 
 export function getStartShiftSuccessLine(
