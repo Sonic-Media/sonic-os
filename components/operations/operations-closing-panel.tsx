@@ -15,6 +15,7 @@ interface OperationsClosingPanelProps {
   staffPayouts: number;
   netCash: number;
   readOnly?: boolean;
+  showStaffPayment?: boolean;
   updateField: <K extends keyof EntryFormData>(
     key: K,
     value: EntryFormData[K]
@@ -29,6 +30,7 @@ export function OperationsClosingPanel({
   staffPayouts,
   netCash,
   readOnly = false,
+  showStaffPayment = true,
   updateField,
 }: OperationsClosingPanelProps) {
   return (
@@ -54,11 +56,13 @@ export function OperationsClosingPanel({
 
       <AccessorySalesSection date={form.date} readOnly />
 
-      <StaffPaymentSection
-        branch={form.branch}
-        date={form.date}
-        readOnly={readOnly}
-      />
+      {showStaffPayment ? (
+        <StaffPaymentSection
+          branch={form.branch}
+          date={form.date}
+          readOnly={readOnly}
+        />
+      ) : null}
 
       <CashSummary
         movieRevenue={movieRevenue}

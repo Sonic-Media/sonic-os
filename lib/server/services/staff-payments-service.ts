@@ -2,12 +2,14 @@ import { randomUUID } from "crypto";
 import type { BranchIdFilter } from "@/lib/server/branch-scope";
 import { ApiError } from "@/lib/api/errors";
 import { prisma } from "@/lib/db";
+import { branchCodesReferToSameInventory } from "@/lib/branch/codes";
 import { getBranchIdByCode } from "@/lib/server/branch-lookup";
 import { toJsonField } from "@/lib/server/json-fields";
 import { mapStaffPaymentToEntity } from "@/lib/server/mappers/entities";
 import {
   assertBranchDayOpenForWrite,
-  assertStaffOperationalRole,
+  assertStaffOperationalRoleForPayment,
+  isHistoricalOperationsDate,
 } from "@/lib/server/day-closing-guards";
 import { requireSession } from "@/lib/server/session";
 import { recordTransactionAudit } from "@/lib/server/transaction-audit";
@@ -73,12 +75,15 @@ export async function createStaffPayment(
   }
 
   const session = await requireSession();
-  assertStaffOperationalRole(session);
+  assertStaffOperationalRoleForPayment(session, input.date);
+
+  const isHistorical = isHistoricalOperationsDate(input.date);
 
   if (
     session.staffId &&
     session.staffId !== input.staffId &&
-    session.role !== "branch-manager"
+    session.role !== "branch-manager" &&
+    !isHistorical
   ) {
     throw new ApiError("You can only record your own daily wage.", {
       status: 403,
@@ -87,7 +92,23 @@ export async function createStaffPayment(
   }
 
   const branchCode = staff.branch.code as Branch;
-  await assertBranchDayOpenForWrite(branchCode, input.date);
+
+  if (
+    input.branch &&
+    !branchCodesReferToSameInventory(branchCode, input.branch)
+  ) {
+    throw new ApiError(
+      "Selected staff does not belong to the selected branch.",
+      {
+        status: 403,
+        code: "branch_mismatch",
+      }
+    );
+  }
+
+  if (!isHistorical) {
+    await assertBranchDayOpenForWrite(branchCode, input.date);
+  }
 
   const branchId = await getBranchIdByCode(branchCode);
 

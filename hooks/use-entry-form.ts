@@ -96,6 +96,7 @@ export function useEntryForm(options: UseEntryFormOptions = {}) {
   const entriesRef = useRef(entries);
   const autosaveTimerRef = useRef<number | null>(null);
   const saveLockRef = useRef(false);
+  const submitInProgressRef = useRef(false);
 
   useEffect(() => {
     entriesRef.current = entries;
@@ -213,23 +214,6 @@ export function useEntryForm(options: UseEntryFormOptions = {}) {
     [form, resolveCreatedBy, resolveStaffName]
   );
 
-  function promoteToCompletedSync(
-    entryId: string,
-    existing?: Entry,
-    formData: EntryFormData = form
-  ): Entry {
-    const completed = formToEntry(formData, {
-      id: entryId,
-      status: "completed",
-      existing,
-      staffName: resolveStaffName(existing),
-    });
-    upsertEntry(completed);
-    syncEntriesRef(completed);
-    draftIdRef.current = entryId;
-    return completed;
-  }
-
   function switchBranch(nextBranch: Branch) {
     cancelPendingAutosave();
 
@@ -297,6 +281,7 @@ export function useEntryForm(options: UseEntryFormOptions = {}) {
 
       void upsertEntry(entry)
         .then((saved) => {
+          if (submitInProgressRef.current) return;
           syncEntriesRef(saved);
           draftIdRef.current = saved.id;
         })
@@ -304,7 +289,9 @@ export function useEntryForm(options: UseEntryFormOptions = {}) {
           // Autosave failures surface on explicit save/close actions.
         })
         .finally(() => {
-          saveLockRef.current = false;
+          if (!submitInProgressRef.current) {
+            saveLockRef.current = false;
+          }
         });
     }, AUTOSAVE_DEBOUNCE_MS);
 
@@ -367,10 +354,12 @@ export function useEntryForm(options: UseEntryFormOptions = {}) {
     setForm((prev) => ({ ...prev, [key]: value }));
   }
 
-  function handleSave() {
+  async function handleSave(): Promise<boolean> {
     cancelPendingAutosave();
+    submitInProgressRef.current = true;
     saveLockRef.current = true;
     setIsSaving(true);
+    setSaveError(null);
 
     try {
       const formWithAllocation = {
@@ -381,7 +370,7 @@ export function useEntryForm(options: UseEntryFormOptions = {}) {
             : form.savingsAllocation,
       };
 
-      let entryId =
+      const entryId =
         resolveActiveDraftId() ??
         draftIdRef.current ??
         options.entry?.id ??
@@ -395,47 +384,38 @@ export function useEntryForm(options: UseEntryFormOptions = {}) {
 
       if (conflict && !(options.entry?.id === conflict.id)) {
         setDuplicateEntry(conflict);
-        setIsSaving(false);
-        return;
+        return false;
       }
 
       const existing = entryId
         ? entriesRef.current.find((entry) => entry.id === entryId)
         : undefined;
-
-      const shouldPersistDraft =
-        hasInteracted.current && (!existing || existing.status === "draft");
-
-      if (shouldPersistDraft) {
-        entryId = entryId ?? crypto.randomUUID();
-        const draft = formToEntry(formWithAllocation, {
-          id: entryId,
-          status: "draft",
-          existing,
-          staffName: resolveStaffName(existing),
-        });
-        upsertEntry(draft);
-        syncEntriesRef(draft);
-        draftIdRef.current = entryId;
-      }
-
       const recordId = entryId ?? crypto.randomUUID();
-      const promoteFrom = entriesRef.current.find(
-        (entry) => entry.id === recordId
-      );
+      const completed = formToEntry(formWithAllocation, {
+        id: recordId,
+        status: "completed",
+        existing,
+        staffName: resolveStaffName(existing),
+      });
 
-      promoteToCompletedSync(recordId, promoteFrom ?? existing, formWithAllocation);
+      const saved = await upsertEntry(completed);
+      syncEntriesRef(saved);
+      draftIdRef.current = saved.id;
+      setLastSavedAt(Date.now());
 
       const redirect =
         options.redirectTo ??
         (mode === "today" ? "/operations/today" : "/history");
-      router.push(
-        mode === "today"
-          ? "/operations/today"
-          : redirect
-      );
+      router.push(mode === "today" ? "/operations/today" : redirect);
+      return true;
+    } catch (error) {
+      setSaveError(getDataSourceErrorMessage(error));
+      setLastSavedAt(null);
+      return false;
     } finally {
+      submitInProgressRef.current = false;
       saveLockRef.current = false;
+      setIsSaving(false);
     }
   }
 
@@ -475,8 +455,7 @@ export function useEntryForm(options: UseEntryFormOptions = {}) {
         setIsSaving(false);
       }
     }
-    handleSave();
-    return true;
+    return handleSave();
   }
 
   function handleCancelDuplicate() {
