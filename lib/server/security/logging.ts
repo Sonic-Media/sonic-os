@@ -1,4 +1,5 @@
 import { ApiError } from "@/lib/api/errors";
+import { EnvValidationError } from "@/lib/env/validate";
 import { BootstrapFailedError } from "@/lib/server/bootstrap/types";
 import { ZodError } from "zod";
 
@@ -97,6 +98,59 @@ export function toPublicErrorMessage(error: unknown): {
           ? { stage: error.stage, stack: error.stack }
           : { stage: error.stage },
     };
+  }
+
+  if (error instanceof EnvValidationError) {
+    return {
+      status: 503,
+      code: "configuration_error",
+      message:
+        error.issues.length === 1
+          ? error.issues[0]!
+          : "Server configuration is incomplete.",
+      details:
+        process.env.NODE_ENV === "development" ? error.issues : undefined,
+    };
+  }
+
+  if (error instanceof Error) {
+    if (error.message.includes("SESSION_SECRET must be configured")) {
+      return {
+        status: 503,
+        code: "configuration_error",
+        message:
+          "SESSION_SECRET must be configured for this deployment (minimum 32 characters).",
+      };
+    }
+
+    if (error.message.includes("DATABASE_URL is not configured")) {
+      return {
+        status: 503,
+        code: "database_unavailable",
+        message: "Database is not configured.",
+      };
+    }
+
+    const prismaCode =
+      "code" in error && typeof error.code === "string" ? error.code : null;
+    if (prismaCode?.startsWith("P")) {
+      if (prismaCode === "P1001" || prismaCode === "P1000") {
+        return {
+          status: 503,
+          code: "database_unavailable",
+          message: "Unable to connect to the database.",
+        };
+      }
+
+      if (prismaCode === "P2021") {
+        return {
+          status: 503,
+          code: "database_unavailable",
+          message:
+            "Database schema is not ready. Run migrations before signing in.",
+        };
+      }
+    }
   }
 
   if (error instanceof ZodError) {
