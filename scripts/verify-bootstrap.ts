@@ -15,17 +15,18 @@ export interface CertificationCashier {
 export async function createCertificationCashier(
   owner: JsonClient,
   testPrefix: string,
-  branch = "main"
+  branch = "main",
+  role: "cashier" | "branch-manager" = "cashier"
 ): Promise<CertificationCashier> {
   const password = `${testPrefix}-pw`;
-  const username = `${testPrefix}-cashier`.slice(0, 48);
+  const username = `${testPrefix}-${role}`.slice(0, 48);
 
   const staff = await owner.json<{ id: string }>("/api/staff", {
     method: "POST",
     body: JSON.stringify({
-      name: `${testPrefix} Cashier`,
+      name: `${testPrefix} ${role}`,
       branch,
-      role: "cashier",
+      role,
       status: "active",
       dailyWage: 10000,
     }),
@@ -35,8 +36,8 @@ export async function createCertificationCashier(
     method: "POST",
     body: JSON.stringify({
       username,
-      displayName: `${testPrefix} Cashier`,
-      role: "cashier",
+      displayName: `${testPrefix} ${role}`,
+      role,
       branch,
       password,
       staffId: staff.id,
@@ -52,8 +53,41 @@ export async function createCertificationCashier(
 }
 
 export async function cleanupCertificationCashier(
-  cashier: CertificationCashier
+  cashier: CertificationCashier,
+  options?: { branch?: string; date?: string }
 ): Promise<void> {
+  const branchCode = options?.branch ?? "main";
+  const date = options?.date ?? new Date().toISOString().slice(0, 10);
+
+  await prisma.auditLogEntry
+    .deleteMany({
+      where: {
+        userId: cashier.staffId,
+        action: {
+          in: ["Start Shift", "Clock In", "Clock Out", "Open Shop"],
+        },
+      },
+    })
+    .catch(() => undefined);
+
+  const branch = await prisma.branch.findFirst({
+    where: { code: branchCode },
+    select: { id: true },
+  });
+
+  if (branch) {
+    await prisma.dayClosing
+      .deleteMany({
+        where: {
+          branchId: branch.id,
+          date,
+          openedBy: cashier.userId,
+          status: "open",
+        },
+      })
+      .catch(() => undefined);
+  }
+
   await prisma.session.deleteMany({ where: { userId: cashier.userId } }).catch(() => undefined);
   await prisma.user.delete({ where: { id: cashier.userId } }).catch(() => undefined);
   await prisma.staff.delete({ where: { id: cashier.staffId } }).catch(() => undefined);
