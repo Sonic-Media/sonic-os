@@ -54,7 +54,7 @@ export function getShopScheduleState(now = new Date()): ShopScheduleState {
     return {
       phase: "before-open",
       canOpen: false,
-      countdownLabel: "Shop opens in",
+      countdownLabel: "Opens in",
       targetTime: openToday,
       statusMessage: "Opening begins at 9:00 AM.",
       detailMessage: getOpeningHoursLabel(),
@@ -75,7 +75,7 @@ export function getShopScheduleState(now = new Date()): ShopScheduleState {
   return {
     phase: "after-close",
     canOpen: false,
-    countdownLabel: "Shop opens in",
+    countdownLabel: "Opens in",
     targetTime: atHour(now, SHOP_OPEN_HOUR, 1),
     statusMessage: "Today's business has ended.",
     detailMessage: "Next opening at 9:00 AM.",

@@ -9,6 +9,7 @@ import { ExpenseList } from "@/components/entry/expense-list";
 import { AccessorySalesSection } from "@/components/operations/accessory-sales-section";
 import { CashSummary } from "@/components/operations/cash-summary";
 import { OperationsClosingPanel } from "@/components/operations/operations-closing-panel";
+import { HistoricalStaffPaymentSection } from "@/components/operations/historical-staff-payment-section";
 import { StaffPaymentSection } from "@/components/operations/staff-payment-section";
 import type { EntryFormData, EntryStatus } from "@/types";
 
@@ -142,6 +143,8 @@ export function OperationsForm({
             onChange={(expenses) => updateField("expenses", expenses)}
             seedFromTemplates={seedCommonExpenses}
           />
+
+          <HistoricalStaffPaymentSection branch={form.branch} date={form.date} />
         </>
       )}
 
@@ -160,6 +163,7 @@ export function OperationsForm({
           totalExpenses={totalExpenses}
           staffPayouts={staffPayouts}
           netCash={netCash}
+          showStaffPayment={false}
           updateField={updateField}
         />
       )}

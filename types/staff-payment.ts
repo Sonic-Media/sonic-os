@@ -18,6 +18,8 @@ export interface StaffPaymentInput {
   paymentType: StaffPaymentType;
   paymentMethod: ExpensePaymentMethod;
   notes?: string;
+  /** When set, payment must belong to this branch (historical owner corrections). */
+  branch?: Branch;
 }
 
 export type StaffPayment = StaffPaymentRecord;
