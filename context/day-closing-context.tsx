@@ -22,7 +22,7 @@ import {
   resolveCashStatus,
 } from "@/lib/day-closing/calculations";
 import { canReopenDay } from "@/lib/day-closing/permissions";
-import { closeDayApi, fetchDayClosings, openDayApi, reopenDayApi } from "@/lib/api/day-closings";
+import { closeDayApi, fetchDayClosings, openWithShiftApi, reopenDayApi } from "@/lib/api/day-closings";
 import {
   getDataSourceErrorMessage,
   loadFromApi,
@@ -44,7 +44,7 @@ import { getTodayISO } from "@/lib/dates";
 import { toStaffFacingError } from "@/lib/ux/staff-messages";
 import { AUDIT_ACTIONS } from "@/lib/audit-log/constants";
 import { pickAuditFields } from "@/lib/audit-log/snapshots";
-import { recordStaffAction, resolveStaffByUserId } from "@/lib/staff/audit";
+import { recordStaffAction, resolveStaffByUserId, mergeStaffAuditRecords } from "@/lib/staff/audit";
 import { resolveStaffDisplayName } from "@/lib/ux/user-display";
 import type { Branch } from "@/types";
 import type {
@@ -255,7 +255,7 @@ export function DayClosingProvider({ children }: { children: React.ReactNode }) 
       try {
         const actorName = resolveStaffDisplayName(session, staff);
         const saved = await runOnApi(() =>
-          openDayApi({
+          openWithShiftApi({
             branch,
             date,
             openedBy: session.userId,
@@ -264,30 +264,25 @@ export function DayClosingProvider({ children }: { children: React.ReactNode }) 
         );
 
         persistClosings(
-          upsertDayClosingRecord(saved, closingsRef.current)
+          upsertDayClosingRecord(saved.dayClosing, closingsRef.current)
         );
 
-        const linkedStaff = resolveStaffByUserId(session.userId);
-
-        recordStaffAction({
-          staffId: linkedStaff?.id,
-          staffName: linkedStaff?.name ?? session.displayName,
-          role: linkedStaff?.role,
-          branch,
-          action: AUDIT_ACTIONS.OPEN_DAY,
-          module: "operations",
-          recordId: saved.id,
-          newValues: pickAuditFields(saved, [
-            "id",
-            "date",
-            "branch",
-            "openedAt",
-          ]),
-        });
+        mergeStaffAuditRecords([
+          {
+            id: saved.attendance.id,
+            timestamp: saved.attendance.timestamp,
+            staffId: saved.attendance.userId,
+            staffName: saved.attendance.userName,
+            role: saved.attendance.role as never,
+            branch: saved.attendance.branch,
+            action: saved.attendance.action,
+            module: saved.attendance.module as never,
+          },
+        ]);
 
         await refreshEntries();
 
-        return createValidationResult({}, saved);
+        return createValidationResult({}, saved.dayClosing);
       } catch (error) {
         return createValidationResult({
           form: toStaffFacingError(getDataSourceErrorMessage(error), {

@@ -21,13 +21,12 @@ import { useStaff } from "@/context/staff-context";
 import { useStaffAttendance } from "@/hooks/use-staff-attendance";
 import { useTodayISO } from "@/hooks/use-today-iso";
 import { useToast } from "@/context/toast-context";
+import { clockInApi } from "@/lib/api/staff-attendance";
+import { runOnApi } from "@/lib/data-source/context-api";
 import { canOpenShop } from "@/lib/day-closing/permissions";
 import { formatEntryDisplayDate } from "@/lib/dates";
-import {
-  formatClockTime,
-  recordStaffClockIn,
-  recordStaffStartShiftAttendance,
-} from "@/lib/staff/attendance";
+import { mergeStaffAuditRecords } from "@/lib/staff/audit";
+import { formatClockTime } from "@/lib/staff/attendance";
 import {
   formatGreetingTime,
   getDaysSinceLastShift,
@@ -154,29 +153,42 @@ export function OpenShopPage({
           return;
         }
 
-        const attendanceRecord = recordStaffStartShiftAttendance(activeBranch);
-        if (!attendanceRecord) {
-          setError(
-            "The branch opened, but we couldn't start your attendance session. Please try Clock In again."
-          );
-          return;
-        }
-
         toastSuccess("Shop Opened");
         setPhase("success");
         return;
       }
 
-      const clockInRecord = recordStaffClockIn(activeBranch);
-      if (!clockInRecord) {
-        setError(
-          "We couldn't record your clock-in. Please sign out and back in, then try again."
-        );
-        return;
-      }
+      const clockInRecord = await runOnApi(() =>
+        clockInApi({ branch: activeBranch, date: today })
+      );
+      mergeStaffAuditRecords([
+        {
+          id: clockInRecord.id,
+          timestamp: clockInRecord.timestamp,
+          staffId: clockInRecord.userId,
+          staffName: clockInRecord.userName,
+          role: clockInRecord.role as never,
+          branch: clockInRecord.branch,
+          action: clockInRecord.action,
+          module: clockInRecord.module as never,
+        },
+      ]);
 
       toastSuccess("Clocked In");
       setPhase("success");
+    } catch (caught) {
+      const message =
+        caught instanceof Error
+          ? caught.message
+          : isStartShift
+            ? "Could not open the shop."
+            : "Could not record your clock-in.";
+      setError(
+        toStaffFacingError(message, {
+          ownerName: settings.ownerName,
+          context: isStartShift ? "start-shift" : "general",
+        })
+      );
     } finally {
       setIsSubmitting(false);
     }
