@@ -31,6 +31,7 @@
     "verify:branch-isolation": "tsx scripts/verify-branch-isolation.ts",
     "verify:branch-operations": "tsx scripts/verify-branch-operations-isolation.ts",
     "verify:attendance": "tsx scripts/verify-attendance-flow.ts",
+    "verify:historical-staff-payment": "tsx scripts/verify-historical-staff-payment.ts",
     "db:studio": "prisma studio",
     "db:backup": "tsx scripts/backup-database.ts",
     "db:backup:schedule": "tsx scripts/scheduled-backup.ts",

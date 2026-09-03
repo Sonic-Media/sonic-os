@@ -19,6 +19,7 @@ import {
   loadFromApi,
   runOnApi,
 } from "@/lib/data-source/context-api";
+import { getTodayISO } from "@/lib/dates";
 import {
   DAY_CLOSED_EDIT_MESSAGE,
   isBranchDayClosed,
@@ -163,11 +164,15 @@ export function StaffPaymentsProvider({
         return createValidationResult({ staffId: "Staff member not found." });
       }
 
-      if (isBranchDayClosed(staff.branch, input.date)) {
-        return createValidationResult({ form: DAY_CLOSED_EDIT_MESSAGE });
-      }
-      if (!isBranchDayOpened(staff.branch, input.date)) {
-        return createValidationResult({ form: SHOP_NOT_OPENED_MESSAGE });
+      const isHistorical = input.date !== getTodayISO();
+
+      if (!isHistorical) {
+        if (isBranchDayClosed(staff.branch, input.date)) {
+          return createValidationResult({ form: DAY_CLOSED_EDIT_MESSAGE });
+        }
+        if (!isBranchDayOpened(staff.branch, input.date)) {
+          return createValidationResult({ form: SHOP_NOT_OPENED_MESSAGE });
+        }
       }
 
       try {
@@ -175,6 +180,7 @@ export function StaffPaymentsProvider({
           const payer = resolveCurrentStaffAction(staff.branch);
           const created = await createStaffPaymentApi({
             ...input,
+            branch: input.branch ?? staff.branch,
             paidBy: payer,
           });
           await refreshPaymentsFromApi();
@@ -222,11 +228,15 @@ export function StaffPaymentsProvider({
         return createValidationResult({ staffId: "Staff member not found." });
       }
 
-      if (isBranchDayClosed(staff.branch, input.date)) {
-        return createValidationResult({ form: DAY_CLOSED_EDIT_MESSAGE });
-      }
-      if (!isBranchDayOpened(staff.branch, input.date)) {
-        return createValidationResult({ form: SHOP_NOT_OPENED_MESSAGE });
+      const isHistorical = input.date !== getTodayISO();
+
+      if (!isHistorical) {
+        if (isBranchDayClosed(staff.branch, input.date)) {
+          return createValidationResult({ form: DAY_CLOSED_EDIT_MESSAGE });
+        }
+        if (!isBranchDayOpened(staff.branch, input.date)) {
+          return createValidationResult({ form: SHOP_NOT_OPENED_MESSAGE });
+        }
       }
 
       void (async () => {
@@ -235,6 +245,7 @@ export function StaffPaymentsProvider({
             const payer = resolveCurrentStaffAction(staff.branch);
             const created = await createStaffPaymentApi({
               ...input,
+              branch: input.branch ?? staff.branch,
               paidBy: payer,
             });
             await refreshPaymentsFromApi();
