@@ -14,16 +14,25 @@ import { getStaffAuditRecords } from "@/lib/staff/audit";
 import { getTodayISO } from "@/lib/dates";
 import type { Branch } from "@/types";
 
-export function useAllBranchesOperations(
+export interface AllBranchesOperationsState {
+  snapshots: BranchOperationsSnapshot[];
+  isReady: boolean;
+  hasMultipleBranches: boolean;
+}
+
+export function useAllBranchesOperationsState(
   dateISO: string = getTodayISO()
-): BranchOperationsSnapshot[] {
-  const { activeBranches } = useBranch();
-  const { closings, isLoaded } = useDayClosing();
+): AllBranchesOperationsState {
+  const { activeBranches, isLoaded: branchesLoaded } = useBranch();
+  const { closings, isLoaded: closingsLoaded } = useDayClosing();
   const { activeStaff } = useStaff();
   useStaffAttendance(dateISO);
 
-  return useMemo(() => {
-    if (!isLoaded) return [];
+  const isReady = branchesLoaded && closingsLoaded;
+  const hasMultipleBranches = activeBranches.length > 1;
+
+  const snapshots = useMemo(() => {
+    if (!isReady) return [];
 
     const auditRecords = getStaffAuditRecords();
     return activeBranches.map((branch) =>
@@ -35,7 +44,21 @@ export function useAllBranchesOperations(
         auditRecords
       )
     );
-  }, [activeBranches, activeStaff, closings, dateISO, isLoaded]);
+  }, [
+    activeBranches,
+    activeStaff,
+    closings,
+    dateISO,
+    isReady,
+  ]);
+
+  return { snapshots, isReady, hasMultipleBranches };
+}
+
+export function useAllBranchesOperations(
+  dateISO: string = getTodayISO()
+): BranchOperationsSnapshot[] {
+  return useAllBranchesOperationsState(dateISO).snapshots;
 }
 
 export function useBranchOperationsSnapshot(

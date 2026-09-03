@@ -1,12 +1,11 @@
 "use client";
 
-import { useActiveBranch } from "@/context/active-branch-context";
 import { useBranch } from "@/context/branch-context";
 import {
   formatBranchOperationsStatusLabel,
   type BranchOperationsStatus,
 } from "@/lib/branch/operations-state";
-import { useAllBranchesOperations } from "@/hooks/use-all-branches-operations";
+import { useAllBranchesOperationsState } from "@/hooks/use-all-branches-operations";
 import { formatClockTime } from "@/lib/staff/attendance";
 import { OwnerCard, OwnerSectionTitle } from "@/components/dashboard/owner/primitives";
 import { cn } from "@/lib/utils";
@@ -39,20 +38,47 @@ function staffWorkingLabel(
   return names;
 }
 
-export function MissionControlBranchOverview() {
-  const { activeBranch } = useActiveBranch();
-  const { getBranchName } = useBranch();
-  const snapshots = useAllBranchesOperations();
+function BranchOverviewSkeleton({ count = 2 }: { count?: number }) {
+  return (
+    <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+      {Array.from({ length: count }).map((_, index) => (
+        <OwnerCard key={index} className="p-6">
+          <div className="h-4 w-28 animate-pulse rounded bg-zinc-800" />
+          <div className="mt-4 h-6 w-36 animate-pulse rounded bg-zinc-800" />
+          <div className="mt-6 grid gap-4 sm:grid-cols-2">
+            <div className="h-12 animate-pulse rounded bg-zinc-900" />
+            <div className="h-12 animate-pulse rounded bg-zinc-900" />
+            <div className="h-12 animate-pulse rounded bg-zinc-900 sm:col-span-2" />
+          </div>
+        </OwnerCard>
+      ))}
+    </div>
+  );
+}
 
-  if (snapshots.length <= 1) {
+export function MissionControlBranchOverview() {
+  const {
+    activeBranch,
+    activeBranches,
+    getBranchName,
+    isLoaded: branchesLoaded,
+  } = useBranch();
+  const { snapshots, isReady } = useAllBranchesOperationsState();
+
+  if (branchesLoaded && activeBranches.length <= 1) {
     return null;
   }
+
+  const skeletonCount = Math.max(activeBranches.length, 2);
 
   return (
     <section className="space-y-4">
       <OwnerSectionTitle>All Branches</OwnerSectionTitle>
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        {snapshots.map((snapshot) => {
+      {!isReady ? (
+        <BranchOverviewSkeleton count={skeletonCount} />
+      ) : (
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          {snapshots.map((snapshot) => {
           const isSelected = snapshot.branch === activeBranch;
           const staffNames = snapshot.activeStaff.map((staff) => staff.staffName);
 
@@ -112,7 +138,8 @@ export function MissionControlBranchOverview() {
             </OwnerCard>
           );
         })}
-      </div>
+        </div>
+      )}
     </section>
   );
 }

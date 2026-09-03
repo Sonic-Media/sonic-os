@@ -5,11 +5,13 @@ import { Button } from "@/components/shared/ui/button";
 import { Card } from "@/components/shared/ui/card";
 import { useActiveBranch } from "@/context/active-branch-context";
 import { useStaffAttendance } from "@/hooks/use-staff-attendance";
+import { clockOutApi } from "@/lib/api/staff-attendance";
+import { runOnApi } from "@/lib/data-source/context-api";
 import {
   formatAttendanceHours,
   formatClockTime,
-  recordStaffClockOut,
 } from "@/lib/staff/attendance";
+import { mergeStaffAuditRecords } from "@/lib/staff/audit";
 import { formatRelativeTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -30,8 +32,25 @@ export function StaffAttendanceBar() {
 
   async function handleClockOut() {
     setIsClockingOut(true);
-    recordStaffClockOut(activeBranch);
-    setIsClockingOut(false);
+    try {
+      const record = await runOnApi(() =>
+        clockOutApi({ branch: activeBranch })
+      );
+      mergeStaffAuditRecords([
+        {
+          id: record.id,
+          timestamp: record.timestamp,
+          staffId: record.userId,
+          staffName: record.userName,
+          role: record.role as never,
+          branch: record.branch,
+          action: record.action,
+          module: record.module as never,
+        },
+      ]);
+    } finally {
+      setIsClockingOut(false);
+    }
   }
 
   if (!currentAttendance) return null;

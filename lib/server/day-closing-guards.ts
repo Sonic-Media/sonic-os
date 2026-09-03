@@ -8,8 +8,27 @@ import { isBranchDayClosed } from "@/lib/server/services/day-closings-service";
 import type { AuthSession } from "@/types/auth";
 import type { Branch } from "@/types";
 
+export function isHistoricalOperationsDate(date: string): boolean {
+  return date !== getTodayISO();
+}
+
 export function assertStaffOperationalRole(session: AuthSession): void {
   if (session.role === "owner") {
+    throw new ApiError("Owners cannot perform staff operational actions.", {
+      status: 403,
+      code: "forbidden",
+    });
+  }
+}
+
+/**
+ * Live-day staff actions stay staff-only. Historical corrections allow owners.
+ */
+export function assertStaffOperationalRoleForPayment(
+  session: AuthSession,
+  date: string
+): void {
+  if (session.role === "owner" && !isHistoricalOperationsDate(date)) {
     throw new ApiError("Owners cannot perform staff operational actions.", {
       status: 403,
       code: "forbidden",
