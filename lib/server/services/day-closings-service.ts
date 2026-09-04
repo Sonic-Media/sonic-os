@@ -9,7 +9,9 @@ import { migrateLegacyAuthRole } from "@/lib/staff/roles";
 import {
   getBranchIdByCode,
   getBranchCodeById,
+  getBranchIdForSession,
 } from "@/lib/server/branch-lookup";
+import { assertRecordInSessionBranchScope } from "@/lib/server/branch-record-guard";
 import { mapStaffToEntity } from "@/lib/server/mappers/entities";
 import { requireSession } from "@/lib/server/session";
 import { isRoleGreetingLabel } from "@/lib/ux/user-display";
@@ -246,9 +248,9 @@ async function ensureDailyOperationDraft(
 
 export async function openDay(input: unknown): Promise<DayClosingRecord> {
   const parsed = openDaySchema.parse(input);
-  const branchId = await getBranchIdByCode(parsed.branch);
   const session = await requireSession();
   assertCanOpenShop(session);
+  const branchId = await getBranchIdForSession(session, parsed.branch);
 
   const actor = await prisma.user.findUnique({
     where: { id: session.userId },
@@ -337,9 +339,9 @@ export async function openDay(input: unknown): Promise<DayClosingRecord> {
 
 export async function closeDay(input: unknown): Promise<DayClosingRecord> {
   const parsed = closeDaySchema.parse(input);
-  const branchId = await getBranchIdByCode(parsed.branch);
   const session = await requireSession();
   assertCanCloseDay(session);
+  const branchId = await getBranchIdForSession(session, parsed.branch);
   const summary = parsed.summary as unknown as DayClosingSummary;
 
   const existing = await prisma.dayClosing.findUnique({
@@ -444,8 +446,8 @@ export async function closeDay(input: unknown): Promise<DayClosingRecord> {
 
 export async function reopenDay(input: unknown): Promise<DayClosingRecord> {
   const parsed = reopenDaySchema.parse(input);
-  const branchId = await getBranchIdByCode(parsed.branch);
   const session = await requireSession();
+  const branchId = await getBranchIdForSession(session, parsed.branch);
 
   if (
     session.role !== "owner" &&

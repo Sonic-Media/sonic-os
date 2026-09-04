@@ -64,11 +64,12 @@ const saleInclude = {
 
 async function generateSaleInvoiceNumber(
   tx: Prisma.TransactionClient,
-  dateISO: string
+  dateISO: string,
+  branchId: string
 ): Promise<string> {
   const datePart = dateISO.replace(/-/g, "");
   const todayCount = await tx.sale.count({
-    where: { date: dateISO },
+    where: { date: dateISO, branchId },
   });
   return `INV-${datePart}-${String(todayCount + 1).padStart(4, "0")}`;
 }
@@ -193,7 +194,7 @@ export async function completeSale(sale: Sale): Promise<Sale> {
   const createdBy = sale.createdBy as StaffActionRecord | undefined;
 
   const created = await prisma.$transaction(async (tx) => {
-    const invoiceNumber = await generateSaleInvoiceNumber(tx, sale.date);
+    const invoiceNumber = await generateSaleInvoiceNumber(tx, sale.date, branchId);
 
     const productIds = [...new Set(sale.items.map((item) => item.productId))];
     const products = await tx.product.findMany({

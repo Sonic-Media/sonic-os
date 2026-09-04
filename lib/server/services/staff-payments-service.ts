@@ -2,7 +2,7 @@ import { randomUUID } from "crypto";
 import type { BranchIdFilter } from "@/lib/server/branch-scope";
 import { ApiError } from "@/lib/api/errors";
 import { prisma } from "@/lib/db";
-import { getBranchIdByCode } from "@/lib/server/branch-lookup";
+import { getBranchIdByCode, assertSessionCanAccessBranchCode } from "@/lib/server/branch-lookup";
 import { toJsonField } from "@/lib/server/json-fields";
 import { mapStaffPaymentToEntity } from "@/lib/server/mappers/entities";
 import {
@@ -74,6 +74,7 @@ export async function createStaffPayment(
 
   const session = await requireSession();
   assertStaffOperationalRole(session);
+  assertSessionCanAccessBranchCode(session, staff.branch.code);
 
   if (
     session.staffId &&

@@ -9,6 +9,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { useBranch } from "@/context/branch-context";
 import { useStock } from "@/context/stock-context";
 import { createPurchaseApi, fetchPurchases } from "@/lib/api/purchases";
 import {
@@ -96,6 +97,7 @@ export function PurchasingProvider({
   children: React.ReactNode;
 }) {
   const { isAuthenticated, isLoaded: authLoaded, session } = useAuth();
+  const { activeBranch } = useBranch();
   const { getProductById, refreshStockFromApi } = useStock();
 
   const [purchases, setPurchases] = useState<Purchase[]>([]);
@@ -103,6 +105,7 @@ export function PurchasingProvider({
   const [isLoaded, setIsLoaded] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const hasLoaded = useRef(false);
+  const lastFetchedBranch = useRef<string | null>(null);
   const purchaseInFlight = useRef(false);
   const purchasesRef = useRef(purchases);
   const suppliersRef = useRef(suppliers);
@@ -141,8 +144,12 @@ export function PurchasingProvider({
       return;
     }
 
-    if (hasLoaded.current) return;
+    if (hasLoaded.current && lastFetchedBranch.current === activeBranch) {
+      return;
+    }
+
     hasLoaded.current = true;
+    lastFetchedBranch.current = activeBranch;
 
     queueMicrotask(() => {
       void (async () => {
@@ -171,7 +178,7 @@ export function PurchasingProvider({
         }
       })();
     });
-  }, [authLoaded, isAuthenticated]);
+  }, [authLoaded, isAuthenticated, activeBranch]);
 
   const purchaseLookup = useMemo(
     () => new Map(purchases.map((purchase) => [purchase.id, purchase])),

@@ -4,6 +4,8 @@ import type { BranchIdFilter } from "@/lib/server/branch-scope";
 import { prisma } from "@/lib/db";
 import { Prisma } from "@/lib/prisma";
 import { getBranchIdForSession } from "@/lib/server/branch-lookup";
+import { assertRecordInSessionBranchScope } from "@/lib/server/branch-record-guard";
+import { isOwnerRole } from "@/lib/auth/validation";
 import { toJsonField } from "@/lib/server/json-fields";
 import {
   mapExpenseCategoryToEntity,
@@ -317,6 +319,10 @@ export async function updateExpense(
     });
   }
 
+  const session = await requireSession();
+  assertStaffOperationalRole(session);
+  await assertRecordInSessionBranchScope(session, existing.branchId);
+
   const mapped = mapExpenseRecordToEntity(existing);
   if (existing.staffPaymentId || isStaffPaymentExpense(mapped)) {
     throw new ApiError(
@@ -345,10 +351,15 @@ export async function updateExpense(
     });
   }
 
-  const session = await requireSession();
-  assertStaffOperationalRole(session);
   await assertBranchDayOpenForWrite(input.branch, input.date);
   const branchId = await getBranchIdForSession(session, input.branch);
+
+  if (!isOwnerRole(session.role) && existing.branchId !== branchId) {
+    throw new ApiError("Cannot move an expense to another branch.", {
+      status: 400,
+      code: "branch_mismatch",
+    });
+  }
 
   const record = await prisma.$transaction(async (tx) => {
     const updated = await tx.expenseRecord.update({
@@ -391,6 +402,10 @@ export async function deleteExpense(id: string): Promise<void> {
     });
   }
 
+  const session = await requireSession();
+  assertStaffOperationalRole(session);
+  await assertRecordInSessionBranchScope(session, existing.branchId);
+
   if (existing.staffPaymentId || isStaffPaymentCategory(existing.categoryId)) {
     throw new ApiError(
       "Staff payment expenses are managed in Staff Payments.",
@@ -398,8 +413,6 @@ export async function deleteExpense(id: string): Promise<void> {
     );
   }
 
-  const session = await requireSession();
-  assertStaffOperationalRole(session);
   assertDestructiveApiAllowed("Expense deletion");
   const branch = await getBranchCodeById(existing.branchId);
   await assertBranchDayOpenForWrite(branch, existing.date);
