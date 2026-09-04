@@ -110,13 +110,17 @@ export function DataProtectionSection() {
 
     try {
       const backup = await triggerBackupApi();
-      setSuccess(
-        `Backup created successfully (${formatBackupLabel(backup)}, ${formatBytes(backup.fileSizeBytes)}).`
-      );
-      await loadBackups();
+      if (backup.status === "failed") {
+        setError(backup.error ?? "Backup failed.");
+      } else {
+        setSuccess(
+          `Backup created successfully (${formatBackupLabel(backup)}, ${formatBytes(backup.fileSizeBytes)}).`
+        );
+      }
     } catch (caught) {
       setError(resolveErrorMessage(caught, "Backup failed."));
     } finally {
+      await loadBackups();
       setIsBackingUp(false);
     }
   }

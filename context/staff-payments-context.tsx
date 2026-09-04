@@ -9,6 +9,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { useBranch } from "@/context/branch-context";
 import { useStaff } from "@/context/staff-context";
 import {
   createStaffPaymentApi,
@@ -79,12 +80,14 @@ export function StaffPaymentsProvider({
 }: {
   children: React.ReactNode;
 }) {
+  const { activeBranch } = useBranch();
   const { getStaffById } = useStaff();
 
   const [payments, setPayments] = useState<StaffPaymentRecord[]>([]);
   const [isLoaded, setIsLoaded] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const hasLoaded = useRef(false);
+  const lastFetchedBranch = useRef<string | null>(null);
   const paymentsRef = useRef(payments);
 
   useEffect(() => {
@@ -92,8 +95,12 @@ export function StaffPaymentsProvider({
   }, [payments]);
 
   useEffect(() => {
-    if (hasLoaded.current) return;
+    if (hasLoaded.current && lastFetchedBranch.current === activeBranch) {
+      return;
+    }
+
     hasLoaded.current = true;
+    lastFetchedBranch.current = activeBranch;
 
     queueMicrotask(() => {
       void (async () => {
@@ -112,7 +119,7 @@ export function StaffPaymentsProvider({
         }
       })();
     });
-  }, []);
+  }, [activeBranch]);
 
   const refreshPaymentsFromApi = useCallback(async () => {
     const remote = await fetchStaffPayments();

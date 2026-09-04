@@ -29,6 +29,7 @@
     "verify:staff": "tsx scripts/verify-staff-module.ts",
     "verify:roles": "tsx scripts/verify-roles-permissions-module.ts",
     "verify:branch-isolation": "tsx scripts/verify-branch-isolation.ts",
+    "verify:backup-roundtrip": "tsx scripts/verify-backup-roundtrip.ts",
     "verify:branch-operations": "tsx scripts/verify-branch-operations-isolation.ts",
     "db:studio": "prisma studio",
     "db:backup": "tsx scripts/backup-database.ts",

@@ -84,11 +84,12 @@ function assertValidPurchaseInput(input: PurchaseInput): void {
 
 async function generatePurchaseInvoiceNumber(
   tx: Prisma.TransactionClient,
-  dateISO: string
+  dateISO: string,
+  branchId: string
 ): Promise<string> {
   const datePart = dateISO.replace(/-/g, "");
   const todayCount = await tx.purchase.count({
-    where: { date: dateISO },
+    where: { date: dateISO, branchId },
   });
   return `PUR-${datePart}-${String(todayCount + 1).padStart(4, "0")}`;
 }
@@ -278,7 +279,7 @@ export async function createPurchase(
   let purchaseId: string;
 
   await prisma.$transaction(async (tx) => {
-    const invoiceNumber = await generatePurchaseInvoiceNumber(tx, dateISO);
+    const invoiceNumber = await generatePurchaseInvoiceNumber(tx, dateISO, branchId);
     const { staffId, staffName } = await resolvePurchaseStaff(
       tx,
       createdBy,

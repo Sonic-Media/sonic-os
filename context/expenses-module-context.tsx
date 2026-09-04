@@ -9,6 +9,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { useBranch } from "@/context/branch-context";
 import {
   createExpenseApi,
   createExpenseCategoryApi,
@@ -109,11 +110,13 @@ export function ExpensesModuleProvider({
 }: {
   children: React.ReactNode;
 }) {
+  const { activeBranch } = useBranch();
   const [expenses, setExpenses] = useState<ExpenseRecord[]>([]);
   const [categories, setCategories] = useState<ExpenseCategory[]>([]);
   const [isLoaded, setIsLoaded] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const hasLoaded = useRef(false);
+  const lastFetchedBranch = useRef<string | null>(null);
   const expensesRef = useRef(expenses);
   const categoriesRef = useRef(categories);
 
@@ -145,8 +148,12 @@ export function ExpensesModuleProvider({
   }, []);
 
   useEffect(() => {
-    if (hasLoaded.current) return;
+    if (hasLoaded.current && lastFetchedBranch.current === activeBranch) {
+      return;
+    }
+
     hasLoaded.current = true;
+    lastFetchedBranch.current = activeBranch;
 
     queueMicrotask(() => {
       void (async () => {
@@ -175,7 +182,7 @@ export function ExpensesModuleProvider({
         }
       })();
     });
-  }, []);
+  }, [activeBranch]);
 
   const expenseLookup = useMemo(
     () => new Map(expenses.map((expense) => [expense.id, expense])),

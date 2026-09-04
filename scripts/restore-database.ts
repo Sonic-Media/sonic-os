@@ -25,7 +25,7 @@ function readCliArgs(): { inputPath: string; confirmed: boolean } {
 
   if (!inputPath) {
     throw new Error(
-      "Usage: npm run db:restore -- <backup-file.sql|backup-file.sql.gz> [--yes]"
+      "Usage: npm run db:restore -- <backup-file.sql|backup-file.sql.gz|backup-file.json|backup-file.json.gz> [--yes]"
     );
   }
 

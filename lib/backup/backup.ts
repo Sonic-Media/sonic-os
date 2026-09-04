@@ -261,6 +261,39 @@ export async function restoreDatabaseBackup(
   const config = getBackupConfig();
   const databaseUrl = requireDatabaseUrl();
   const connection = parseDatabaseUrl(databaseUrl);
+  const resolvedInput = path.resolve(options.inputPath);
+  const lower = resolvedInput.toLowerCase();
+
+  if (lower.endsWith(".json") || lower.endsWith(".json.gz")) {
+    const { decompressToFile } = await import("@/lib/backup/compress");
+    const { parseJsonBackupPayload, restoreDatabaseJson } = await import(
+      "@/lib/backup/json-import"
+    );
+    const fs = await import("node:fs");
+    const os = await import("node:os");
+
+    let jsonPath = resolvedInput;
+    let tempDir: string | undefined;
+
+    if (lower.endsWith(".json.gz")) {
+      tempDir = fs.mkdtempSync(path.join(os.tmpdir(), "sonic-os-restore-"));
+      jsonPath = path.join(tempDir, "restore.json");
+      await decompressToFile(resolvedInput, jsonPath);
+    }
+
+    try {
+      const raw = fs.readFileSync(jsonPath, "utf8");
+      const payload = parseJsonBackupPayload(raw);
+      await restoreDatabaseJson({ payload, clearExisting: true });
+    } finally {
+      if (tempDir) {
+        fs.rmSync(tempDir, { recursive: true, force: true });
+      }
+    }
+
+    return;
+  }
+
   const { restoreDatabaseSql } = await import("@/lib/backup/restore");
 
   await restoreDatabaseSql({

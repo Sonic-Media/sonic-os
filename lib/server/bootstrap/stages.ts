@@ -43,6 +43,7 @@ export async function runMigrationsVerifiedStage(): Promise<void> {
     ALTER TABLE "DayClosing" ADD COLUMN IF NOT EXISTS "openedBy" TEXT;
     ALTER TABLE "DayClosing" ADD COLUMN IF NOT EXISTS "openedByName" TEXT;
     ALTER TABLE "DayClosing" ADD COLUMN IF NOT EXISTS "openedAt" TIMESTAMP(3);
+    ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "lastLoginAt" TIMESTAMP(3);
   `;
 
   resetPrismaClientCache();

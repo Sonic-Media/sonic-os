@@ -18,6 +18,7 @@ import {
 } from "@/lib/api/customers";
 import { createSaleApi, fetchSales } from "@/lib/api/sales";
 import { useAuth } from "@/context/auth-context";
+import { useBranch } from "@/context/branch-context";
 import { roleHasModuleAccess } from "@/lib/staff/permissions";
 import {
   getDataSourceErrorMessage,
@@ -95,6 +96,7 @@ function createValidationResult(
 
 export function SalesProvider({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoaded: authLoaded, session } = useAuth();
+  const { activeBranch } = useBranch();
   const { getProductById, refreshStockFromApi, getBranchProductStock } = useStock();
   const canAccessStockModule =
     session !== null && roleHasModuleAccess(session.role, "stock");
@@ -104,6 +106,7 @@ export function SalesProvider({ children }: { children: React.ReactNode }) {
   const [isLoaded, setIsLoaded] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const hasLoaded = useRef(false);
+  const lastFetchedBranch = useRef<string | null>(null);
   const saleInFlight = useRef(false);
   const salesRef = useRef(sales);
   const customersRef = useRef(customers);
@@ -138,12 +141,17 @@ export function SalesProvider({ children }: { children: React.ReactNode }) {
       setCustomers([]);
       setLoadError(null);
       hasLoaded.current = false;
+      lastFetchedBranch.current = null;
       setIsLoaded(true);
       return;
     }
 
-    if (hasLoaded.current) return;
+    if (hasLoaded.current && lastFetchedBranch.current === activeBranch) {
+      return;
+    }
+
     hasLoaded.current = true;
+    lastFetchedBranch.current = activeBranch;
 
     queueMicrotask(() => {
       void (async () => {
@@ -172,7 +180,7 @@ export function SalesProvider({ children }: { children: React.ReactNode }) {
         }
       })();
     });
-  }, [authLoaded, isAuthenticated]);
+  }, [authLoaded, isAuthenticated, activeBranch]);
 
   const customerLookup = useMemo(
     () => new Map(customers.map((customer) => [customer.id, customer])),
