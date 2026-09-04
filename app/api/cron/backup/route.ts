@@ -44,6 +44,15 @@ export async function GET(request: Request) {
     ensureDatabaseConfigured();
 
     const backup = await triggerDatabaseBackup({ trigger: "scheduled" });
+
+    if (backup.status === "failed") {
+      throw new ApiError(backup.error ?? "Scheduled database backup failed.", {
+        status: 500,
+        code: "backup_failed",
+        details: { backupId: backup.id },
+      });
+    }
+
     return jsonOk(backup);
   } catch (error) {
     logCronBackupError(error);

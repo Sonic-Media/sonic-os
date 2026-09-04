@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import { stringifyJsonSafe } from "@/lib/backup/json-serialize";
 import { getAdminPrismaClient } from "@/lib/db/admin-prisma";
 import type { ParsedDatabaseUrl } from "@/lib/backup/database-url";
 
@@ -117,17 +118,13 @@ export async function exportDatabaseJson(
       AuditLogEntry: auditLogEntry,
       ActivityLog: activityLog,
       StaffPayment: staffPayment,
-      BackupRecord: backupRecord.map((record) => ({
-        ...record,
-        fileSizeBytes:
-          record.fileSizeBytes !== null ? Number(record.fileSizeBytes) : null,
-      })),
+      BackupRecord: backupRecord,
     },
   };
 
   fs.writeFileSync(
     options.outputPath,
-    `${JSON.stringify(payload, null, 2)}\n`,
+    `${stringifyJsonSafe(payload, 2)}\n`,
     "utf8"
   );
 
