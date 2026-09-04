@@ -17,6 +17,7 @@ import {
   resetPrismaClientCache,
 } from "@/lib/db";
 import { getTodayISO } from "@/lib/dates";
+import { deployPendingMigrations } from "@/lib/server/migrations/deploy";
 import { clearBranchLookupCache } from "@/lib/server/branch-lookup";
 import {
   DEFAULT_OWNER_DISPLAY_NAME,
@@ -39,10 +40,20 @@ export async function runDatabaseConnectionStage(): Promise<void> {
 }
 
 export async function runMigrationsVerifiedStage(): Promise<void> {
+  try {
+    await deployPendingMigrations();
+  } catch (error) {
+    console.error(
+      "[bootstrap] prisma migrate deploy failed, applying schema patches:",
+      error instanceof Error ? error.message : error
+    );
+  }
+
   await prisma.$executeRaw`
     ALTER TABLE "DayClosing" ADD COLUMN IF NOT EXISTS "openedBy" TEXT;
     ALTER TABLE "DayClosing" ADD COLUMN IF NOT EXISTS "openedByName" TEXT;
     ALTER TABLE "DayClosing" ADD COLUMN IF NOT EXISTS "openedAt" TIMESTAMP(3);
+    ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "lastLoginAt" TIMESTAMP(3);
   `;
 
   resetPrismaClientCache();

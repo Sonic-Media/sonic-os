@@ -136,6 +136,14 @@ export function validateEnvAtStartup(options?: {
         `SESSION_SECRET must be at least 32 characters when APP_ENV is "${appEnv}".`
       );
     }
+  } else if (
+    nodeEnv === "production" &&
+    databaseConfigured &&
+    !sessionSecretConfigured
+  ) {
+    issues.push(
+      "SESSION_SECRET is required when NODE_ENV is production and DATABASE_URL is configured."
+    );
   } else if (sessionSecretConfigured && (sessionSecret?.length ?? 0) < 32) {
     issues.push("SESSION_SECRET must be at least 32 characters when set.");
   }

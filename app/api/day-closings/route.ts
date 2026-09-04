@@ -5,6 +5,7 @@ import {
   closeDay,
   listDayClosings,
   openDay,
+  openWithShift,
   reopenDay,
 } from "@/lib/server/services/day-closings-service";
 
@@ -39,6 +40,14 @@ export async function POST(request: Request) {
         module: "operations",
       });
       return jsonCreated(record);
+    }
+
+    if (action === "open-with-shift") {
+      const result = await withDatabase(() => openWithShift(body), {
+        request,
+        module: "operations",
+      });
+      return jsonCreated(result);
     }
 
     const record = await withDatabase(() => closeDay(body), {

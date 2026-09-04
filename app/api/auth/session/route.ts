@@ -8,6 +8,7 @@ import {
   updateActiveBranchPreference,
   getActiveBranchPreference,
 } from "@/lib/server/services/auth-service";
+import { ensureApplicationInitialized } from "@/lib/server/bootstrap";
 import { isOwnerRole } from "@/lib/auth/validation";
 import { activeBranchSchema, loginSchema } from "@/lib/validation/auth";
 import { isDatabaseConfigured } from "@/lib/db";
@@ -46,6 +47,7 @@ export async function POST(request: Request) {
     const action = typeof body.action === "string" ? body.action : "login";
 
     if (action === "login") {
+      await ensureApplicationInitialized();
       const parsed = loginSchema.parse(body);
       const session = await login(parsed, request);
       return jsonOk({ session });
