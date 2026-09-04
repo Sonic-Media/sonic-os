@@ -4,6 +4,8 @@ import path from "node:path";
 
 export type BackupEngine = "pg_dump" | "json";
 
+const SERVERLESS_BACKUP_DIR = path.join("/tmp", "sonic-os-backups");
+
 export function isServerlessRuntime(): boolean {
   return Boolean(
     process.env.VERCEL ||
@@ -12,14 +14,34 @@ export function isServerlessRuntime(): boolean {
   );
 }
 
+function isEphemeralServerlessPath(dir: string): boolean {
+  const normalized = path.resolve(dir);
+  return (
+    normalized.startsWith("/var/task") ||
+    normalized.startsWith(path.resolve(process.cwd(), "backups"))
+  );
+}
+
+/**
+ * On serverless, backups are persisted in BackupRecord.payload (Neon).
+ * BACKUP_DIR is only used for temporary export files and must be writable (/tmp).
+ */
 export function resolveRuntimeBackupDir(): string {
+  if (isServerlessRuntime()) {
+    const configured = process.env.BACKUP_DIR?.trim();
+    if (configured) {
+      const resolved = path.resolve(configured);
+      if (!isEphemeralServerlessPath(resolved)) {
+        return resolved;
+      }
+    }
+
+    return SERVERLESS_BACKUP_DIR;
+  }
+
   const configured = process.env.BACKUP_DIR?.trim();
   if (configured) {
     return path.resolve(configured);
-  }
-
-  if (isServerlessRuntime()) {
-    return path.join("/tmp", "sonic-os-backups");
   }
 
   return path.resolve(process.cwd(), "backups");

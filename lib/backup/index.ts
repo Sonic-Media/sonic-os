@@ -4,6 +4,7 @@ export { getBackupConfig, requireDatabaseUrl } from "@/lib/backup/config";
 export type { BackupConfig } from "@/lib/backup/config";
 export { parseDatabaseUrl, sanitizeDatabaseName } from "@/lib/backup/database-url";
 export type { ParsedDatabaseUrl } from "@/lib/backup/database-url";
+export { stringifyJsonSafe, bigIntJsonReplacer } from "@/lib/backup/json-serialize";
 export { exportDatabaseJson } from "@/lib/backup/json-export";
 export {
   ensureBackupDirectory,
