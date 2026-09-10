@@ -21,8 +21,8 @@ export async function importDailyOperationsApi(
 
 export async function bulkDeleteDailyOperationsApi(
   ids: string[]
-): Promise<{ count: number }> {
-  return apiPost<{ count: number }>("/api/daily-operations/bulk-delete", {
+): Promise<{ deleted: number }> {
+  return apiPost<{ deleted: number }>("/api/daily-operations/bulk-delete", {
     ids,
   });
 }

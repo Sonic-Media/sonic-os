@@ -2,7 +2,10 @@ import { randomUUID } from "crypto";
 import { ApiError } from "@/lib/api/errors";
 import type { BranchIdFilter } from "@/lib/server/branch-scope";
 import { prisma } from "@/lib/db";
-import { getBranchIdByCode } from "@/lib/server/branch-lookup";
+import {
+  assertSessionCanAccessBranchCode,
+  getBranchIdByCode,
+} from "@/lib/server/branch-lookup";
 import { toJsonField } from "@/lib/server/json-fields";
 import { mapDailyOperationToEntry } from "@/lib/server/mappers/entities";
 import {
@@ -168,7 +171,11 @@ export async function upsertDailyOperation(entry: Entry): Promise<Entry> {
 }
 
 export async function deleteDailyOperation(id: string): Promise<void> {
-  const existing = await prisma.dailyOperation.findUnique({ where: { id } });
+  const session = await requireSession();
+  const existing = await prisma.dailyOperation.findUnique({
+    where: { id },
+    include: { branch: true },
+  });
   if (!existing) {
     throw new ApiError("Daily operation not found.", {
       status: 404,
@@ -176,6 +183,7 @@ export async function deleteDailyOperation(id: string): Promise<void> {
     });
   }
 
+  assertSessionCanAccessBranchCode(session, existing.branch.code);
   await prisma.dailyOperation.delete({ where: { id } });
 }
 
@@ -253,9 +261,35 @@ export async function removeDailyOperationsByIds(
 ): Promise<number> {
   if (ids.length === 0) return 0;
 
-  const result = await prisma.dailyOperation.deleteMany({
-    where: { id: { in: ids } },
+  const session = await requireSession();
+  const uniqueIds = [...new Set(ids)];
+
+  const operations = await prisma.dailyOperation.findMany({
+    where: { id: { in: uniqueIds } },
+    include: { branch: true },
   });
+
+  if (operations.length !== uniqueIds.length) {
+    throw new ApiError("One or more daily operations were not found.", {
+      status: 404,
+      code: "not_found",
+    });
+  }
+
+  for (const operation of operations) {
+    assertSessionCanAccessBranchCode(session, operation.branch.code);
+  }
+
+  const result = await prisma.dailyOperation.deleteMany({
+    where: { id: { in: uniqueIds } },
+  });
+
+  if (result.count !== uniqueIds.length) {
+    throw new ApiError("Failed to delete all requested daily operations.", {
+      status: 500,
+      code: "delete_failed",
+    });
+  }
 
   return result.count;
 }

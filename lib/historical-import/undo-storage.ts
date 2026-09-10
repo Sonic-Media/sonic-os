@@ -6,6 +6,7 @@ import {
 } from "@/lib/safe-storage";
 import type { ImportUndoSnapshot } from "@/types/historical-import";
 
+/** UI metadata only — entry IDs here are never treated as delete authorization. */
 export function getImportUndoSnapshot(): ImportUndoSnapshot | null {
   if (typeof window === "undefined") return null;
 

@@ -25,6 +25,12 @@ import {
 import { upsertEntryInList } from "@/lib/storage";
 import type { Entry } from "@/types";
 
+export type RemoveEntriesByIdsResult = {
+  success: boolean;
+  removedCount: number;
+  error?: string;
+};
+
 interface EntriesContextValue {
   entries: Entry[];
   isLoaded: boolean;
@@ -33,7 +39,7 @@ interface EntriesContextValue {
   upsertEntry: (entry: Entry) => Promise<Entry>;
   deleteEntry: (id: string) => void;
   importEntries: (entries: Entry[]) => Promise<Entry[]>;
-  removeEntriesByIds: (ids: string[]) => number;
+  removeEntriesByIds: (ids: string[]) => Promise<RemoveEntriesByIdsResult>;
 }
 
 const EntriesContext = createContext<EntriesContextValue | null>(null);
@@ -45,6 +51,7 @@ export function EntriesProvider({ children }: { children: React.ReactNode }) {
   const [loadError, setLoadError] = useState<string | null>(null);
   const hasLoaded = useRef(false);
   const entriesRef = useRef<Entry[]>([]);
+  const removeEntriesInFlight = useRef(false);
 
   useEffect(() => {
     entriesRef.current = entries;
@@ -134,30 +141,53 @@ export function EntriesProvider({ children }: { children: React.ReactNode }) {
     return saved;
   }, []);
 
-  const removeEntriesByIds = useCallback((ids: string[]): number => {
-    if (ids.length === 0) return 0;
-
-    const idSet = new Set(ids);
-    const previous = entriesRef.current;
-    const next = previous.filter((entry) => !idSet.has(entry.id));
-    const removedCount = previous.length - next.length;
-
-    if (removedCount === 0) return 0;
-
-    void (async () => {
-      try {
-        await runOnApi(async () => {
-          await bulkDeleteDailyOperationsApi(ids);
-          entriesRef.current = next;
-          setEntries(next);
-        });
-      } catch (error) {
-        console.error(getDataSourceErrorMessage(error));
+  const removeEntriesByIds = useCallback(
+    async (ids: string[]): Promise<RemoveEntriesByIdsResult> => {
+      if (ids.length === 0) {
+        return { success: true, removedCount: 0 };
       }
-    })();
 
-    return removedCount;
-  }, []);
+      if (removeEntriesInFlight.current) {
+        return {
+          success: false,
+          removedCount: 0,
+          error: "An undo is already in progress.",
+        };
+      }
+
+      const uniqueIds = [...new Set(ids)];
+
+      removeEntriesInFlight.current = true;
+
+      try {
+        const deletedCount = await runOnApi(async () => {
+          const response = await bulkDeleteDailyOperationsApi(uniqueIds);
+          if (response.deleted !== uniqueIds.length) {
+            throw new Error(
+              `Expected to delete ${uniqueIds.length} records but deleted ${response.deleted}.`
+            );
+          }
+          return response.deleted;
+        });
+
+        const idSet = new Set(uniqueIds);
+        const next = entriesRef.current.filter((entry) => !idSet.has(entry.id));
+        entriesRef.current = next;
+        setEntries(next);
+
+        return { success: true, removedCount: deletedCount };
+      } catch (error) {
+        return {
+          success: false,
+          removedCount: 0,
+          error: getDataSourceErrorMessage(error),
+        };
+      } finally {
+        removeEntriesInFlight.current = false;
+      }
+    },
+    []
+  );
 
   const value = useMemo(
     () => ({
