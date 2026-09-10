@@ -11,6 +11,7 @@ import type { EntryFormData, EntryStatus } from "@/types";
 interface EntryFormProps {
   form: EntryFormData;
   isSaving: boolean;
+  saveError?: string | null;
   sales: number;
   totalExpenses: number;
   balance: number;
@@ -22,12 +23,13 @@ interface EntryFormProps {
     key: K,
     value: EntryFormData[K]
   ) => void;
-  onSubmit: () => void;
+  onSubmit: () => void | Promise<unknown>;
 }
 
 export function EntryForm({
   form,
   isSaving,
+  saveError,
   sales,
   totalExpenses,
   balance,
@@ -42,7 +44,7 @@ export function EntryForm({
     <form
       onSubmit={(e) => {
         e.preventDefault();
-        onSubmit();
+        void onSubmit();
       }}
       className="space-y-6"
     >
@@ -79,6 +81,10 @@ export function EntryForm({
         value={form.notes}
         onChange={(e) => updateField("notes", e.target.value)}
       />
+
+      {saveError ? (
+        <p className="text-sm text-red-400">{saveError}</p>
+      ) : null}
 
       <Button
         type="submit"
