@@ -4,8 +4,60 @@
 **Milestone:** Data Integrity — Close Day  
 **Branch:** `cursor/close-day-date-fix-b6e7`  
 **Pull Request:** https://github.com/Sonic-Media/sonic-os/pull/20  
-**Prior diagnostic:** `docs/CLOSE-DAY-BUG-DIAGNOSTIC.md`  
-**Final status:** **PASS**
+**Prior diagnostic:** `docs/CLOSE-DAY-BUG-DIAGNOSTIC.md`
+
+---
+
+## PHASE 1 CLOSE-DAY BUG FIX REPORT (CERTIFICATION FORMAT)
+
+**STATUS:** PASS
+
+### BUG A — BUSINESS DATE ROLLOVER
+
+**BEFORE:** Open Day stored `DayClosing.date` via `getTodayISO()`. Close Day called `getTodayISO()` again independently. After midnight (e.g. Uganda), browser date became `2026-09-11` while open record remained `2026-09-10` → *"Start today's shift before closing the day."*
+
+**AFTER:** Client and server resolve the active open business day from PostgreSQL. Close uses persisted `DayClosing.date`, not a fresh calendar date.
+
+**BUSINESS DATE SOURCE:** Earliest open `DayClosing` for the authorized branch (`status=open`, `openedAt`/`reopenedAt` set). Server: `resolveOpenBusinessDateForClose()`. Client: `getActiveOpenDayRecord()`. Client date is hint only.
+
+**AFTER-MIDNIGHT BEHAVIOR:** Open `2019-06-20`, close hint `2019-06-21` → closes `2019-06-20`. No spurious `2019-06-21` DayClosing created.
+
+### BUG B — POST-CLOSE DUPLICATE WRITE
+
+**BEFORE:** After successful `closeDayApi()`, client called `upsertEntry(buildClosedDayDailyOperationEntry(...))`. Server had already synced DailyOperation in `closeDay()` → 409 `day_closed` → UI reported failure despite PostgreSQL CLOSED.
+
+**AFTER:** On success: `closeDayApi()` → `refreshClosingsFromApi()` → `refreshEntries()` → success. No redundant post-close write.
+
+**SERVER CLOSE RESULT:** `closeDay()` → `syncClosedDayDailyOperation()` → `DayClosing.status = "closed"`.
+
+**CLIENT CLOSE RESULT:** Success when API succeeds; no follow-up upsert.
+
+**STAFF PAYOUT SEQUENCING:** Preserved Fix #3 — validate → payouts → `closeDayApi()` → refresh → success. Payouts use `businessDate`.
+
+**BRANCH ISOLATION:** Preserved. Salaama cannot close Kansanga (403). Kansanga cannot close Salaama (403). Owner switching and staff branch restriction unchanged.
+
+**POSTGRESQL AUTHORITY:** Preserved from Fix #9. Server resolves from PostgreSQL; client cache refreshed from API only. `assertBranchDayOpenForWrite` not weakened.
+
+**SAME-DAY TEST:** Open `2019-06-10`, close `2019-06-10` → CLOSED. PASS.
+
+**AFTER-MIDNIGHT TEST:** Open `2019-06-20`, close hint `2019-06-21` → `2019-06-20` CLOSED, no next-day record. PASS.
+
+**POST-CLOSE WRITE TEST:** Close succeeds; server DailyOperation synced; redundant write 409; no client upsert after close. PASS.
+
+**FAILURE TEST:** Close without open → 400 failure; day remains unopened. PASS.
+
+**FILES CHANGED:** `lib/day-closing/business-date.ts`, `lib/day-closing/storage.ts`, `lib/server/services/day-closings-service.ts`, `context/day-closing-context.tsx`, `components/operations/close-day-workspace.tsx`, `hooks/use-staff-close-day.ts`, `scripts/verify-close-day-date-consistency.ts`, `package.json`, `docs/PHASE-1-CLOSE-DAY-BUG-FIX.md`
+
+**SCHEMA CHANGED:** NO  
+**MIGRATIONS CHANGED:** NO  
+**PRODUCTION DATA TOUCHED:** NO  
+**TYPESCRIPT:** PASS  
+**BUILD:** PASS  
+**ESLINT:** FAIL (pre-existing `set-state-in-effect` only; no new issues from this fix)
+
+**TEST RESULTS:** `npm run verify:close-day-date` — 16/16 PASS | `npx tsc --noEmit` — PASS | `npm run build` — PASS
+
+**FINAL RESULT:** PASS
 
 ---
 
