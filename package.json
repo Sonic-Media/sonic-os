@@ -22,6 +22,7 @@
     "verify:stock": "tsx scripts/verify-stock-module.ts",
     "verify:sales": "tsx scripts/verify-sales-module.ts",
     "verify:expenses": "tsx scripts/verify-expenses-module.ts",
+    "verify:expense-branch-ownership": "tsx scripts/verify-expense-branch-ownership.ts",
     "verify:purchasing": "tsx scripts/verify-purchasing-module.ts",
     "verify:operations": "tsx scripts/verify-daily-operations-module.ts",
     "verify:historical-import": "tsx scripts/verify-historical-import.ts",
