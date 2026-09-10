@@ -25,6 +25,7 @@
     "verify:purchasing": "tsx scripts/verify-purchasing-module.ts",
     "verify:operations": "tsx scripts/verify-daily-operations-module.ts",
     "verify:historical-import": "tsx scripts/verify-historical-import.ts",
+    "verify:day-closing-live-db": "tsx scripts/verify-day-closing-live-db.ts",
     "verify:users": "tsx scripts/verify-users-module.ts",
     "verify:staff": "tsx scripts/verify-staff-module.ts",
     "verify:roles": "tsx scripts/verify-roles-permissions-module.ts",
