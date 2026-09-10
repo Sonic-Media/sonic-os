@@ -8,7 +8,10 @@ import {
   getActiveStaffAttendance,
   isStaffOnShift,
 } from "@/lib/staff/attendance";
-import { getBranchIdByCode } from "@/lib/server/branch-lookup";
+import {
+  getBranchIdByCode,
+  getBranchIdForSession,
+} from "@/lib/server/branch-lookup";
 import {
   createAuditLogEntry,
   listStaffAttendanceEntries,
@@ -106,8 +109,12 @@ async function fetchBranchAttendanceAudit(
   );
 }
 
-async function assertBranchDayOpen(branch: Branch, date: string): Promise<void> {
-  const branchId = await getBranchIdByCode(branch);
+async function assertBranchDayOpen(
+  session: Awaited<ReturnType<typeof requireSession>>,
+  branch: Branch,
+  date: string
+): Promise<void> {
+  const branchId = await getBranchIdForSession(session, branch);
   const record = await prisma.dayClosing.findUnique({
     where: {
       branchId_date: {
@@ -213,6 +220,7 @@ export async function recordAttendanceAction(
   const branch = parsed.branch as Branch;
   const session = await requireSession();
   assertStaffOperationalRole(session);
+  await getBranchIdForSession(session, branch);
 
   const linkedStaff = await getLinkedStaffForUser(session.userId);
   if (!linkedStaff) {
@@ -228,7 +236,7 @@ export async function recordAttendanceAction(
   ).map(mapAuditToStaffRecord);
 
   if (parsed.action === "clock-in") {
-    await assertBranchDayOpen(branch, date);
+    await assertBranchDayOpen(session, branch, date);
 
     if (isStaffOnShift(linkedStaff.id, branch, date, auditRecords)) {
       throw new ApiError("You are already on shift.", {

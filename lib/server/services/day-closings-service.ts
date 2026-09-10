@@ -9,6 +9,7 @@ import { migrateLegacyAuthRole } from "@/lib/staff/roles";
 import {
   getBranchIdByCode,
   getBranchCodeById,
+  getBranchIdForSession,
 } from "@/lib/server/branch-lookup";
 import { mapStaffToEntity } from "@/lib/server/mappers/entities";
 import { requireSession } from "@/lib/server/session";
@@ -199,6 +200,7 @@ async function ensureDailyOperationDraft(
   date: string,
   session: Awaited<ReturnType<typeof requireSession>>
 ) {
+  await getBranchIdForSession(session, branch);
   const branchId = await getBranchIdByCode(branch);
   const existing = await prisma.dailyOperation.findUnique({
     where: {
@@ -253,9 +255,9 @@ async function ensureDailyOperationDraft(
 
 export async function openDay(input: unknown): Promise<DayClosingRecord> {
   const parsed = openDaySchema.parse(input);
-  const branchId = await getBranchIdByCode(parsed.branch);
   const session = await requireSession();
   assertCanOpenShop(session);
+  const branchId = await getBranchIdForSession(session, parsed.branch);
 
   const actor = await prisma.user.findUnique({
     where: { id: session.userId },
@@ -349,10 +351,10 @@ export interface OpenWithShiftResult {
 
 export async function openWithShift(input: unknown): Promise<OpenWithShiftResult> {
   const parsed = openDaySchema.parse(input);
-  const branchId = await getBranchIdByCode(parsed.branch);
   const session = await requireSession();
   assertCanOpenShop(session);
   assertStaffOperationalRole(session);
+  const branchId = await getBranchIdForSession(session, parsed.branch);
 
   const linkedStaff = await getLinkedStaffForUser(session.userId);
   if (!linkedStaff) {
@@ -472,9 +474,9 @@ export async function openWithShift(input: unknown): Promise<OpenWithShiftResult
 
 export async function closeDay(input: unknown): Promise<DayClosingRecord> {
   const parsed = closeDaySchema.parse(input);
-  const branchId = await getBranchIdByCode(parsed.branch);
   const session = await requireSession();
   assertCanCloseDay(session);
+  const branchId = await getBranchIdForSession(session, parsed.branch);
   const summary = parsed.summary as unknown as DayClosingSummary;
 
   const existing = await prisma.dayClosing.findUnique({
@@ -595,8 +597,8 @@ export async function closeDay(input: unknown): Promise<DayClosingRecord> {
 
 export async function reopenDay(input: unknown): Promise<DayClosingRecord> {
   const parsed = reopenDaySchema.parse(input);
-  const branchId = await getBranchIdByCode(parsed.branch);
   const session = await requireSession();
+  const branchId = await getBranchIdForSession(session, parsed.branch);
 
   if (
     session.role !== "owner" &&
