@@ -30,7 +30,6 @@ import {
   beginBranchScopedFetch,
   resetBranchScopedFetchRefs,
   shouldSkipBranchScopedFetch,
-  type BranchScopedLoadRefs,
 } from "@/lib/context/branch-scoped-load";
 import type { Branch } from "@/types";
 import { getTodayISO } from "@/lib/dates";
@@ -126,10 +125,6 @@ export function ExpensesModuleProvider({
   const [loadError, setLoadError] = useState<string | null>(null);
   const hasLoaded = useRef(false);
   const lastFetchedBranch = useRef<Branch | null>(null);
-  const branchLoadRefs = useRef<BranchScopedLoadRefs>({
-    hasLoaded,
-    lastFetchedBranch,
-  }).current;
   const expensesRef = useRef(expenses);
   const categoriesRef = useRef(categories);
 
@@ -169,16 +164,20 @@ export function ExpensesModuleProvider({
       setCategories([]);
       setExpenses([]);
       setLoadError(null);
-      resetBranchScopedFetchRefs(branchLoadRefs);
+      resetBranchScopedFetchRefs(hasLoaded, lastFetchedBranch);
       setIsLoaded(true);
       return;
     }
 
-    if (shouldSkipBranchScopedFetch(branchLoadRefs, activeBranch)) {
+    if (shouldSkipBranchScopedFetch(hasLoaded, lastFetchedBranch, activeBranch)) {
       return;
     }
 
-    const branchChanged = beginBranchScopedFetch(branchLoadRefs, activeBranch);
+    const branchChanged = beginBranchScopedFetch(
+      hasLoaded,
+      lastFetchedBranch,
+      activeBranch
+    );
     if (branchChanged) {
       expensesRef.current = [];
       setExpenses([]);
@@ -215,7 +214,7 @@ export function ExpensesModuleProvider({
         }
       })();
     });
-  }, [authLoaded, isAuthenticated, activeBranch, branchLoadRefs]);
+  }, [authLoaded, isAuthenticated, activeBranch]);
 
   const expenseLookup = useMemo(
     () => new Map(expenses.map((expense) => [expense.id, expense])),

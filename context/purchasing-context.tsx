@@ -49,7 +49,6 @@ import {
   beginBranchScopedFetch,
   resetBranchScopedFetchRefs,
   shouldSkipBranchScopedFetch,
-  type BranchScopedLoadRefs,
 } from "@/lib/context/branch-scoped-load";
 import type { Branch } from "@/types";
 import {
@@ -113,10 +112,6 @@ export function PurchasingProvider({
   const [loadError, setLoadError] = useState<string | null>(null);
   const hasLoaded = useRef(false);
   const lastFetchedBranch = useRef<Branch | null>(null);
-  const branchLoadRefs = useRef<BranchScopedLoadRefs>({
-    hasLoaded,
-    lastFetchedBranch,
-  }).current;
   const purchaseInFlight = useRef(false);
   const purchasesRef = useRef(purchases);
   const suppliersRef = useRef(suppliers);
@@ -150,16 +145,20 @@ export function PurchasingProvider({
       setPurchases([]);
       setSuppliers([]);
       setLoadError(null);
-      resetBranchScopedFetchRefs(branchLoadRefs);
+      resetBranchScopedFetchRefs(hasLoaded, lastFetchedBranch);
       setIsLoaded(true);
       return;
     }
 
-    if (shouldSkipBranchScopedFetch(branchLoadRefs, activeBranch)) {
+    if (shouldSkipBranchScopedFetch(hasLoaded, lastFetchedBranch, activeBranch)) {
       return;
     }
 
-    const branchChanged = beginBranchScopedFetch(branchLoadRefs, activeBranch);
+    const branchChanged = beginBranchScopedFetch(
+      hasLoaded,
+      lastFetchedBranch,
+      activeBranch
+    );
     if (branchChanged) {
       purchasesRef.current = [];
       suppliersRef.current = [];
@@ -200,7 +199,7 @@ export function PurchasingProvider({
         }
       })();
     });
-  }, [authLoaded, isAuthenticated, activeBranch, branchLoadRefs]);
+  }, [authLoaded, isAuthenticated, activeBranch]);
 
   const purchaseLookup = useMemo(
     () => new Map(purchases.map((purchase) => [purchase.id, purchase])),

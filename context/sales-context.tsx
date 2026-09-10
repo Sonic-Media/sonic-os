@@ -23,7 +23,6 @@ import {
   beginBranchScopedFetch,
   resetBranchScopedFetchRefs,
   shouldSkipBranchScopedFetch,
-  type BranchScopedLoadRefs,
 } from "@/lib/context/branch-scoped-load";
 import type { Branch } from "@/types";
 import { roleHasModuleAccess } from "@/lib/staff/permissions";
@@ -114,10 +113,6 @@ export function SalesProvider({ children }: { children: React.ReactNode }) {
   const [loadError, setLoadError] = useState<string | null>(null);
   const hasLoaded = useRef(false);
   const lastFetchedBranch = useRef<Branch | null>(null);
-  const branchLoadRefs = useRef<BranchScopedLoadRefs>({
-    hasLoaded,
-    lastFetchedBranch,
-  }).current;
   const saleInFlight = useRef(false);
   const salesRef = useRef(sales);
   const customersRef = useRef(customers);
@@ -151,16 +146,20 @@ export function SalesProvider({ children }: { children: React.ReactNode }) {
       setSales([]);
       setCustomers([]);
       setLoadError(null);
-      resetBranchScopedFetchRefs(branchLoadRefs);
+      resetBranchScopedFetchRefs(hasLoaded, lastFetchedBranch);
       setIsLoaded(true);
       return;
     }
 
-    if (shouldSkipBranchScopedFetch(branchLoadRefs, activeBranch)) {
+    if (shouldSkipBranchScopedFetch(hasLoaded, lastFetchedBranch, activeBranch)) {
       return;
     }
 
-    const branchChanged = beginBranchScopedFetch(branchLoadRefs, activeBranch);
+    const branchChanged = beginBranchScopedFetch(
+      hasLoaded,
+      lastFetchedBranch,
+      activeBranch
+    );
     if (branchChanged) {
       salesRef.current = [];
       customersRef.current = [];
@@ -201,7 +200,7 @@ export function SalesProvider({ children }: { children: React.ReactNode }) {
         }
       })();
     });
-  }, [authLoaded, isAuthenticated, activeBranch, branchLoadRefs]);
+  }, [authLoaded, isAuthenticated, activeBranch]);
 
   const customerLookup = useMemo(
     () => new Map(customers.map((customer) => [customer.id, customer])),

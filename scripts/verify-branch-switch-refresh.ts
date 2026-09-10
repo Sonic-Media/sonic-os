@@ -7,7 +7,6 @@ import {
   beginBranchScopedFetch,
   resetBranchScopedFetchRefs,
   shouldSkipBranchScopedFetch,
-  type BranchScopedLoadRefs,
 } from "@/lib/context/branch-scoped-load";
 import type { Branch } from "@/types";
 import {
@@ -131,17 +130,13 @@ function scanContextsForBranchRefresh(): void {
 function testBranchScopedLoadHelpers(): void {
   const hasLoaded = { current: false };
   const lastFetchedBranch = { current: null as Branch | null };
-  const refs: BranchScopedLoadRefs = {
-    hasLoaded,
-    lastFetchedBranch,
-  };
 
-  assert.equal(shouldSkipBranchScopedFetch(refs, "main"), false);
-  assert.equal(beginBranchScopedFetch(refs, "main"), false);
-  assert.equal(shouldSkipBranchScopedFetch(refs, "main"), true);
-  assert.equal(beginBranchScopedFetch(refs, "salaama"), true);
-  resetBranchScopedFetchRefs(refs);
-  assert.equal(shouldSkipBranchScopedFetch(refs, "main"), false);
+  assert.equal(shouldSkipBranchScopedFetch(hasLoaded, lastFetchedBranch, "main"), false);
+  assert.equal(beginBranchScopedFetch(hasLoaded, lastFetchedBranch, "main"), false);
+  assert.equal(shouldSkipBranchScopedFetch(hasLoaded, lastFetchedBranch, "main"), true);
+  assert.equal(beginBranchScopedFetch(hasLoaded, lastFetchedBranch, "salaama"), true);
+  resetBranchScopedFetchRefs(hasLoaded, lastFetchedBranch);
+  assert.equal(shouldSkipBranchScopedFetch(hasLoaded, lastFetchedBranch, "main"), false);
 
   recordCheck(
     6,
@@ -166,14 +161,6 @@ function buildExpensePayload(options: {
     paymentMethod: "cash",
     branch: options.branch,
   };
-}
-
-async function countBranchExpenses(
-  client: BranchRefreshVerifier,
-  branchCode: string
-) {
-  const expenses = await client.json<Array<{ branch: string }>>("/api/expenses");
-  return expenses.filter((expense) => expense.branch === branchCode).length;
 }
 
 async function cleanupExpenseIds(expenseIds: string[]) {

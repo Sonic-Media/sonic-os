@@ -16,7 +16,6 @@ import {
   beginBranchScopedFetch,
   resetBranchScopedFetchRefs,
   shouldSkipBranchScopedFetch,
-  type BranchScopedLoadRefs,
 } from "@/lib/context/branch-scoped-load";
 import {
   createStaffPaymentApi,
@@ -96,10 +95,6 @@ export function StaffPaymentsProvider({
   const [loadError, setLoadError] = useState<string | null>(null);
   const hasLoaded = useRef(false);
   const lastFetchedBranch = useRef<Branch | null>(null);
-  const branchLoadRefs = useRef<BranchScopedLoadRefs>({
-    hasLoaded,
-    lastFetchedBranch,
-  }).current;
   const paymentsRef = useRef(payments);
 
   useEffect(() => {
@@ -113,16 +108,20 @@ export function StaffPaymentsProvider({
       paymentsRef.current = [];
       setPayments([]);
       setLoadError(null);
-      resetBranchScopedFetchRefs(branchLoadRefs);
+      resetBranchScopedFetchRefs(hasLoaded, lastFetchedBranch);
       setIsLoaded(true);
       return;
     }
 
-    if (shouldSkipBranchScopedFetch(branchLoadRefs, activeBranch)) {
+    if (shouldSkipBranchScopedFetch(hasLoaded, lastFetchedBranch, activeBranch)) {
       return;
     }
 
-    const branchChanged = beginBranchScopedFetch(branchLoadRefs, activeBranch);
+    const branchChanged = beginBranchScopedFetch(
+      hasLoaded,
+      lastFetchedBranch,
+      activeBranch
+    );
     if (branchChanged) {
       paymentsRef.current = [];
       setPayments([]);
@@ -149,7 +148,7 @@ export function StaffPaymentsProvider({
         }
       })();
     });
-  }, [authLoaded, isAuthenticated, activeBranch, branchLoadRefs]);
+  }, [authLoaded, isAuthenticated, activeBranch]);
 
   const refreshPaymentsFromApi = useCallback(async () => {
     const remote = await fetchStaffPayments();
