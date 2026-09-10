@@ -19,11 +19,21 @@ import {
   updateExpenseApi,
   updateExpenseCategoryApi,
 } from "@/lib/api/expenses";
+import { useAuth } from "@/context/auth-context";
+import { useBranch } from "@/context/branch-context";
+import {
+  beginBranchScopedFetch,
+  beginFetchGeneration,
+  isCurrentFetchGeneration,
+  resetBranchScopedFetchRefs,
+  shouldSkipBranchScopedFetch,
+} from "@/lib/context/branch-scoped-load";
 import {
   getDataSourceErrorMessage,
   loadFromApi,
   runOnApi,
 } from "@/lib/data-source/context-api";
+import type { Branch } from "@/types";
 import { getTodayISO } from "@/lib/dates";
 import {
   normalizeExpenseCategoryList,
@@ -109,11 +119,15 @@ export function ExpensesModuleProvider({
 }: {
   children: React.ReactNode;
 }) {
+  const { isAuthenticated, isLoaded: authLoaded } = useAuth();
+  const { activeBranch, isLoaded: branchLoaded } = useBranch();
   const [expenses, setExpenses] = useState<ExpenseRecord[]>([]);
   const [categories, setCategories] = useState<ExpenseCategory[]>([]);
   const [isLoaded, setIsLoaded] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const hasLoaded = useRef(false);
+  const lastFetchedBranch = useRef<Branch | null>(null);
+  const fetchGeneration = useRef(0);
   const expensesRef = useRef(expenses);
   const categoriesRef = useRef(categories);
 
@@ -145,8 +159,44 @@ export function ExpensesModuleProvider({
   }, []);
 
   useEffect(() => {
-    if (hasLoaded.current) return;
-    hasLoaded.current = true;
+    if (!authLoaded) return;
+
+    if (!isAuthenticated) {
+      beginFetchGeneration(fetchGeneration);
+      categoriesRef.current = [];
+      expensesRef.current = [];
+      setCategories([]);
+      setExpenses([]);
+      setLoadError(null);
+      resetBranchScopedFetchRefs(hasLoaded, lastFetchedBranch);
+      setIsLoaded(true);
+      return;
+    }
+
+    if (!branchLoaded) {
+      setIsLoaded(false);
+      return;
+    }
+
+    if (shouldSkipBranchScopedFetch(hasLoaded, lastFetchedBranch, activeBranch)) {
+      return;
+    }
+
+    const branchChanged = beginBranchScopedFetch(
+      hasLoaded,
+      lastFetchedBranch,
+      activeBranch
+    );
+    if (branchChanged) {
+      categoriesRef.current = [];
+      expensesRef.current = [];
+      setCategories([]);
+      setExpenses([]);
+      setLoadError(null);
+      setIsLoaded(false);
+    }
+
+    const generation = beginFetchGeneration(fetchGeneration);
 
     queueMicrotask(() => {
       void (async () => {
@@ -155,6 +205,10 @@ export function ExpensesModuleProvider({
             loadFromApi(fetchExpenseCategories),
             loadFromApi(fetchExpenses),
           ]);
+
+          if (!isCurrentFetchGeneration(fetchGeneration, generation)) {
+            return;
+          }
 
           const normalizedCategories = sortExpenseCategoriesByName(
             normalizeExpenseCategoryList(loadedCategories)
@@ -169,13 +223,23 @@ export function ExpensesModuleProvider({
           setExpenses(normalizedExpenses);
           setLoadError(null);
         } catch (error) {
+          if (!isCurrentFetchGeneration(fetchGeneration, generation)) {
+            return;
+          }
+
+          categoriesRef.current = [];
+          expensesRef.current = [];
+          setCategories([]);
+          setExpenses([]);
           setLoadError(getDataSourceErrorMessage(error));
         } finally {
-          setIsLoaded(true);
+          if (isCurrentFetchGeneration(fetchGeneration, generation)) {
+            setIsLoaded(true);
+          }
         }
       })();
     });
-  }, []);
+  }, [authLoaded, isAuthenticated, branchLoaded, activeBranch]);
 
   const expenseLookup = useMemo(
     () => new Map(expenses.map((expense) => [expense.id, expense])),
