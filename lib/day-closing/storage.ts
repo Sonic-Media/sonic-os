@@ -1,3 +1,4 @@
+import { getActiveOpenDayRecord as resolveActiveOpenDayRecord } from "@/lib/day-closing/business-date";
 import { branchCodesReferToSameInventory } from "@/lib/branch/codes";
 import type { Branch } from "@/types";
 import type { DayClosingRecord, DayClosingStatus } from "@/types/day-closing";
@@ -63,6 +64,14 @@ export function getClosedDayRecord(
       record.date === date &&
       record.status === "closed"
   );
+}
+
+/** Earliest open business day for the branch (Close Day date source). */
+export function getActiveOpenDayRecord(
+  branch: Branch,
+  records: DayClosingRecord[] = uiDayClosingsCache
+): DayClosingRecord | undefined {
+  return resolveActiveOpenDayRecord(branch, records);
 }
 
 export function getOpenDayRecord(

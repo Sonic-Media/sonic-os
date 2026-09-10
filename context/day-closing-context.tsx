@@ -16,9 +16,7 @@ import { useStaffPaymentsModule } from "@/context/staff-payments-context";
 import { useStaff } from "@/context/staff-context";
 import {
   computeCashDifference,
-  computeDayClosingMetrics,
   computeDayClosingSummary,
-  computeExpectedCash,
   resolveCashStatus,
 } from "@/lib/day-closing/calculations";
 import { canReopenDay } from "@/lib/day-closing/permissions";
@@ -29,6 +27,7 @@ import {
   runOnApi,
 } from "@/lib/data-source/context-api";
 import {
+  getActiveOpenDayRecord,
   getClosedDayRecord as findClosedDayRecord,
   getOpenDayRecord as findOpenDayRecord,
   isBranchDayClosed as checkBranchDayClosed,
@@ -36,9 +35,6 @@ import {
   needsShopOpening as checkNeedsShopOpening,
   setDayClosingsCache,
 } from "@/lib/day-closing/storage";
-import { buildClosedDayDailyOperationEntry } from "@/lib/day-closing/entry-sync";
-import { findDraftForBranchDate } from "@/lib/entry-helpers";
-import { branchCodesReferToSameInventory } from "@/lib/branch/codes";
 import { getTodayISO } from "@/lib/dates";
 import { toStaffFacingError } from "@/lib/ux/staff-messages";
 import { AUDIT_ACTIONS } from "@/lib/audit-log/constants";
@@ -79,6 +75,7 @@ interface DayClosingContextValue {
   needsShopOpening: (branch: Branch, date?: string) => boolean;
   getClosedRecord: (branch: Branch, date?: string) => DayClosingRecord | undefined;
   getOpenRecord: (branch: Branch, date?: string) => DayClosingRecord | undefined;
+  getActiveOpenRecord: (branch: Branch) => DayClosingRecord | undefined;
   getBranchStatusInfo: (
     branch: BranchEntity,
     date?: string
@@ -116,7 +113,7 @@ export function DayClosingProvider({ children }: { children: React.ReactNode }) 
   const { session, isAuthenticated, isLoaded: authLoaded } = useAuth();
   const { settings } = useSettings();
   const { recordStaffPayment } = useStaffPaymentsModule();
-  const { upsertEntry, entries, refreshEntries } = useEntriesContext();
+  const { refreshEntries } = useEntriesContext();
   const { staff } = useStaff();
 
   useEffect(() => {
@@ -198,6 +195,12 @@ export function DayClosingProvider({ children }: { children: React.ReactNode }) 
   const getOpenRecord = useCallback(
     (branch: Branch, date = getTodayISO()) =>
       findOpenDayRecord(branch, date, closingsRef.current),
+    []
+  );
+
+  const getActiveOpenRecord = useCallback(
+    (branch: Branch) =>
+      getActiveOpenDayRecord(branch, closingsRef.current),
     []
   );
 
@@ -312,12 +315,19 @@ export function DayClosingProvider({ children }: { children: React.ReactNode }) 
         });
       }
 
-      if (checkBranchDayClosed(input.branch, input.date, closingsRef.current)) {
-        errors.form = "Today's shift has already been completed.";
+      const activeOpenRecord = getActiveOpenDayRecord(
+        input.branch,
+        closingsRef.current
+      );
+
+      if (!activeOpenRecord) {
+        errors.form = "Start today's shift before closing the day.";
       }
 
-      if (!checkBranchDayOpened(input.branch, input.date, closingsRef.current)) {
-        errors.form = "Start today's shift before closing the day.";
+      const businessDate = activeOpenRecord?.date ?? input.date;
+
+      if (checkBranchDayClosed(input.branch, businessDate, closingsRef.current)) {
+        errors.form = "Today's shift has already been completed.";
       }
 
       const difference = computeCashDifference(
@@ -350,7 +360,7 @@ export function DayClosingProvider({ children }: { children: React.ReactNode }) 
         const paymentResult = recordStaffPayment({
           staffId: payout.staffId,
           amount: payout.amount,
-          date: input.date,
+          date: businessDate,
           paymentType: "daily-wage",
           paymentMethod: "cash",
           notes: payout.notes?.trim() || "End of day payout",
@@ -370,17 +380,10 @@ export function DayClosingProvider({ children }: { children: React.ReactNode }) 
         input.staffPayouts,
         input.actualCashCounted
       );
-      const now = new Date().toISOString();
-      const existing = closingsRef.current.find(
-        (record) =>
-          branchCodesReferToSameInventory(record.branch, input.branch) &&
-          record.date === input.date
-      );
-
       try {
         const saved = await runOnApi(() =>
           closeDayApi({
-            date: input.date,
+            date: businessDate,
             branch: input.branch,
             metrics: input.metrics,
             staffPayouts: input.staffPayouts,
@@ -419,31 +422,6 @@ export function DayClosingProvider({ children }: { children: React.ReactNode }) 
           ]),
         });
 
-        const draftEntry = findDraftForBranchDate(
-          entries,
-          input.branch,
-          input.date
-        );
-
-        await upsertEntry(
-          buildClosedDayDailyOperationEntry({
-            branch: input.branch,
-            date: input.date,
-            summary,
-            closingNotes: input.closingNotes,
-            existing: draftEntry,
-            createdBy: linkedStaff
-              ? {
-                  staffId: linkedStaff.id,
-                  staffName: linkedStaff.name,
-                  role: linkedStaff.role,
-                  branch: input.branch,
-                  timestamp: now,
-                }
-              : undefined,
-          })
-        );
-
         await refreshEntries();
 
         return createValidationResult({}, saved);
@@ -460,8 +438,6 @@ export function DayClosingProvider({ children }: { children: React.ReactNode }) 
       recordStaffPayment,
       refreshClosingsFromApi,
       session,
-      upsertEntry,
-      entries,
       refreshEntries,
       settings.ownerName,
     ]
@@ -529,6 +505,7 @@ export function DayClosingProvider({ children }: { children: React.ReactNode }) 
       needsShopOpening: needsShopOpeningFn,
       getClosedRecord,
       getOpenRecord,
+      getActiveOpenRecord,
       getBranchStatusInfo,
       openDay,
       closeDay,
@@ -543,6 +520,7 @@ export function DayClosingProvider({ children }: { children: React.ReactNode }) 
       needsShopOpeningFn,
       getClosedRecord,
       getOpenRecord,
+      getActiveOpenRecord,
       getBranchStatusInfo,
       openDay,
       closeDay,
