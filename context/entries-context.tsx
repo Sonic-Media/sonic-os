@@ -17,6 +17,14 @@ import {
   upsertDailyOperationApi,
 } from "@/lib/api/daily-operations";
 import { useAuth } from "@/context/auth-context";
+import { useBranch } from "@/context/branch-context";
+import {
+  beginBranchScopedFetch,
+  resetBranchScopedFetchRefs,
+  shouldSkipBranchScopedFetch,
+  type BranchScopedLoadRefs,
+} from "@/lib/context/branch-scoped-load";
+import type { Branch } from "@/types";
 import {
   getDataSourceErrorMessage,
   loadFromApi,
@@ -40,10 +48,16 @@ const EntriesContext = createContext<EntriesContextValue | null>(null);
 
 export function EntriesProvider({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoaded: authLoaded } = useAuth();
+  const { activeBranch } = useBranch();
   const [entries, setEntries] = useState<Entry[]>([]);
   const [isLoaded, setIsLoaded] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const hasLoaded = useRef(false);
+  const lastFetchedBranch = useRef<Branch | null>(null);
+  const branchLoadRefs = useRef<BranchScopedLoadRefs>({
+    hasLoaded,
+    lastFetchedBranch,
+  }).current;
   const entriesRef = useRef<Entry[]>([]);
 
   useEffect(() => {
@@ -60,39 +74,41 @@ export function EntriesProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!authLoaded) return;
 
-    if (hasLoaded.current && !isAuthenticated) {
-      entriesRef.current = [];
-      setEntries([]);
-      setLoadError(null);
-      hasLoaded.current = false;
-      setIsLoaded(true);
-      return;
-    }
-
     if (!isAuthenticated) {
       entriesRef.current = [];
       setEntries([]);
       setLoadError(null);
-      hasLoaded.current = false;
+      resetBranchScopedFetchRefs(branchLoadRefs);
       setIsLoaded(true);
       return;
     }
 
-    if (hasLoaded.current) return;
-    hasLoaded.current = true;
+    if (shouldSkipBranchScopedFetch(branchLoadRefs, activeBranch)) {
+      return;
+    }
+
+    const branchChanged = beginBranchScopedFetch(branchLoadRefs, activeBranch);
+    if (branchChanged) {
+      entriesRef.current = [];
+      setEntries([]);
+      setLoadError(null);
+      setIsLoaded(false);
+    }
 
     queueMicrotask(() => {
       void (async () => {
         try {
           await loadFromApi(() => refreshEntriesFromApi());
         } catch (error) {
+          entriesRef.current = [];
+          setEntries([]);
           setLoadError(getDataSourceErrorMessage(error));
         } finally {
           setIsLoaded(true);
         }
       })();
     });
-  }, [authLoaded, isAuthenticated, refreshEntriesFromApi]);
+  }, [authLoaded, isAuthenticated, activeBranch, branchLoadRefs, refreshEntriesFromApi]);
 
   const upsertEntry = useCallback(async (entry: Entry): Promise<Entry> => {
     return runOnApi(async () => {

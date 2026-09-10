@@ -44,6 +44,14 @@ import { pickAuditFields } from "@/lib/audit-log/snapshots";
 import { recordStaffAction } from "@/lib/staff/audit";
 import { resolveCurrentStaffAction } from "@/lib/staff/session";
 import { useAuth } from "@/context/auth-context";
+import { useBranch } from "@/context/branch-context";
+import {
+  beginBranchScopedFetch,
+  resetBranchScopedFetchRefs,
+  shouldSkipBranchScopedFetch,
+  type BranchScopedLoadRefs,
+} from "@/lib/context/branch-scoped-load";
+import type { Branch } from "@/types";
 import {
   DAY_CLOSED_EDIT_MESSAGE,
   isBranchDayClosed,
@@ -96,6 +104,7 @@ export function PurchasingProvider({
   children: React.ReactNode;
 }) {
   const { isAuthenticated, isLoaded: authLoaded, session } = useAuth();
+  const { activeBranch } = useBranch();
   const { getProductById, refreshStockFromApi } = useStock();
 
   const [purchases, setPurchases] = useState<Purchase[]>([]);
@@ -103,6 +112,11 @@ export function PurchasingProvider({
   const [isLoaded, setIsLoaded] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const hasLoaded = useRef(false);
+  const lastFetchedBranch = useRef<Branch | null>(null);
+  const branchLoadRefs = useRef<BranchScopedLoadRefs>({
+    hasLoaded,
+    lastFetchedBranch,
+  }).current;
   const purchaseInFlight = useRef(false);
   const purchasesRef = useRef(purchases);
   const suppliersRef = useRef(suppliers);
@@ -136,13 +150,24 @@ export function PurchasingProvider({
       setPurchases([]);
       setSuppliers([]);
       setLoadError(null);
-      hasLoaded.current = false;
+      resetBranchScopedFetchRefs(branchLoadRefs);
       setIsLoaded(true);
       return;
     }
 
-    if (hasLoaded.current) return;
-    hasLoaded.current = true;
+    if (shouldSkipBranchScopedFetch(branchLoadRefs, activeBranch)) {
+      return;
+    }
+
+    const branchChanged = beginBranchScopedFetch(branchLoadRefs, activeBranch);
+    if (branchChanged) {
+      purchasesRef.current = [];
+      suppliersRef.current = [];
+      setPurchases([]);
+      setSuppliers([]);
+      setLoadError(null);
+      setIsLoaded(false);
+    }
 
     queueMicrotask(() => {
       void (async () => {
@@ -165,13 +190,17 @@ export function PurchasingProvider({
           setSuppliers(suppliersRef.current);
           setLoadError(null);
         } catch (error) {
+          purchasesRef.current = [];
+          suppliersRef.current = [];
+          setPurchases([]);
+          setSuppliers([]);
           setLoadError(getDataSourceErrorMessage(error));
         } finally {
           setIsLoaded(true);
         }
       })();
     });
-  }, [authLoaded, isAuthenticated]);
+  }, [authLoaded, isAuthenticated, activeBranch, branchLoadRefs]);
 
   const purchaseLookup = useMemo(
     () => new Map(purchases.map((purchase) => [purchase.id, purchase])),
