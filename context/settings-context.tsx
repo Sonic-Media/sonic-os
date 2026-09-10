@@ -28,7 +28,9 @@ interface SettingsContextValue {
   isLoaded: boolean;
   loadError: string | null;
   version: string;
-  updateSettings: (patch: Partial<AppSettings>) => void;
+  updateSettings: (
+    patch: Partial<AppSettings>
+  ) => Promise<{ success: boolean; error?: string }>;
   getBranchName: (branch: Branch) => string;
 }
 
@@ -40,6 +42,7 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
   const [isLoaded, setIsLoaded] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const hasLoaded = useRef(false);
+  const settingsUpdateEpoch = useRef(0);
 
   const refreshSettingsFromApi = useCallback(async () => {
     const remoteSettings = await fetchSettings();
@@ -77,29 +80,37 @@ export function SettingsProvider({ children }: { children: React.ReactNode }) {
     });
   }, [authLoaded, isAuthenticated, refreshSettingsFromApi]);
 
-  const updateSettings = useCallback((patch: Partial<AppSettings>) => {
-    void (async () => {
-      try {
-        const next = await runOnApi(() => updateSettingsApi(patch));
-        setSettings(next);
-        setLoadError(null);
+  const updateSettings = useCallback(async (patch: Partial<AppSettings>) => {
+    const epoch = ++settingsUpdateEpoch.current;
 
-        const changedKeys = Object.keys(patch);
-        const isSignificant = changedKeys.some((key) =>
-          ["businessName", "ownerName", "defaultLunchAmount"].includes(key)
-        );
-
-        if (isSignificant) {
-          recordActivity({
-            type: "settings-changed",
-            title: "Settings changed",
-            description: "Business or account settings were updated.",
-          });
-        }
-      } catch (error) {
-        console.error(getDataSourceErrorMessage(error));
+    try {
+      const next = await runOnApi(() => updateSettingsApi(patch));
+      if (epoch !== settingsUpdateEpoch.current) {
+        return { success: false, error: "A newer settings update superseded this save." };
       }
-    })();
+
+      setSettings(next);
+      setLoadError(null);
+
+      const changedKeys = Object.keys(patch);
+      const isSignificant = changedKeys.some((key) =>
+        ["businessName", "ownerName", "defaultLunchAmount"].includes(key)
+      );
+
+      if (isSignificant) {
+        recordActivity({
+          type: "settings-changed",
+          title: "Settings changed",
+          description: "Business or account settings were updated.",
+        });
+      }
+
+      return { success: true };
+    } catch (error) {
+      const message = getDataSourceErrorMessage(error);
+      setLoadError(message);
+      return { success: false, error: message };
+    }
   }, []);
 
   const branches = useMemo(

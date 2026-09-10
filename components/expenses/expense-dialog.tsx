@@ -53,7 +53,7 @@ export function ExpenseDialog({
     label: method.label,
   }));
 
-  function handleSubmit(event: React.FormEvent) {
+  async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
 
     const parsedAmount = Number.parseFloat(amount);
@@ -76,8 +76,8 @@ export function ExpenseDialog({
 
     const result =
       mode === "add"
-        ? addExpense(input)
-        : updateExpense(expense!.id, input);
+        ? await addExpense(input)
+        : await updateExpense(expense!.id, input);
 
     if (!result.success) {
       setErrors(result.errors);

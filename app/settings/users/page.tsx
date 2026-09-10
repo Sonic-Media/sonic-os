@@ -54,11 +54,11 @@ export default function SettingsUsersPage() {
     setSelectedUser(null);
   }
 
-  function handleDisable(user: AppUser) {
+  async function handleDisable(user: AppUser) {
     const confirmed = window.confirm(`Disable ${user.displayName}?`);
     if (!confirmed) return;
 
-    const result = disableUser(user.id);
+    const result = await disableUser(user.id);
     if (!result.success) {
       window.alert(result.errors.form ?? "Unable to disable this user.");
     }
@@ -94,7 +94,13 @@ export default function SettingsUsersPage() {
         onEdit={openEditUser}
         onResetPassword={setResetUser}
         onDisable={handleDisable}
-        onEnable={(user) => enableUser(user.id)}
+        onEnable={(user) => {
+          void enableUser(user.id).then((result) => {
+            if (!result.success) {
+              window.alert(result.errors.form ?? "Unable to enable this user.");
+            }
+          });
+        }}
         onDelete={handleDelete}
       />
 

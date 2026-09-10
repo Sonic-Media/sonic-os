@@ -71,12 +71,12 @@ interface SalesContextValue {
   loadError: string | null;
   refreshSales: () => Promise<void>;
   getCustomerById: (id: string) => Customer | undefined;
-  addCustomer: (input: CustomerInput) => SaleValidationResult;
+  addCustomer: (input: CustomerInput) => Promise<SaleValidationResult>;
   updateCustomer: (
     id: string,
     input: CustomerUpdateInput
-  ) => SaleValidationResult;
-  deleteCustomer: (id: string) => SaleValidationResult;
+  ) => Promise<SaleValidationResult>;
+  deleteCustomer: (id: string) => Promise<SaleValidationResult>;
   completeSale: (input: SaleInput) => Promise<SaleValidationResult>;
 }
 
@@ -190,30 +190,32 @@ export function SalesProvider({ children }: { children: React.ReactNode }) {
   );
 
   const addCustomer = useCallback(
-    (input: CustomerInput): SaleValidationResult => {
+    async (input: CustomerInput): Promise<SaleValidationResult> => {
       const errors = validateCustomerInput(input);
       if (hasValidationErrors(errors)) {
         return createValidationResult(errors);
       }
 
-      void (async () => {
-        try {
-          await runOnApi(async () => {
-            await createCustomerApi(input);
-            await refreshSalesFromApi();
-          });
-        } catch (error) {
-          console.error(getDataSourceErrorMessage(error));
-        }
-      })();
-
-      return createValidationResult({});
+      try {
+        await runOnApi(async () => {
+          await createCustomerApi(input);
+          await refreshSalesFromApi();
+        });
+        return createValidationResult({});
+      } catch (error) {
+        return createValidationResult({
+          form: getDataSourceErrorMessage(error),
+        });
+      }
     },
     [refreshSalesFromApi]
   );
 
   const updateCustomer = useCallback(
-    (id: string, input: CustomerUpdateInput): SaleValidationResult => {
+    async (
+      id: string,
+      input: CustomerUpdateInput
+    ): Promise<SaleValidationResult> => {
       const existing = customersRef.current.find(
         (customer) => customer.id === id
       );
@@ -226,24 +228,23 @@ export function SalesProvider({ children }: { children: React.ReactNode }) {
         return createValidationResult(errors);
       }
 
-      void (async () => {
-        try {
-          await runOnApi(async () => {
-            await updateCustomerApi(id, input);
-            await refreshSalesFromApi();
-          });
-        } catch (error) {
-          console.error(getDataSourceErrorMessage(error));
-        }
-      })();
-
-      return createValidationResult({});
+      try {
+        await runOnApi(async () => {
+          await updateCustomerApi(id, input);
+          await refreshSalesFromApi();
+        });
+        return createValidationResult({});
+      } catch (error) {
+        return createValidationResult({
+          form: getDataSourceErrorMessage(error),
+        });
+      }
     },
     [refreshSalesFromApi]
   );
 
   const deleteCustomer = useCallback(
-    (id: string): SaleValidationResult => {
+    async (id: string): Promise<SaleValidationResult> => {
       const inUse = salesRef.current.some((sale) => sale.customerId === id);
       if (inUse) {
         return createValidationResult({
@@ -251,18 +252,17 @@ export function SalesProvider({ children }: { children: React.ReactNode }) {
         });
       }
 
-      void (async () => {
-        try {
-          await runOnApi(async () => {
-            await deleteCustomerApi(id);
-            await refreshSalesFromApi();
-          });
-        } catch (error) {
-          console.error(getDataSourceErrorMessage(error));
-        }
-      })();
-
-      return createValidationResult({});
+      try {
+        await runOnApi(async () => {
+          await deleteCustomerApi(id);
+          await refreshSalesFromApi();
+        });
+        return createValidationResult({});
+      } catch (error) {
+        return createValidationResult({
+          form: getDataSourceErrorMessage(error),
+        });
+      }
     },
     [refreshSalesFromApi]
   );

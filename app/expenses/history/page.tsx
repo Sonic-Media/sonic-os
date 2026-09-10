@@ -29,12 +29,15 @@ export default function ExpensesHistoryPage() {
     [categories]
   );
 
-  function handleDelete(expenseId: string, description: string) {
+  async function handleDelete(expenseId: string, description: string) {
     const confirmed = window.confirm(
       `Delete expense "${description}"? This cannot be undone.`
     );
-    if (confirmed) {
-      deleteExpense(expenseId);
+    if (!confirmed) return;
+
+    const result = await deleteExpense(expenseId);
+    if (!result.success) {
+      window.alert(result.errors.form ?? "Unable to delete expense.");
     }
   }
 

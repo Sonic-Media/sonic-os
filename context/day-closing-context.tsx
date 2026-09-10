@@ -343,7 +343,7 @@ export function DayClosingProvider({ children }: { children: React.ReactNode }) 
       }
 
       for (const payout of selectedPayouts) {
-        const paymentResult = recordStaffPayment({
+        const paymentResult = await recordStaffPayment({
           staffId: payout.staffId,
           amount: payout.amount,
           date: input.date,
