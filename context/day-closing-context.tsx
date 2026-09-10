@@ -38,6 +38,7 @@ import {
   upsertDayClosingRecord,
 } from "@/lib/day-closing/storage";
 import { buildClosedDayDailyOperationEntry } from "@/lib/day-closing/entry-sync";
+import { persistCloseDayStaffPayouts } from "@/lib/day-closing/persist-close-day-payouts";
 import { findDraftForBranchDate } from "@/lib/entry-helpers";
 import { branchCodesReferToSameInventory } from "@/lib/branch/codes";
 import { getTodayISO } from "@/lib/dates";
@@ -116,7 +117,7 @@ export function DayClosingProvider({ children }: { children: React.ReactNode }) 
   const lastSessionUserId = useRef<string | null>(null);
   const { session, isAuthenticated, isLoaded: authLoaded } = useAuth();
   const { settings } = useSettings();
-  const { recordStaffPayment } = useStaffPaymentsModule();
+  const { recordStaffPaymentAsync } = useStaffPaymentsModule();
   const { upsertEntry, entries, refreshEntries } = useEntriesContext();
   const { staff } = useStaff();
 
@@ -342,23 +343,16 @@ export function DayClosingProvider({ children }: { children: React.ReactNode }) 
         return createValidationResult(errors);
       }
 
-      for (const payout of selectedPayouts) {
-        const paymentResult = recordStaffPayment({
-          staffId: payout.staffId,
-          amount: payout.amount,
-          date: input.date,
-          paymentType: "daily-wage",
-          paymentMethod: "cash",
-          notes: payout.notes?.trim() || "End of day payout",
-        });
+      const payoutResult = await persistCloseDayStaffPayouts(
+        input.staffPayouts,
+        input.date,
+        recordStaffPaymentAsync
+      );
 
-        if (!paymentResult.success) {
-          return createValidationResult({
-            form:
-              paymentResult.errors.form ??
-              `Unable to pay ${payout.staffName}.`,
-          });
-        }
+      if (!payoutResult.success) {
+        return createValidationResult({
+          form: payoutResult.message,
+        });
       }
 
       const summary = computeDayClosingSummary(
@@ -454,7 +448,7 @@ export function DayClosingProvider({ children }: { children: React.ReactNode }) 
         });
       }
     },
-    [recordStaffPayment, persistClosings, session, upsertEntry, entries, refreshEntries, settings.ownerName]
+    [recordStaffPaymentAsync, persistClosings, session, upsertEntry, entries, refreshEntries, settings.ownerName]
   );
 
   const reopenDay = useCallback(
