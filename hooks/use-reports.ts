@@ -1,36 +1,83 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { aggregateEntries } from "@/lib/aggregations";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { fetchReportSummary } from "@/lib/api/reports";
 import { useActiveBranch } from "@/context/active-branch-context";
-import { useEntriesContext } from "@/context/entries-context";
-import { useSettings } from "@/context/settings-context";
-import { filterEntriesByPeriod } from "@/lib/entry-helpers";
+import { useAuth } from "@/context/auth-context";
+import {
+  getDataSourceErrorMessage,
+  loadFromApi,
+} from "@/lib/data-source/context-api";
+import { BRANCH_IDS } from "@/lib/constants";
 import { getPeriodLabel } from "@/lib/format";
-import { filterByBranchField } from "@/lib/active-branch/filters";
-import type { ReportPeriod } from "@/types";
+import { createInitialByBranch } from "@/lib/reports/branch-totals";
+import type { ReportPeriod, ReportSummary } from "@/types";
+
+function createEmptyReportSummary(): ReportSummary {
+  return {
+    totalSales: 0,
+    totalExpenses: 0,
+    totalSavings: 0,
+    byBranch: createInitialByBranch(BRANCH_IDS),
+    chartData: [],
+    insights: {
+      averageDailySales: 0,
+      averageDailySavings: 0,
+      bestPerformingBranchSavings: 0,
+      expenseBreakdown: [],
+    },
+  };
+}
 
 export function useReports() {
-  const { entries, isLoaded } = useEntriesContext();
+  const { isAuthenticated, isLoaded: authLoaded } = useAuth();
   const { activeBranch, isLoaded: branchLoaded } = useActiveBranch();
-  const { branches, isLoaded: settingsLoaded } = useSettings();
   const [period, setPeriod] = useState<ReportPeriod>("daily");
+  const [summary, setSummary] = useState<ReportSummary>(createEmptyReportSummary);
+  const [isLoaded, setIsLoaded] = useState(false);
+  const requestId = useRef(0);
 
-  const data = useMemo(() => {
-    const branchIds = branches.map((branch) => branch.id);
-    const branchEntries = filterByBranchField(entries, activeBranch);
-    const filtered = filterEntriesByPeriod(branchEntries, period);
-    const summary = aggregateEntries(filtered, { branchIds });
-    return {
-      summary,
-      periodLabel: getPeriodLabel(period),
-    };
-  }, [entries, activeBranch, branches, period]);
+  const refresh = useCallback(async () => {
+    if (!isAuthenticated) {
+      setSummary(createEmptyReportSummary());
+      setIsLoaded(true);
+      return;
+    }
+
+    const currentRequest = ++requestId.current;
+
+    try {
+      const remote = await loadFromApi(() => fetchReportSummary(period));
+      if (currentRequest !== requestId.current) return;
+
+      setSummary(remote);
+    } catch (error) {
+      if (currentRequest !== requestId.current) return;
+
+      setSummary(createEmptyReportSummary());
+      console.error(getDataSourceErrorMessage(error));
+    } finally {
+      if (currentRequest === requestId.current) {
+        setIsLoaded(true);
+      }
+    }
+  }, [isAuthenticated, period]);
+
+  useEffect(() => {
+    if (!authLoaded || !branchLoaded) return;
+
+    queueMicrotask(() => {
+      void refresh();
+    });
+  }, [authLoaded, branchLoaded, activeBranch, refresh]);
+
+  const periodLabel = useMemo(() => getPeriodLabel(period), [period]);
 
   return {
-    isLoaded: isLoaded && branchLoaded && settingsLoaded,
+    isLoaded: isLoaded && authLoaded && branchLoaded,
     period,
     setPeriod,
-    ...data,
+    summary,
+    periodLabel,
   };
 }

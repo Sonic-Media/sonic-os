@@ -19,6 +19,7 @@
     "db:bootstrap": "tsx scripts/bootstrap-application.ts",
     "verify:reports": "tsx scripts/verify-reports-aggregation.ts",
     "verify:reports-module": "tsx scripts/verify-reports-module.ts",
+    "verify:reports-server-authority": "tsx scripts/verify-reports-server-authority.ts",
     "verify:stock": "tsx scripts/verify-stock-module.ts",
     "verify:sales": "tsx scripts/verify-sales-module.ts",
     "verify:expenses": "tsx scripts/verify-expenses-module.ts",
