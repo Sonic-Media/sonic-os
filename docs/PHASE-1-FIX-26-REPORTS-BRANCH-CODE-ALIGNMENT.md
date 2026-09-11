@@ -1,9 +1,11 @@
 # PHASE 1 FIX #26 REPORT — REPORTS BRANCH CODE ALIGNMENT
 
-**STATUS:** PASS (code + verification)  
-**LIVE:** NOT VERIFIED (not deployed at time of report)  
+**STATUS:** PASS  
+**LIVE:** PASS (verified on production after deploy)  
 **DATE:** 2026-09-11  
-**BRANCH:** `cursor/reports-branch-code-fix-b6e7`
+**FIX COMMIT:** `95c48d0`  
+**MERGE COMMIT:** `26922d8`  
+**PR:** #33 (merged)
 
 **Formal deliverable:** `docs/PHASE-1-FIX-26-REPORTS-BRANCH-CODE-ALIGNMENT.docx`
 
@@ -58,16 +60,13 @@ Production evidence (live branches API):
 Wire Reports UI to `BranchProvider` active branches and lookup totals by `branch.code`:
 
 1. `components/reports/reports-branch-totals.tsx` — `useBranch().activeBranches`, `getBranchTotals(byBranch, branch.code)`
-2. `components/reports/reports-insights.tsx` — `getBranchName` from `useBranch()` (resolves DB names for `bestPerformingBranch` codes like `branch2`)
-3. `components/dashboard/staff-dashboard-layout.tsx` — same pattern for dashboard branch card (same bug class)
+2. `components/reports/reports-insights.tsx` — `getBranchName` from `useBranch()`
+3. `components/dashboard/staff-dashboard-layout.tsx` — same pattern for dashboard branch card
 4. `hooks/use-reports.ts` — empty `byBranch: {}` instead of seeding deprecated `BRANCH_IDS`
 5. `lib/branch/registry.ts` — `getActiveBranchesForReports()` helper
 6. `scripts/verify-reports-branch-code-alignment.ts` — regression tests for production codes `main` / `branch2`
 
-**Preserved:**
-- Fix #11 server report authority (`/api/reports/summary` unchanged)
-- `getBranchTotals` throw on missing/wrong keys (integrity guard)
-- Branch isolation / server scoping unchanged
+**Preserved:** Fix #11 server report authority, `getBranchTotals` integrity guard, branch isolation.
 
 ---
 
@@ -85,28 +84,61 @@ Wire Reports UI to `BranchProvider` active branches and lookup totals by `branch
 
 ---
 
-## 6. Branch Isolation Impact
+## 6. Deployment
 
-**None.** Server `resolveBranchListFilter` and reports aggregation unchanged. UI now uses the same codes the server already emits.
+| Item | Value |
+|------|-------|
+| Fix branch | `cursor/reports-branch-code-fix-b6e7` |
+| Fix commit | `95c48d0` |
+| Merge commit (main) | `26922d8` — Merge Fix #26: Reports branch code alignment |
+| Prior production | `dcff0bf` |
+| Vercel Production deployment ID | `6402602266` |
+| Vercel Production commit | `26922d84482a8cc65a3892ab2b588dfdc2f7c2db` |
+| Deployment status | **success** (2026-09-11T22:09:57Z) |
+| Production domain | https://sonic-os-lemon.vercel.app |
+
+**Proof Fix #26 is in production:** `git merge-base --is-ancestor 95c48d0 26922d8` → true. GitHub deployment `6402602266` sha = `26922d8`.
 
 ---
 
-## 7. Financial / Reporting Impact
+## 7. Live Production Verification (2026-09-11T22:10–22:13 UTC)
 
-Reports totals remain server-authoritative. UI displays Kansanga/Salaama names with correct `main` / `branch2` totals from API `byBranch`. No client-side re-aggregation added.
+### /api/health
+
+```json
+{
+  "status": "ok",
+  "databaseConfigured": true,
+  "databaseConnected": true,
+  "databaseError": null,
+  "timestamp": "2026-09-11T22:10:12.727Z"
+}
+```
+
+### /reports (owner login, browser)
+
+| Check | Result |
+|-------|--------|
+| Page loads | **PASS** — no "This page couldn't load" |
+| Console error `Branch 'salaama' is missing...` | **PASS** — not present |
+| Kansanga card visible | **PASS** |
+| Salaama card visible | **PASS** |
+| Branch switch Kansanga ↔ Salaama | **PASS** — no crash |
+| `/api/reports/summary?period=daily` | **HTTP 200**, `byBranch` keys: `main`, `branch2` |
+
+Daily period totals UGX 0 for both branches (no transactions today); branch cards render correctly with distinct branch names.
 
 ---
 
-## 8. Tests and Results
+## 8. Tests and Results (post-merge main)
 
 | Command | Result |
 |---------|--------|
 | `npm run verify:reports-branch-code-alignment` | **10/10 PASS** |
-| `npm run verify:reports` | **PASS** (all scenarios) |
+| `npm run verify:reports` | **PASS** |
 | `npm run verify:branch-selection` | **PASS** |
-| `npm run verify:reports-server-authority` | **FAIL** — 401 on `/api/reports/summary` (local auth/session fixture; checks 1–3, 13 passed before failure) |
 | `npx tsc --noEmit` | **PASS** |
-| `npm run build` | **FAIL** — pre-existing `/_global-error` prerender (`useContext` null); same baseline blocker from prior certification |
+| `npm run build` | **FAIL** — pre-existing `/_not-found` / `/_global-error` prerender (`useState`/`useContext` null); unchanged baseline blocker |
 
 ---
 
@@ -122,29 +154,9 @@ Reports totals remain server-authoritative. UI displays Kansanga/Salaama names w
 
 ---
 
-## 11. Deployment Performed?
+## 11. Environment / DATABASE_URL Changed?
 
-**NO** (at time of report — awaiting merge/deploy)
-
----
-
-## 12. Production Commit After Fix
-
-Pending merge to `main` and Vercel Production deploy.
-
-Prior production: `dcff0bf`
-
----
-
-## 13. Live /reports Result
-
-**NOT VERIFIED LIVE** — fix not yet on https://sonic-os-lemon.vercel.app
-
-Expected after deploy:
-- `/reports` loads without React crash
-- Kansanga card (code `main`) and Salaama card (code `branch2`) display
-- Branch switching does not mix totals
-- Server summary remains authoritative
+**NO**
 
 ---
 
