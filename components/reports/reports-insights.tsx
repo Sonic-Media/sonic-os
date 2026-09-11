@@ -2,7 +2,7 @@
 
 import { Card } from "@/components/shared/ui/card";
 import { StatCard } from "@/components/shared/ui/stat-card";
-import { useSettings } from "@/context/settings-context";
+import { useBranch } from "@/context/branch-context";
 import { formatCurrency } from "@/lib/format";
 import type { ReportInsights } from "@/types";
 
@@ -11,7 +11,7 @@ interface ReportsInsightsProps {
 }
 
 export function ReportsInsights({ insights }: ReportsInsightsProps) {
-  const { getBranchName } = useSettings();
+  const { getBranchName } = useBranch();
   const bestBranchName = insights.bestPerformingBranch
     ? getBranchName(insights.bestPerformingBranch)
     : "—";

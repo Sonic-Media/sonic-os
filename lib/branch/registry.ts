@@ -36,3 +36,16 @@ export function getDefaultComparisonBranchCodes(
 
   return [...FALLBACK_BRANCH_CODES];
 }
+
+/**
+ * Active branches for report UI iteration.
+ * Canonical identity is BranchEntity.code (PostgreSQL Branch.code), not settings BRANCH_IDS.
+ */
+export function getActiveBranchesForReports(
+  branches: BranchEntity[]
+): BranchEntity[] {
+  return branches
+    .filter((branch) => branch.active)
+    .slice()
+    .sort((left, right) => left.name.localeCompare(right.name));
+}

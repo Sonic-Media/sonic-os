@@ -8,9 +8,7 @@ import {
   getDataSourceErrorMessage,
   loadFromApi,
 } from "@/lib/data-source/context-api";
-import { BRANCH_IDS } from "@/lib/constants";
 import { getPeriodLabel } from "@/lib/format";
-import { createInitialByBranch } from "@/lib/reports/branch-totals";
 import type { ReportPeriod, ReportSummary } from "@/types";
 
 function createEmptyReportSummary(): ReportSummary {
@@ -18,7 +16,7 @@ function createEmptyReportSummary(): ReportSummary {
     totalSales: 0,
     totalExpenses: 0,
     totalSavings: 0,
-    byBranch: createInitialByBranch(BRANCH_IDS),
+    byBranch: {},
     chartData: [],
     insights: {
       averageDailySales: 0,
