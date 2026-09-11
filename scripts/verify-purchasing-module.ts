@@ -21,6 +21,11 @@ import { computeInventoryValue } from "@/lib/stock/calculations";
 import { mapPurchaseToEntity } from "@/lib/server/mappers/entities";
 import type { Purchase } from "@/types/purchasing";
 import type { StockProduct } from "@/types/stock";
+import {
+  expectedMergedBuyingPrice,
+  expectedPurchaseTotalCost,
+  expectedWeightedAverageBuyingPrice,
+} from "./verify/financial-expectations";
 
 const BASE_URL = process.env.VERIFY_BASE_URL ?? "http://localhost:3000";
 const TEST_PREFIX = `cert-purchasing-${Date.now()}`;
@@ -269,23 +274,30 @@ async function main() {
     assert.equal(Number(productA.currentStock), 0);
     assert.equal(Number(productB.currentStock), 0);
 
+    const PURCHASE1_QUANTITY = 10;
+    const PURCHASE1_BUYING_PRICE = 9000;
+    const expectedPurchase1Total = expectedPurchaseTotalCost(
+      PURCHASE1_QUANTITY,
+      PURCHASE1_BUYING_PRICE
+    );
+
     const purchase1 = await certifier.createPurchase(
       buildPurchasePayload({
         supplierId,
         productId: productAId,
-        quantity: 10,
-        buyingPrice: 9000,
+        quantity: PURCHASE1_QUANTITY,
+        buyingPrice: PURCHASE1_BUYING_PRICE,
         notes: `${TEST_PREFIX} first purchase`,
       })
     );
     purchaseIds.push(String(purchase1.id));
     assert.ok(String(purchase1.invoiceNumber).startsWith("PUR-"));
-    assert.equal(purchase1.totalCost, 90_000);
+    assert.equal(purchase1.totalCost, expectedPurchase1Total);
     recordCheck(
       1,
       "Create purchase orders",
       true,
-      `Purchase ${purchase1.invoiceNumber} total 90,000 UGX`
+      `Purchase ${purchase1.invoiceNumber} total ${expectedPurchase1Total} UGX (derived)`
     );
 
     const dbAfterPurchase1 = await prisma.product.findUnique({
@@ -314,7 +326,12 @@ async function main() {
       "Product A stock 0 → 10"
     );
 
-    const expectedAvg1 = computeWeightedAverageBuyingPrice(0, 8000, 10, 9000);
+    const expectedAvg1 = expectedWeightedAverageBuyingPrice(
+      0,
+      8000,
+      PURCHASE1_QUANTITY,
+      PURCHASE1_BUYING_PRICE
+    );
     assert.equal(dbAfterPurchase1?.buyingPrice, expectedAvg1);
     recordCheck(
       4,
@@ -406,13 +423,19 @@ async function main() {
       `Negative quantity and zero price rejected (${negativeQty.message}; ${zeroPrice.message})`
     );
 
+    const mergeLineA = { quantity: 4, buyingPrice: 11000 };
+    const mergeLineB = { quantity: 6, buyingPrice: 13000 };
+    const expectedMergedPrice = expectedMergedBuyingPrice([
+      mergeLineA,
+      mergeLineB,
+    ]);
     const merged = mergePurchaseLineItems([
-      { productId: productBId, quantity: 4, buyingPrice: 11000 },
-      { productId: productBId, quantity: 6, buyingPrice: 13000 },
+      { productId: productBId, ...mergeLineA },
+      { productId: productBId, ...mergeLineB },
     ]);
     assert.equal(merged.length, 1);
-    assert.equal(merged[0]?.quantity, 10);
-    assert.equal(merged[0]?.buyingPrice, 12200);
+    assert.equal(merged[0]?.quantity, mergeLineA.quantity + mergeLineB.quantity);
+    assert.equal(merged[0]?.buyingPrice, expectedMergedPrice);
 
     const duplicateLinePurchase = await certifier.createPurchase(
       buildPurchasePayload({
@@ -429,7 +452,7 @@ async function main() {
     purchaseIds.push(String(duplicateLinePurchase.id));
     assert.equal(duplicateLinePurchase.items.length, 1);
     assert.equal(duplicateLinePurchase.items[0]?.quantity, 10);
-    assert.equal(duplicateLinePurchase.items[0]?.buyingPrice, 12200);
+    assert.equal(duplicateLinePurchase.items[0]?.buyingPrice, expectedMergedPrice);
     recordCheck(
       10,
       "Prevent duplicate purchase submissions",

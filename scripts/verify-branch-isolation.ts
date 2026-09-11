@@ -132,10 +132,6 @@ async function main() {
   assert.equal(salaamaMetrics.totalProducts, salaamaDbCount);
   assert.equal(salaamaMetrics.inventoryValue, salaamaDbValue);
 
-  if (salaamaDbCount === 15) {
-    assert.equal(salaamaMetrics.inventoryValue, 752_000);
-  }
-
   // Acceptance B: Kansanga is empty and does not leak Salaama data.
   await setActiveBranch(client, "main");
   const kansangaProductsBefore = await client.json<StockProductRow[]>(

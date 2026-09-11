@@ -20,6 +20,10 @@ import {
   createCertificationCashier,
   type CertificationCashier,
 } from "./verify-bootstrap";
+import {
+  expectedRemainingStock,
+  expectedSaleTotals,
+} from "./verify/financial-expectations";
 
 const BASE_URL = process.env.VERIFY_BASE_URL ?? "http://localhost:3000";
 const TEST_PREFIX = `cert-sales-${Date.now()}`;
@@ -271,35 +275,75 @@ async function main() {
     await certifier.loginAsStaff(certCashier.username, certCashier.password);
     await ensureDayOpen(certifier, today, "main", ownerCertifier);
 
+    const PRODUCT_A_INITIAL = 100;
+    const PRODUCT_B_INITIAL = 30;
+    const SALE1_QUANTITY = 3;
+    const SALE1_UNIT_PRICE = 15000;
+    const SALE1_BUYING_PRICE = 10000;
+    const SALE1_DISCOUNT = 1500;
+    const expectedSale1 = expectedSaleTotals({
+      quantity: SALE1_QUANTITY,
+      unitPrice: SALE1_UNIT_PRICE,
+      buyingPrice: SALE1_BUYING_PRICE,
+      discount: SALE1_DISCOUNT,
+    });
+
     const sale1 = await certifier.createSaleBody(
       buildSalePayload({
         id: crypto.randomUUID(),
         productId: productAId,
         productName: `${TEST_PREFIX} Item A`,
-        quantity: 3,
-        unitPrice: 15000,
-        buyingPrice: 10000,
-        discount: 1500,
+        quantity: SALE1_QUANTITY,
+        unitPrice: SALE1_UNIT_PRICE,
+        buyingPrice: SALE1_BUYING_PRICE,
+        discount: SALE1_DISCOUNT,
         paymentMethod: "cash",
       })
     );
     saleIds.push(String(sale1.id));
-    assert.equal(sale1.total, 43500);
-    assert.equal(sale1.profit, 13500);
+    assert.equal(sale1.total, expectedSale1.total);
+    assert.equal(sale1.profit, expectedSale1.profit);
     assert.equal(sale1.branch, "main");
-    recordCheck(1, "Create single-item sales", true, `Sale ${sale1.invoiceNumber} total 43,500`);
+    recordCheck(
+      1,
+      "Create single-item sales",
+      true,
+      `Sale ${sale1.invoiceNumber} total ${expectedSale1.total} (derived from inputs)`
+    );
 
     const dbAfterSingle = await prisma.product.findUnique({
       where: { id: productAId },
     });
-    assert.equal(dbAfterSingle?.currentStock, 97);
+    assert.equal(
+      dbAfterSingle?.currentStock,
+      expectedRemainingStock(PRODUCT_A_INITIAL, [SALE1_QUANTITY])
+    );
 
-    const multiPreviewB = computeSalePreview(2, 15000, 10000, 0);
-    const multiPreviewC = computeSalePreview(1, 12000, 8000, 0);
+    const MULTI_A_QUANTITY = 2;
+    const MULTI_B_QUANTITY = 1;
+    const MULTI_A_UNIT_PRICE = 15000;
+    const MULTI_B_UNIT_PRICE = 12000;
+    const MULTI_A_BUYING_PRICE = 10000;
+    const MULTI_B_BUYING_PRICE = 8000;
+    const multiPreviewB = computeSalePreview(
+      MULTI_A_QUANTITY,
+      MULTI_A_UNIT_PRICE,
+      MULTI_A_BUYING_PRICE,
+      0
+    );
+    const multiPreviewC = computeSalePreview(
+      MULTI_B_QUANTITY,
+      MULTI_B_UNIT_PRICE,
+      MULTI_B_BUYING_PRICE,
+      0
+    );
     const multiSubtotal = multiPreviewB.subtotal + multiPreviewC.subtotal;
     const multiDiscount = 2000;
     const multiTotal = multiSubtotal - multiDiscount;
-    const multiProfit = multiTotal - (2 * 10000 + 1 * 8000);
+    const multiProfit =
+      multiTotal -
+      (MULTI_A_QUANTITY * MULTI_A_BUYING_PRICE +
+        MULTI_B_QUANTITY * MULTI_B_BUYING_PRICE);
 
     const multiSale = await certifier.createSaleBody({
       id: crypto.randomUUID(),
@@ -310,17 +354,17 @@ async function main() {
         {
           productId: productAId,
           productName: `${TEST_PREFIX} Item A`,
-          quantity: 2,
-          unitPrice: 15000,
-          buyingPrice: 10000,
+          quantity: MULTI_A_QUANTITY,
+          unitPrice: MULTI_A_UNIT_PRICE,
+          buyingPrice: MULTI_A_BUYING_PRICE,
           lineTotal: multiPreviewB.subtotal,
         },
         {
           productId: productBId,
           productName: `${TEST_PREFIX} Item B`,
-          quantity: 1,
-          unitPrice: 12000,
-          buyingPrice: 8000,
+          quantity: MULTI_B_QUANTITY,
+          unitPrice: MULTI_B_UNIT_PRICE,
+          buyingPrice: MULTI_B_BUYING_PRICE,
           lineTotal: multiPreviewC.subtotal,
         },
       ],
@@ -342,6 +386,13 @@ async function main() {
     recordCheck(8, "Verify branch assignment", true, "All sales saved to branch main (Kansanga)");
 
     const consecutiveCount = 20;
+    const productASoldQuantities = [
+      SALE1_QUANTITY,
+      MULTI_A_QUANTITY,
+      ...Array.from({ length: consecutiveCount }, () => 1),
+    ];
+    const productBSoldQuantities = [MULTI_B_QUANTITY];
+
     for (let index = 0; index < consecutiveCount; index += 1) {
       const preview = computeSalePreview(1, 15000, 10000, 0);
       const sale = await certifier.createSaleBody(
@@ -385,13 +436,21 @@ async function main() {
 
     const dbA = await prisma.product.findUnique({ where: { id: productAId } });
     const dbB = await prisma.product.findUnique({ where: { id: productBId } });
-    assert.equal(dbA?.currentStock, 75);
-    assert.equal(dbB?.currentStock, 29);
+    const expectedStockA = expectedRemainingStock(
+      PRODUCT_A_INITIAL,
+      productASoldQuantities
+    );
+    const expectedStockB = expectedRemainingStock(
+      PRODUCT_B_INITIAL,
+      productBSoldQuantities
+    );
+    assert.equal(dbA?.currentStock, expectedStockA);
+    assert.equal(dbB?.currentStock, expectedStockB);
     recordCheck(
       4,
       "Verify stock decreases correctly",
       true,
-      `Item A 100→75, Item B 30→29 after ${saleIds.length} sales`
+      `Item A ${PRODUCT_A_INITIAL}→${expectedStockA}, Item B ${PRODUCT_B_INITIAL}→${expectedStockB} after ${saleIds.length} sales`
     );
 
     const staffRecord = await prisma.staff.findUnique({

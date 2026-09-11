@@ -33,6 +33,7 @@
     "verify:auth-storage-isolation": "tsx scripts/verify-auth-storage-isolation.ts",
     "verify:audit-cache-integrity": "tsx scripts/verify-audit-cache-integrity.ts",
     "verify:financial-defaults": "tsx scripts/verify-financial-defaults.ts",
+    "verify:financial-assertions": "tsx scripts/verify-financial-assertions.ts",
     "verify:branch-selection": "tsx scripts/verify-branch-selection-authority.ts",
     "db:studio": "prisma studio",
     "db:backup": "tsx scripts/backup-database.ts",
