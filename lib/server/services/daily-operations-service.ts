@@ -274,13 +274,38 @@ export async function removeDailyOperationsByIds(
 ): Promise<number> {
   if (ids.length === 0) return 0;
 
-  const where: Prisma.DailyOperationWhereInput = { id: { in: ids } };
+  const uniqueIds = [...new Set(ids)];
+
+  const operations = await prisma.dailyOperation.findMany({
+    where: { id: { in: uniqueIds } },
+  });
+
+  if (operations.length !== uniqueIds.length) {
+    throw new ApiError("One or more daily operations were not found.", {
+      status: 404,
+      code: "not_found",
+    });
+  }
+
+  for (const operation of operations) {
+    await assertRecordInSessionBranchScope(session, operation.branchId);
+  }
+
+  const where: Prisma.DailyOperationWhereInput = { id: { in: uniqueIds } };
   if (!isOwnerRole(session.role)) {
     const filter = await resolveBranchListFilter(session);
     where.branchId = filter.branchId;
   }
 
   const result = await prisma.dailyOperation.deleteMany({ where });
+
+  if (result.count !== uniqueIds.length) {
+    throw new ApiError("Failed to delete all requested daily operations.", {
+      status: 500,
+      code: "delete_failed",
+    });
+  }
+
   return result.count;
 }
 

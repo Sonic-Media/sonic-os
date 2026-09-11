@@ -26,7 +26,6 @@
     "verify:purchasing": "tsx scripts/verify-purchasing-module.ts",
     "verify:operations": "tsx scripts/verify-daily-operations-module.ts",
     "verify:historical-import": "tsx scripts/verify-historical-import.ts",
-    "verify:historical-save": "tsx scripts/verify-historical-save-persistence.ts",
     "verify:users": "tsx scripts/verify-users-module.ts",
     "verify:staff": "tsx scripts/verify-staff-module.ts",
     "verify:roles": "tsx scripts/verify-roles-permissions-module.ts",
@@ -51,7 +50,9 @@
     "verify:close-day-payouts": "tsx scripts/verify-close-day-payout-sequencing.ts",
     "verify:documentation-drift": "tsx scripts/verify-documentation-drift.ts",
     "verify:data-integrity": "tsx scripts/verify-data-integrity.ts",
-    "verify:branch-switch-refresh": "tsx scripts/verify-branch-switch-refresh.ts"
+    "verify:branch-switch-refresh": "tsx scripts/verify-branch-switch-refresh.ts",
+    "verify:historical-save": "tsx scripts/verify-historical-save-persistence.ts",
+    "verify:historical-import-undo": "tsx scripts/verify-historical-import-undo.ts"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.9.1",

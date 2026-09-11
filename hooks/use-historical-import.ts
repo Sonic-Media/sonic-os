@@ -57,6 +57,7 @@ export function useHistoricalImport() {
   const [undoSnapshot, setUndoSnapshot] = useState<ImportUndoSnapshot | null>(
     () => getImportUndoSnapshot()
   );
+  const [isUndoing, setIsUndoing] = useState(false);
 
   const resetImportState = useCallback(() => {
     setPreview(null);
@@ -244,7 +245,7 @@ export function useHistoricalImport() {
     }
   }, [importEntries, preview, selectedRows, staff]);
 
-  const undoLastImport = useCallback(() => {
+  const undoLastImport = useCallback(async () => {
     const snapshot = undoSnapshot ?? getImportUndoSnapshot();
     if (!snapshot || snapshot.entryIds.length === 0) {
       return {
@@ -254,19 +255,36 @@ export function useHistoricalImport() {
       };
     }
 
-    const removedCount = removeEntriesByIds(snapshot.entryIds);
-    clearImportUndoSnapshot();
-    setUndoSnapshot(null);
-    setLastImportResult(null);
+    setIsUndoing(true);
 
-    return {
-      success: removedCount > 0,
-      removedCount,
-      message:
-        removedCount > 0
-          ? `Removed ${removedCount} imported record${removedCount === 1 ? "" : "s"}.`
-          : "Nothing was removed. The imported records may have been changed or deleted.",
-    };
+    try {
+      const result = await removeEntriesByIds(snapshot.entryIds);
+
+      if (!result.success) {
+        return {
+          success: false,
+          removedCount: 0,
+          message:
+            result.error ??
+            "Undo failed. Imported records were not removed from the database.",
+        };
+      }
+
+      clearImportUndoSnapshot();
+      setUndoSnapshot(null);
+      setLastImportResult(null);
+
+      return {
+        success: true,
+        removedCount: result.removedCount,
+        message:
+          result.removedCount > 0
+            ? `Removed ${result.removedCount} imported record${result.removedCount === 1 ? "" : "s"}.`
+            : "Nothing was removed. The imported records may have been changed or deleted.",
+      };
+    } finally {
+      setIsUndoing(false);
+    }
   }, [removeEntriesByIds, undoSnapshot]);
 
   const errorReport = useMemo(() => {
@@ -292,6 +310,7 @@ export function useHistoricalImport() {
     isImporting,
     lastImportResult,
     undoSnapshot,
+    isUndoing,
     errorReport,
     activeBranch,
     loadFile,
