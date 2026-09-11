@@ -9,6 +9,7 @@ import { migrateLegacyAuthRole } from "@/lib/staff/roles";
 import {
   getBranchIdByCode,
   getBranchCodeById,
+  getBranchIdForSession,
 } from "@/lib/server/branch-lookup";
 import { mapStaffToEntity } from "@/lib/server/mappers/entities";
 import { requireSession } from "@/lib/server/session";
@@ -18,7 +19,14 @@ import { upsertDailyOperation } from "@/lib/server/services/daily-operations-ser
 import {
   assertCanCloseDay,
   assertCanOpenShop,
+  assertStaffOperationalRole,
 } from "@/lib/server/day-closing-guards";
+import {
+  createStartShiftAudit,
+  getStaffOnShiftAtBranch,
+} from "@/lib/server/services/attendance-service";
+import { getLinkedStaffForUser } from "@/lib/server/services/staff-service";
+import type { AuditLogRecord } from "@/types/audit-log";
 import type { Branch } from "@/types";
 import type { DayClosingSummary } from "@/types/day-closing";
 import type {
@@ -192,6 +200,7 @@ async function ensureDailyOperationDraft(
   date: string,
   session: Awaited<ReturnType<typeof requireSession>>
 ) {
+  await getBranchIdForSession(session, branch);
   const branchId = await getBranchIdByCode(branch);
   const existing = await prisma.dailyOperation.findUnique({
     where: {
@@ -246,9 +255,9 @@ async function ensureDailyOperationDraft(
 
 export async function openDay(input: unknown): Promise<DayClosingRecord> {
   const parsed = openDaySchema.parse(input);
-  const branchId = await getBranchIdByCode(parsed.branch);
   const session = await requireSession();
   assertCanOpenShop(session);
+  const branchId = await getBranchIdForSession(session, parsed.branch);
 
   const actor = await prisma.user.findUnique({
     where: { id: session.userId },
@@ -335,11 +344,139 @@ export async function openDay(input: unknown): Promise<DayClosingRecord> {
   return mapDayClosingRecord(record);
 }
 
+export interface OpenWithShiftResult {
+  dayClosing: DayClosingRecord;
+  attendance: AuditLogRecord;
+}
+
+export async function openWithShift(input: unknown): Promise<OpenWithShiftResult> {
+  const parsed = openDaySchema.parse(input);
+  const session = await requireSession();
+  assertCanOpenShop(session);
+  assertStaffOperationalRole(session);
+  const branchId = await getBranchIdForSession(session, parsed.branch);
+
+  const linkedStaff = await getLinkedStaffForUser(session.userId);
+  if (!linkedStaff) {
+    throw new ApiError("No staff profile is linked to your account.", {
+      status: 404,
+      code: "staff_not_linked",
+    });
+  }
+
+  const actor = await prisma.user.findUnique({
+    where: { id: session.userId },
+    include: { staff: true },
+  });
+  const openedByName =
+    parsed.openedByName ??
+    (await resolveActorDisplayName(session, actor?.staff?.name ?? null));
+
+  const existing = await prisma.dayClosing.findUnique({
+    where: {
+      branchId_date: {
+        branchId,
+        date: parsed.date,
+      },
+    },
+  });
+
+  if (existing?.status === "closed") {
+    throw new ApiError(
+      "This branch day is closed. Reopen it before opening the shop.",
+      {
+        status: 409,
+        code: "day_closed",
+      }
+    );
+  }
+
+  if (
+    existing?.status === "open" &&
+    (existing.openedAt || existing.reopenedAt)
+  ) {
+    throw new ApiError("This branch day is already open.", {
+      status: 409,
+      code: "day_already_open",
+    });
+  }
+
+  const now = new Date();
+  const openedBy = parsed.openedBy ?? session.userId;
+
+  const { dayClosingRecord, attendanceRecord } = await prisma.$transaction(
+    async (tx) => {
+      const record = await tx.dayClosing.upsert({
+        where: {
+          branchId_date: {
+            branchId,
+            date: parsed.date,
+          },
+        },
+        update: {
+          status: "open",
+          openedBy,
+          openedByName,
+          openedAt: now,
+          metrics: EMPTY_METRICS as unknown as Prisma.InputJsonValue,
+          staffPayouts: [] as unknown as Prisma.InputJsonValue,
+          expectedCash: 0,
+          actualCashCounted: 0,
+          cashDifference: 0,
+          cashStatus: "balanced",
+          summary: EMPTY_SUMMARY as unknown as Prisma.InputJsonValue,
+          reconciliationNotes: null,
+          closingNotes: null,
+          closedBy: null,
+          closedByName: null,
+          closedAt: null,
+        },
+        create: {
+          date: parsed.date,
+          branchId,
+          status: "open",
+          metrics: EMPTY_METRICS as unknown as Prisma.InputJsonValue,
+          staffPayouts: [] as unknown as Prisma.InputJsonValue,
+          expectedCash: 0,
+          actualCashCounted: 0,
+          cashDifference: 0,
+          cashStatus: "balanced",
+          summary: EMPTY_SUMMARY as unknown as Prisma.InputJsonValue,
+          openedBy,
+          openedByName,
+          openedAt: now,
+        },
+      });
+
+      const attendance = await createStartShiftAudit(
+        {
+          branch: parsed.branch,
+          date: parsed.date,
+          staffId: linkedStaff.id,
+          staffName: linkedStaff.name,
+          role: linkedStaff.role,
+          detail: "Branch opened for the day",
+        },
+        tx
+      );
+
+      return { dayClosingRecord: record, attendanceRecord: attendance };
+    }
+  );
+
+  await ensureDailyOperationDraft(parsed.branch as Branch, parsed.date, session);
+
+  return {
+    dayClosing: await mapDayClosingRecord(dayClosingRecord),
+    attendance: attendanceRecord,
+  };
+}
+
 export async function closeDay(input: unknown): Promise<DayClosingRecord> {
   const parsed = closeDaySchema.parse(input);
-  const branchId = await getBranchIdByCode(parsed.branch);
   const session = await requireSession();
   assertCanCloseDay(session);
+  const branchId = await getBranchIdForSession(session, parsed.branch);
   const summary = parsed.summary as unknown as DayClosingSummary;
 
   const existing = await prisma.dayClosing.findUnique({
@@ -363,6 +500,22 @@ export async function closeDay(input: unknown): Promise<DayClosingRecord> {
       status: 400,
       code: "shop_not_opened",
     });
+  }
+
+  const staffOnShift = await getStaffOnShiftAtBranch(
+    parsed.branch as Branch,
+    parsed.date
+  );
+  if (staffOnShift.length > 0) {
+    const names = staffOnShift.map((member) => member.staffName).join(", ");
+    throw new ApiError(
+      `Cannot close the day while staff are still on shift: ${names}`,
+      {
+        status: 409,
+        code: "staff_on_shift",
+        details: { staffOnShift },
+      }
+    );
   }
 
   const now = new Date();
@@ -444,8 +597,8 @@ export async function closeDay(input: unknown): Promise<DayClosingRecord> {
 
 export async function reopenDay(input: unknown): Promise<DayClosingRecord> {
   const parsed = reopenDaySchema.parse(input);
-  const branchId = await getBranchIdByCode(parsed.branch);
   const session = await requireSession();
+  const branchId = await getBranchIdForSession(session, parsed.branch);
 
   if (
     session.role !== "owner" &&

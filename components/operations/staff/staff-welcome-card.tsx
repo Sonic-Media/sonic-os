@@ -8,12 +8,12 @@ import { useDayClosing } from "@/context/day-closing-context";
 import { useSettings } from "@/context/settings-context";
 import { useStaff } from "@/context/staff-context";
 import { useStaffAttendance } from "@/hooks/use-staff-attendance";
+import { clockOutApi } from "@/lib/api/staff-attendance";
+import { runOnApi } from "@/lib/data-source/context-api";
 import { getTodayISO } from "@/lib/dates";
 import { formatRelativeTime, getGreeting } from "@/lib/format";
-import {
-  formatClockTime,
-  recordStaffClockOut,
-} from "@/lib/staff/attendance";
+import { mergeStaffAuditRecords } from "@/lib/staff/audit";
+import { formatClockTime } from "@/lib/staff/attendance";
 import { resolveStaffDisplayName } from "@/lib/ux/user-display";
 import {
   StaffCard,
@@ -58,8 +58,25 @@ export function StaffWelcomeCard() {
 
   async function handleClockOut() {
     setIsClockingOut(true);
-    recordStaffClockOut(activeBranch);
-    setIsClockingOut(false);
+    try {
+      const record = await runOnApi(() =>
+        clockOutApi({ branch: activeBranch, date: today })
+      );
+      mergeStaffAuditRecords([
+        {
+          id: record.id,
+          timestamp: record.timestamp,
+          staffId: record.userId,
+          staffName: record.userName,
+          role: record.role as never,
+          branch: record.branch,
+          action: record.action,
+          module: record.module as never,
+        },
+      ]);
+    } finally {
+      setIsClockingOut(false);
+    }
   }
 
   return (
