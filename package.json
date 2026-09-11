@@ -27,6 +27,7 @@
     "verify:historical-import": "tsx scripts/verify-historical-import.ts",
     "verify:users": "tsx scripts/verify-users-module.ts",
     "verify:staff": "tsx scripts/verify-staff-module.ts",
+    "verify:staff-payment-branch": "tsx scripts/verify-staff-payment-branch-authorization.ts",
     "verify:roles": "tsx scripts/verify-roles-permissions-module.ts",
     "verify:branch-isolation": "tsx scripts/verify-branch-isolation.ts",
     "verify:branch-operations": "tsx scripts/verify-branch-operations-isolation.ts",

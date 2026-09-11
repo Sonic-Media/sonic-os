@@ -2,7 +2,9 @@ import { randomUUID } from "crypto";
 import type { BranchIdFilter } from "@/lib/server/branch-scope";
 import { ApiError } from "@/lib/api/errors";
 import { prisma } from "@/lib/db";
-import { getBranchIdByCode } from "@/lib/server/branch-lookup";
+import { assertSessionCanAccessBranchCode } from "@/lib/server/branch-lookup";
+import { assertDestructiveApiAllowed } from "@/lib/server/data-protection/guards";
+import { recordDeleteAudit } from "@/lib/server/data-protection/audit";
 import { toJsonField } from "@/lib/server/json-fields";
 import { mapStaffPaymentToEntity } from "@/lib/server/mappers/entities";
 import {
@@ -17,11 +19,47 @@ import {
   STAFF_PAYMENT_CATEGORY_NAME,
   getStaffPaymentTypeLabel,
 } from "@/lib/expenses-module/constants";
+import type { AuthSession } from "@/types/auth";
 import type { StaffPayment, StaffPaymentInput } from "@/types/staff-payment";
 import type { StaffActionRecord } from "@/types/staff-session";
 import type { Branch } from "@/types";
 
-const paymentInclude = { branch: true } as const;
+const paymentInclude = { branch: true, staff: { include: { branch: true } } } as const;
+
+async function loadStaffPaymentRow(id: string) {
+  const payment = await prisma.staffPayment.findUnique({
+    where: { id },
+    include: paymentInclude,
+  });
+
+  if (!payment) {
+    throw new ApiError("Staff payment not found.", {
+      status: 404,
+      code: "not_found",
+    });
+  }
+
+  return payment;
+}
+
+function assertStaffPaymentBranchAccess(
+  session: AuthSession,
+  branchCode: string
+): void {
+  assertSessionCanAccessBranchCode(session, branchCode);
+}
+
+function assertStaffMemberMatchesPaymentBranch(input: {
+  staffBranchCode: string;
+  paymentBranchCode: string;
+}): void {
+  if (input.staffBranchCode !== input.paymentBranchCode) {
+    throw new ApiError(
+      "Staff member does not belong to the payment branch.",
+      { status: 403, code: "branch_forbidden" }
+    );
+  }
+}
 
 export async function listStaffPayments(
   branchFilter?: BranchIdFilter
@@ -38,12 +76,18 @@ export async function listStaffPayments(
 export async function getStaffPaymentByExpenseId(
   expenseId: string
 ): Promise<StaffPayment | null> {
+  const session = await requireSession();
   const payment = await prisma.staffPayment.findFirst({
     where: { expenseId },
     include: paymentInclude,
   });
 
-  return payment ? mapStaffPaymentToEntity(payment) : null;
+  if (!payment) {
+    return null;
+  }
+
+  assertStaffPaymentBranchAccess(session, payment.branch.code);
+  return mapStaffPaymentToEntity(payment);
 }
 
 export async function createStaffPayment(
@@ -87,9 +131,14 @@ export async function createStaffPayment(
   }
 
   const branchCode = staff.branch.code as Branch;
+  assertStaffPaymentBranchAccess(session, branchCode);
+  assertStaffMemberMatchesPaymentBranch({
+    staffBranchCode: staff.branch.code,
+    paymentBranchCode: branchCode,
+  });
   await assertBranchDayOpenForWrite(branchCode, input.date);
 
-  const branchId = await getBranchIdByCode(branchCode);
+  const branchId = staff.branchId;
 
   const duplicatePayment = await prisma.staffPayment.findFirst({
     where: {
@@ -178,10 +227,101 @@ export async function createStaffPayment(
 export async function getStaffPaymentById(
   id: string
 ): Promise<StaffPayment | null> {
+  const session = await requireSession();
   const payment = await prisma.staffPayment.findUnique({
     where: { id },
     include: paymentInclude,
   });
 
-  return payment ? mapStaffPaymentToEntity(payment) : null;
+  if (!payment) {
+    return null;
+  }
+
+  assertStaffPaymentBranchAccess(session, payment.branch.code);
+  return mapStaffPaymentToEntity(payment);
+}
+
+export async function updateStaffPayment(
+  id: string,
+  input: { notes?: string; amount?: number }
+): Promise<StaffPayment> {
+  const session = await requireSession();
+  assertStaffOperationalRole(session);
+
+  const existing = await loadStaffPaymentRow(id);
+  const branchCode = existing.branch.code as Branch;
+  assertStaffPaymentBranchAccess(session, branchCode);
+  assertStaffMemberMatchesPaymentBranch({
+    staffBranchCode: existing.staff.branch.code,
+    paymentBranchCode: existing.branch.code,
+  });
+  await assertBranchDayOpenForWrite(branchCode, existing.date);
+
+  if (input.amount !== undefined && input.amount <= 0) {
+    throw new ApiError("Amount must be greater than zero.", {
+      status: 400,
+      code: "validation_error",
+    });
+  }
+
+  const amount =
+    input.amount !== undefined ? Math.abs(input.amount) : existing.amount;
+
+  await prisma.$transaction(async (tx) => {
+    await tx.staffPayment.update({
+      where: { id },
+      data: {
+        amount,
+        notes: input.notes?.trim() ?? existing.notes,
+      },
+    });
+
+    await tx.expenseRecord.update({
+      where: { id: existing.expenseId },
+      data: {
+        amount,
+        notes: input.notes?.trim() ?? existing.notes,
+        description: `${getStaffPaymentTypeLabel(existing.paymentType as StaffPayment["paymentType"])} - ${existing.staffName}`,
+      },
+    });
+
+    await recordTransactionAudit(
+      tx,
+      session,
+      AUDIT_ACTIONS.STAFF_PAYMENT,
+      `Updated staff payment for ${existing.staffName} on ${existing.date}.`
+    );
+  });
+
+  return mapStaffPaymentToEntity(await loadStaffPaymentRow(id));
+}
+
+export async function deleteStaffPayment(id: string): Promise<void> {
+  const session = await requireSession();
+  assertStaffOperationalRole(session);
+  assertDestructiveApiAllowed("Staff payment deletion");
+
+  const existing = await loadStaffPaymentRow(id);
+  const branchCode = existing.branch.code as Branch;
+  assertStaffPaymentBranchAccess(session, branchCode);
+  assertStaffMemberMatchesPaymentBranch({
+    staffBranchCode: existing.staff.branch.code,
+    paymentBranchCode: existing.branch.code,
+  });
+  await assertBranchDayOpenForWrite(branchCode, existing.date);
+
+  await prisma.$transaction(async (tx) => {
+    await tx.staffPayment.delete({ where: { id } });
+    await tx.expenseRecord.update({
+      where: { id: existing.expenseId },
+      data: { deletedAt: new Date() },
+    });
+  });
+
+  await recordDeleteAudit(
+    session,
+    "staff-payments",
+    id,
+    existing as unknown as Record<string, unknown>
+  );
 }
