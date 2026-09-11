@@ -1,4 +1,5 @@
 import { hashPassword } from "@/lib/auth/password";
+import { ACTIVE_BRANCH_STORAGE_KEY } from "@/lib/constants";
 import { removeLocalStorageItem } from "@/lib/safe-storage";
 import { isUserRole, normalizeUserRole } from "@/lib/auth/validation";
 import type { AppUser, AuthAuditRecord, AuthSession } from "@/types/auth";
@@ -153,6 +154,7 @@ export function clearSession(): void {
     "sonic-os-notifications",
     "sonic-os-import-undo",
     "sonic-os-stock-last-movement-branch",
+    ACTIVE_BRANCH_STORAGE_KEY,
     "sonic-os-entries",
     "sonic-os-sales",
     "sonic-os-expenses-records",

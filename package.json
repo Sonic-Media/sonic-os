@@ -34,7 +34,6 @@
     "verify:staff": "tsx scripts/verify-staff-module.ts",
     "verify:roles": "tsx scripts/verify-roles-permissions-module.ts",
     "verify:branch-isolation": "tsx scripts/verify-branch-isolation.ts",
-    "verify:branch-authorization": "tsx scripts/verify-branch-authorization.ts",
     "verify:branch-operations": "tsx scripts/verify-branch-operations-isolation.ts",
     "db:studio": "prisma studio",
     "db:backup": "tsx scripts/backup-database.ts",
@@ -56,7 +55,9 @@
     "verify:data-integrity": "tsx scripts/verify-data-integrity.ts",
     "verify:branch-switch-refresh": "tsx scripts/verify-branch-switch-refresh.ts",
     "verify:historical-save": "tsx scripts/verify-historical-save-persistence.ts",
-    "verify:historical-import-undo": "tsx scripts/verify-historical-import-undo.ts"
+    "verify:historical-import-undo": "tsx scripts/verify-historical-import-undo.ts",
+    "verify:branch-authorization": "tsx scripts/verify-branch-authorization.ts",
+    "verify:branch-selection": "tsx scripts/verify-branch-selection-authority.ts"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.9.1",
