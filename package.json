@@ -33,6 +33,7 @@
     "verify:branch-authorization": "tsx scripts/verify-branch-authorization.ts",
     "verify:branch-operations": "tsx scripts/verify-branch-operations-isolation.ts",
     "verify:attendance": "tsx scripts/verify-attendance-flow.ts",
+    "verify:awaited-mutations": "tsx scripts/verify-awaited-mutations.ts",
     "verify:close-day-payouts": "tsx scripts/verify-close-day-payout-sequencing.ts",
     "verify:documentation-drift": "tsx scripts/verify-documentation-drift.ts",
     "verify:data-integrity": "tsx scripts/verify-data-integrity.ts",

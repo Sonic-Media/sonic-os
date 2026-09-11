@@ -84,10 +84,14 @@ interface StaffContextValue {
         | "notes"
       >
     >
-  ) => void;
-  linkStaffAccount: (staffId: string, userId: string, username?: string) => void;
-  unlinkStaffAccount: (staffId: string) => void;
-  deactivateStaff: (id: string) => void;
+  ) => Promise<StaffValidationResult>;
+  linkStaffAccount: (
+    staffId: string,
+    userId: string,
+    username?: string
+  ) => Promise<StaffValidationResult>;
+  unlinkStaffAccount: (staffId: string) => Promise<StaffValidationResult>;
+  deactivateStaff: (id: string) => Promise<StaffValidationResult>;
   deleteStaff: (id: string) => Promise<StaffValidationResult>;
 }
 
@@ -293,7 +297,7 @@ export function StaffProvider({ children }: { children: React.ReactNode }) {
   );
 
   const updateStaff = useCallback(
-    (
+    async (
       id: string,
       patch: Partial<
         Pick<
@@ -314,120 +318,133 @@ export function StaffProvider({ children }: { children: React.ReactNode }) {
           | "notes"
         >
       >
-    ) => {
+    ): Promise<StaffValidationResult> => {
       const existing = staffRef.current.find((member) => member.id === id);
+      if (!existing) {
+        return createStaffValidationResult({ form: "Staff member not found." });
+      }
+
       const normalizedPatch = normalizeStaffPatch(patch);
 
-      void (async () => {
-        try {
-          await runOnApi(async () => {
-            await updateStaffApi(id, normalizedPatch);
-            await refreshStaffFromApi();
-          });
+      try {
+        await runOnApi(async () => {
+          await updateStaffApi(id, normalizedPatch);
+          await refreshStaffFromApi();
+        });
 
-          if (existing) {
-            const updated = staffRef.current.find((member) => member.id === id);
-            if (!updated) return;
-
-            let action: string = AUDIT_ACTIONS.EDIT;
-            if (
-              normalizedPatch.role &&
-              normalizedPatch.role !== existing.role
-            ) {
-              action = AUDIT_ACTIONS.ROLE_CHANGED;
-            } else if (
-              normalizedPatch.status === "inactive" &&
-              existing.status !== "inactive"
-            ) {
-              action = AUDIT_ACTIONS.DEACTIVATE;
-            } else if (
-              normalizedPatch.status === "active" &&
-              existing.status !== "active"
-            ) {
-              action = AUDIT_ACTIONS.ACTIVATE;
-            }
-
-            recordStaffAction({
-              staffId: existing.id,
-              staffName: existing.name,
-              role: existing.role,
-              branch: existing.branch,
-              action,
-              module: "staff",
-              recordId: existing.id,
-              oldValues: pickAuditFields(existing, [
-                "name",
-                "branch",
-                "role",
-                "status",
-                "dailyWage",
-              ]),
-              newValues: pickAuditFields(updated, [
-                "name",
-                "branch",
-                "role",
-                "status",
-                "dailyWage",
-              ]),
-            });
+        const updated = staffRef.current.find((member) => member.id === id);
+        if (updated) {
+          let action: string = AUDIT_ACTIONS.EDIT;
+          if (normalizedPatch.role && normalizedPatch.role !== existing.role) {
+            action = AUDIT_ACTIONS.ROLE_CHANGED;
+          } else if (
+            normalizedPatch.status === "inactive" &&
+            existing.status !== "inactive"
+          ) {
+            action = AUDIT_ACTIONS.DEACTIVATE;
+          } else if (
+            normalizedPatch.status === "active" &&
+            existing.status !== "active"
+          ) {
+            action = AUDIT_ACTIONS.ACTIVATE;
           }
-        } catch (error) {
-          console.error(getDataSourceErrorMessage(error));
+
+          recordStaffAction({
+            staffId: existing.id,
+            staffName: existing.name,
+            role: existing.role,
+            branch: existing.branch,
+            action,
+            module: "staff",
+            recordId: existing.id,
+            oldValues: pickAuditFields(existing, [
+              "name",
+              "branch",
+              "role",
+              "status",
+              "dailyWage",
+            ]),
+            newValues: pickAuditFields(updated, [
+              "name",
+              "branch",
+              "role",
+              "status",
+              "dailyWage",
+            ]),
+          });
         }
-      })();
+
+        return createStaffValidationResult({}, updated);
+      } catch (error) {
+        return createStaffValidationResult({
+          form: getDataSourceErrorMessage(error),
+        });
+      }
     },
     [refreshStaffFromApi]
   );
 
   const linkStaffAccount = useCallback(
-    (staffId: string, userId: string, username?: string) => {
-      void (async () => {
-        try {
-          await runOnApi(async () => {
-            await linkStaffUserApi(staffId, { userId, username });
-            await refreshStaffFromApi();
-          });
+    async (
+      staffId: string,
+      userId: string,
+      username?: string
+    ): Promise<StaffValidationResult> => {
+      const member = staffRef.current.find((item) => item.id === staffId);
+      if (!member) {
+        return createStaffValidationResult({ form: "Staff member not found." });
+      }
 
-          const member = staffRef.current.find((item) => item.id === staffId);
-          if (member) {
-            recordStaffAction({
-              staffId: member.id,
-              staffName: member.name,
-              role: member.role,
-              branch: member.branch,
-              action: "Login Linked",
-              module: "staff",
-              detail: username,
-            });
-          }
-        } catch (error) {
-          console.error(getDataSourceErrorMessage(error));
-        }
-      })();
+      try {
+        await runOnApi(async () => {
+          await linkStaffUserApi(staffId, { userId, username });
+          await refreshStaffFromApi();
+        });
+
+        recordStaffAction({
+          staffId: member.id,
+          staffName: member.name,
+          role: member.role,
+          branch: member.branch,
+          action: "Login Linked",
+          module: "staff",
+          detail: username,
+        });
+
+        return createStaffValidationResult({});
+      } catch (error) {
+        return createStaffValidationResult({
+          form: getDataSourceErrorMessage(error),
+        });
+      }
     },
     [refreshStaffFromApi]
   );
 
   const unlinkStaffAccount = useCallback(
-    (staffId: string) => {
-      void (async () => {
-        try {
-          await runOnApi(async () => {
-            await unlinkStaffUserApi(staffId);
-            await refreshStaffFromApi();
-          });
-        } catch (error) {
-          console.error(getDataSourceErrorMessage(error));
-        }
-      })();
+    async (staffId: string): Promise<StaffValidationResult> => {
+      const member = staffRef.current.find((item) => item.id === staffId);
+      if (!member) {
+        return createStaffValidationResult({ form: "Staff member not found." });
+      }
+
+      try {
+        await runOnApi(async () => {
+          await unlinkStaffUserApi(staffId);
+          await refreshStaffFromApi();
+        });
+        return createStaffValidationResult({});
+      } catch (error) {
+        return createStaffValidationResult({
+          form: getDataSourceErrorMessage(error),
+        });
+      }
     },
     [refreshStaffFromApi]
   );
 
   const deactivateStaff = useCallback(
-    (id: string) => {
-      updateStaff(id, { status: "inactive", active: false });
-    },
+    (id: string) => updateStaff(id, { status: "inactive", active: false }),
     [updateStaff]
   );
 

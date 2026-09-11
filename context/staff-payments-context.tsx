@@ -64,7 +64,9 @@ interface StaffPaymentsContextValue {
   getPaymentById: (id: string) => StaffPaymentRecord | undefined;
   getPaymentByExpenseId: (expenseId: string) => StaffPaymentRecord | undefined;
   getPaymentsForBranchDate: (branch: Branch, date: string) => StaffPaymentRecord[];
-  recordStaffPayment: (input: StaffPaymentInput) => StaffPaymentValidationResult;
+  recordStaffPayment: (
+    input: StaffPaymentInput
+  ) => Promise<StaffPaymentValidationResult>;
   recordStaffPaymentAsync: (
     input: StaffPaymentInput
   ) => Promise<StaffPaymentValidationResult>;
@@ -211,60 +213,9 @@ export function StaffPaymentsProvider({
   );
 
   const recordStaffPayment = useCallback(
-    (input: StaffPaymentInput): StaffPaymentValidationResult => {
-      const errors = validateStaffPaymentInput(input);
-      if (hasValidationErrors(errors)) {
-        return createValidationResult(errors);
-      }
-
-      const staff = getStaffById(input.staffId);
-      if (!staff) {
-        return createValidationResult({ staffId: "Staff member not found." });
-      }
-
-      if (isBranchDayClosed(staff.branch, input.date)) {
-        return createValidationResult({ form: DAY_CLOSED_EDIT_MESSAGE });
-      }
-      if (!isBranchDayOpened(staff.branch, input.date)) {
-        return createValidationResult({ form: SHOP_NOT_OPENED_MESSAGE });
-      }
-
-      void (async () => {
-        try {
-          await runOnApi(async () => {
-            const payer = resolveCurrentStaffAction(staff.branch);
-            const created = await createStaffPaymentApi({
-              ...input,
-              paidBy: payer,
-            });
-            await refreshPaymentsFromApi();
-
-            recordStaffAction({
-              staffId: payer?.staffId ?? staff.id,
-              staffName: payer?.staffName ?? staff.name,
-              role: payer?.role ?? staff.role,
-              branch: staff.branch,
-              action: AUDIT_ACTIONS.STAFF_PAYMENT,
-              module: "staff",
-              recordId: created.id,
-              newValues: pickAuditFields(created, [
-                "id",
-                "staffName",
-                "amount",
-                "paymentType",
-                "branch",
-                "date",
-              ]),
-            });
-          });
-        } catch (error) {
-          console.error(getDataSourceErrorMessage(error));
-        }
-      })();
-
-      return createValidationResult({});
-    },
-    [getStaffById, refreshPaymentsFromApi]
+    (input: StaffPaymentInput): Promise<StaffPaymentValidationResult> =>
+      recordStaffPaymentAsync(input),
+    [recordStaffPaymentAsync]
   );
 
   const value = useMemo(

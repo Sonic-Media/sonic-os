@@ -61,10 +61,13 @@ interface BranchContextValue {
   loadError: string | null;
   getBranchByCode: (code: Branch) => BranchEntity | undefined;
   getBranchName: (code: Branch) => string;
-  addBranch: (input: BranchInput) => BranchValidationResult;
-  updateBranch: (id: string, input: BranchUpdateInput) => BranchValidationResult;
-  deactivateBranch: (id: string) => void;
-  reactivateBranch: (id: string) => void;
+  addBranch: (input: BranchInput) => Promise<BranchValidationResult>;
+  updateBranch: (
+    id: string,
+    input: BranchUpdateInput
+  ) => Promise<BranchValidationResult>;
+  deactivateBranch: (id: string) => Promise<BranchValidationResult>;
+  reactivateBranch: (id: string) => Promise<BranchValidationResult>;
 
   // Global operating context
   activeBranch: Branch;
@@ -324,30 +327,32 @@ export function BranchProvider({ children }: { children: React.ReactNode }) {
   );
 
   const addBranch = useCallback(
-    (input: BranchInput): BranchValidationResult => {
+    async (input: BranchInput): Promise<BranchValidationResult> => {
       const errors = validateBranchInput(input, branchesRef.current);
       if (hasValidationErrors(errors)) {
         return createValidationResult(errors);
       }
 
-      void (async () => {
-        try {
-          await runOnApi(async () => {
-            await createBranchApi(input);
-            await refreshBranchesFromApi();
-          });
-        } catch (error) {
-          console.error(getDataSourceErrorMessage(error));
-        }
-      })();
-
-      return createValidationResult({});
+      try {
+        await runOnApi(async () => {
+          await createBranchApi(input);
+          await refreshBranchesFromApi();
+        });
+        return createValidationResult({});
+      } catch (error) {
+        return createValidationResult({
+          form: getDataSourceErrorMessage(error),
+        });
+      }
     },
     [refreshBranchesFromApi]
   );
 
   const updateBranch = useCallback(
-    (id: string, input: BranchUpdateInput): BranchValidationResult => {
+    async (
+      id: string,
+      input: BranchUpdateInput
+    ): Promise<BranchValidationResult> => {
       const existing = branchesRef.current.find((branch) => branch.id === id);
       if (!existing) {
         return createValidationResult({ form: "Branch not found." });
@@ -358,50 +363,61 @@ export function BranchProvider({ children }: { children: React.ReactNode }) {
         return createValidationResult(errors);
       }
 
-      void (async () => {
-        try {
-          await runOnApi(async () => {
-            await updateBranchApi(id, input);
-            await refreshBranchesFromApi();
-          });
-        } catch (error) {
-          console.error(getDataSourceErrorMessage(error));
-        }
-      })();
-
-      return createValidationResult({});
+      try {
+        await runOnApi(async () => {
+          await updateBranchApi(id, input);
+          await refreshBranchesFromApi();
+        });
+        return createValidationResult({});
+      } catch (error) {
+        return createValidationResult({
+          form: getDataSourceErrorMessage(error),
+        });
+      }
     },
     [refreshBranchesFromApi]
   );
 
   const deactivateBranch = useCallback(
-    (id: string) => {
-      void (async () => {
-        try {
-          await runOnApi(async () => {
-            await setBranchActiveApi(id, false);
-            await refreshBranchesFromApi();
-          });
-        } catch (error) {
-          console.error(getDataSourceErrorMessage(error));
-        }
-      })();
+    async (id: string): Promise<BranchValidationResult> => {
+      const existing = branchesRef.current.find((branch) => branch.id === id);
+      if (!existing) {
+        return createValidationResult({ form: "Branch not found." });
+      }
+
+      try {
+        await runOnApi(async () => {
+          await setBranchActiveApi(id, false);
+          await refreshBranchesFromApi();
+        });
+        return createValidationResult({});
+      } catch (error) {
+        return createValidationResult({
+          form: getDataSourceErrorMessage(error),
+        });
+      }
     },
     [refreshBranchesFromApi]
   );
 
   const reactivateBranch = useCallback(
-    (id: string) => {
-      void (async () => {
-        try {
-          await runOnApi(async () => {
-            await setBranchActiveApi(id, true);
-            await refreshBranchesFromApi();
-          });
-        } catch (error) {
-          console.error(getDataSourceErrorMessage(error));
-        }
-      })();
+    async (id: string): Promise<BranchValidationResult> => {
+      const existing = branchesRef.current.find((branch) => branch.id === id);
+      if (!existing) {
+        return createValidationResult({ form: "Branch not found." });
+      }
+
+      try {
+        await runOnApi(async () => {
+          await setBranchActiveApi(id, true);
+          await refreshBranchesFromApi();
+        });
+        return createValidationResult({});
+      } catch (error) {
+        return createValidationResult({
+          form: getDataSourceErrorMessage(error),
+        });
+      }
     },
     [refreshBranchesFromApi]
   );

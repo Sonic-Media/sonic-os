@@ -22,13 +22,13 @@ export function CategoryDialog({
   const [name, setName] = useState(category?.name ?? "");
   const [errors, setErrors] = useState<Record<string, string | undefined>>({});
 
-  function handleSubmit(event: React.FormEvent) {
+  async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
 
     const result =
       mode === "add"
-        ? addCategory({ name })
-        : updateCategory(category!.id, { name });
+        ? await addCategory({ name })
+        : await updateCategory(category!.id, { name });
 
     if (!result.success) {
       setErrors(result.errors);

@@ -23,12 +23,14 @@ export function BranchDialog({ mode, branch, onClose }: BranchDialogProps) {
   const [manager, setManager] = useState(branch?.manager ?? "");
   const [errors, setErrors] = useState<Record<string, string | undefined>>({});
 
-  function handleSubmit(event: React.FormEvent) {
+  async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
 
     const input = { name, code, address, phone, manager };
     const result =
-      mode === "add" ? addBranch(input) : updateBranch(branch!.id, input);
+      mode === "add"
+        ? await addBranch(input)
+        : await updateBranch(branch!.id, input);
 
     if (!result.success) {
       setErrors(result.errors);

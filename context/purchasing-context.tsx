@@ -70,12 +70,12 @@ interface PurchasingContextValue {
   refreshPurchases: () => Promise<void>;
   getPurchaseById: (id: string) => Purchase | undefined;
   getSupplierById: (id: string) => Supplier | undefined;
-  addSupplier: (input: SupplierInput) => PurchaseValidationResult;
+  addSupplier: (input: SupplierInput) => Promise<PurchaseValidationResult>;
   updateSupplier: (
     id: string,
     input: SupplierUpdateInput
-  ) => PurchaseValidationResult;
-  deleteSupplier: (id: string) => PurchaseValidationResult;
+  ) => Promise<PurchaseValidationResult>;
+  deleteSupplier: (id: string) => Promise<PurchaseValidationResult>;
   completePurchase: (input: PurchaseInput) => Promise<PurchaseValidationResult>;
 }
 
@@ -199,30 +199,32 @@ export function PurchasingProvider({
   );
 
   const addSupplier = useCallback(
-    (input: SupplierInput): PurchaseValidationResult => {
+    async (input: SupplierInput): Promise<PurchaseValidationResult> => {
       const errors = validateSupplierInput(input);
       if (hasValidationErrors(errors)) {
         return createValidationResult(errors);
       }
 
-      void (async () => {
-        try {
-          await runOnApi(async () => {
-            await createSupplierApi(input);
-            await refreshPurchasesFromApi();
-          });
-        } catch (error) {
-          console.error(getDataSourceErrorMessage(error));
-        }
-      })();
-
-      return createValidationResult({});
+      try {
+        await runOnApi(async () => {
+          await createSupplierApi(input);
+          await refreshPurchasesFromApi();
+        });
+        return createValidationResult({});
+      } catch (error) {
+        return createValidationResult({
+          form: getDataSourceErrorMessage(error),
+        });
+      }
     },
     [refreshPurchasesFromApi]
   );
 
   const updateSupplier = useCallback(
-    (id: string, input: SupplierUpdateInput): PurchaseValidationResult => {
+    async (
+      id: string,
+      input: SupplierUpdateInput
+    ): Promise<PurchaseValidationResult> => {
       const existing = suppliersRef.current.find(
         (supplier) => supplier.id === id
       );
@@ -235,24 +237,23 @@ export function PurchasingProvider({
         return createValidationResult(errors);
       }
 
-      void (async () => {
-        try {
-          await runOnApi(async () => {
-            await updateSupplierApi(id, input);
-            await refreshPurchasesFromApi();
-          });
-        } catch (error) {
-          console.error(getDataSourceErrorMessage(error));
-        }
-      })();
-
-      return createValidationResult({});
+      try {
+        await runOnApi(async () => {
+          await updateSupplierApi(id, input);
+          await refreshPurchasesFromApi();
+        });
+        return createValidationResult({});
+      } catch (error) {
+        return createValidationResult({
+          form: getDataSourceErrorMessage(error),
+        });
+      }
     },
     [refreshPurchasesFromApi]
   );
 
   const deleteSupplier = useCallback(
-    (id: string): PurchaseValidationResult => {
+    async (id: string): Promise<PurchaseValidationResult> => {
       const inUse = purchasesRef.current.some(
         (purchase) => purchase.supplierId === id
       );
@@ -262,18 +263,17 @@ export function PurchasingProvider({
         });
       }
 
-      void (async () => {
-        try {
-          await runOnApi(async () => {
-            await deleteSupplierApi(id);
-            await refreshPurchasesFromApi();
-          });
-        } catch (error) {
-          console.error(getDataSourceErrorMessage(error));
-        }
-      })();
-
-      return createValidationResult({});
+      try {
+        await runOnApi(async () => {
+          await deleteSupplierApi(id);
+          await refreshPurchasesFromApi();
+        });
+        return createValidationResult({});
+      } catch (error) {
+        return createValidationResult({
+          form: getDataSourceErrorMessage(error),
+        });
+      }
     },
     [refreshPurchasesFromApi]
   );

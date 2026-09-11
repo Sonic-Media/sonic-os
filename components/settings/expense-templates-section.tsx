@@ -24,10 +24,12 @@ function TemplateRow({ template }: { template: ExpenseTemplate }) {
   const [defaultAmount, setDefaultAmount] = useState(
     template.defaultAmount !== undefined ? String(template.defaultAmount) : ""
   );
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  function handleSave() {
+  async function handleSave() {
     if (!name.trim()) return;
-    updateTemplate(template.id, {
+
+    const result = await updateTemplate(template.id, {
       name: name.trim(),
       category,
       defaultAmount:
@@ -35,6 +37,13 @@ function TemplateRow({ template }: { template: ExpenseTemplate }) {
           ? undefined
           : parseAmount(defaultAmount),
     });
+
+    if (!result.success) {
+      setErrorMessage(result.error ?? "Unable to save template.");
+      return;
+    }
+
+    setErrorMessage(null);
     setIsEditing(false);
   }
 
@@ -44,21 +53,42 @@ function TemplateRow({ template }: { template: ExpenseTemplate }) {
     setDefaultAmount(
       template.defaultAmount !== undefined ? String(template.defaultAmount) : ""
     );
+    setErrorMessage(null);
     setIsEditing(false);
   }
 
-  function handleDelete() {
+  async function handleDelete() {
     const confirmed = window.confirm(
       `Delete ${template.name}? Existing entries keep their saved expense amounts.`
     );
-    if (confirmed) {
-      deleteTemplate(template.id);
+    if (!confirmed) return;
+
+    const result = await deleteTemplate(template.id);
+    if (!result.success) {
+      window.alert(result.error ?? "Unable to delete template.");
+    }
+  }
+
+  async function handleDeactivate() {
+    const result = await deactivateTemplate(template.id);
+    if (!result.success) {
+      window.alert(result.error ?? "Unable to deactivate template.");
+    }
+  }
+
+  async function handleActivate() {
+    const result = await updateTemplate(template.id, { active: true });
+    if (!result.success) {
+      window.alert(result.error ?? "Unable to activate template.");
     }
   }
 
   if (isEditing) {
     return (
       <div className="rounded-xl border border-zinc-800/80 bg-zinc-950/60 p-4 space-y-3">
+        {errorMessage && (
+          <p className="text-sm text-red-400">{errorMessage}</p>
+        )}
         <Input
           label="Name"
           value={name}
@@ -83,7 +113,7 @@ function TemplateRow({ template }: { template: ExpenseTemplate }) {
           onChange={(e) => setDefaultAmount(e.target.value)}
         />
         <div className="grid grid-cols-2 gap-3">
-          <Button type="button" onClick={handleSave}>
+          <Button type="button" onClick={() => void handleSave()}>
             Save
           </Button>
           <Button type="button" variant="secondary" onClick={handleCancel}>
@@ -118,7 +148,7 @@ function TemplateRow({ template }: { template: ExpenseTemplate }) {
         {template.active ? (
           <button
             type="button"
-            onClick={() => deactivateTemplate(template.id)}
+            onClick={() => void handleDeactivate()}
             className="px-2 py-1 text-xs font-medium text-zinc-400 hover:text-amber-400 transition-colors"
           >
             Deactivate
@@ -126,7 +156,7 @@ function TemplateRow({ template }: { template: ExpenseTemplate }) {
         ) : (
           <button
             type="button"
-            onClick={() => updateTemplate(template.id, { active: true })}
+            onClick={() => void handleActivate()}
             className="px-2 py-1 text-xs font-medium text-zinc-400 hover:text-emerald-400 transition-colors"
           >
             Activate
@@ -134,7 +164,7 @@ function TemplateRow({ template }: { template: ExpenseTemplate }) {
         )}
         <button
           type="button"
-          onClick={handleDelete}
+          onClick={() => void handleDelete()}
           className="px-2 py-1 text-xs font-medium text-zinc-400 hover:text-red-400 transition-colors"
         >
           Delete
@@ -149,6 +179,7 @@ export function ExpenseTemplatesSection() {
   const [name, setName] = useState("");
   const [category, setCategory] = useState<ExpenseBreakdownKey>("other");
   const [defaultAmount, setDefaultAmount] = useState("");
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const categoryOptions = useMemo(
     () =>
@@ -159,16 +190,23 @@ export function ExpenseTemplatesSection() {
     []
   );
 
-  function handleAddTemplate() {
+  async function handleAddTemplate() {
     const trimmedName = name.trim();
     if (!trimmedName) return;
 
-    addTemplate({
+    const result = await addTemplate({
       name: trimmedName,
       category,
       defaultAmount:
         defaultAmount.trim() === "" ? undefined : parseAmount(defaultAmount),
     });
+
+    if (!result.success) {
+      setErrorMessage(result.error ?? "Unable to add template.");
+      return;
+    }
+
+    setErrorMessage(null);
     setName("");
     setDefaultAmount("");
   }
@@ -190,6 +228,9 @@ export function ExpenseTemplatesSection() {
       </div>
 
       <div className={cn("space-y-3 border-t border-zinc-800/80 pt-4")}>
+        {errorMessage && (
+          <p className="text-sm text-red-400">{errorMessage}</p>
+        )}
         <Input
           label="Add Expense Template"
           placeholder="Name"
@@ -211,7 +252,7 @@ export function ExpenseTemplatesSection() {
           value={defaultAmount}
           onChange={(e) => setDefaultAmount(e.target.value)}
         />
-        <Button type="button" className="w-full" onClick={handleAddTemplate}>
+        <Button type="button" className="w-full" onClick={() => void handleAddTemplate()}>
           Add Template
         </Button>
       </div>

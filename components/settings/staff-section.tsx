@@ -47,9 +47,9 @@ function StaffRow({ member }: { member: Staff }) {
     [activeBranches]
   );
 
-  function handleSave() {
+  async function handleSave() {
     if (!name.trim()) return;
-    updateStaff(member.id, {
+    const result = await updateStaff(member.id, {
       name: name.trim(),
       branch,
       role,
@@ -61,6 +61,10 @@ function StaffRow({ member }: { member: Staff }) {
       emergencyContact: emergencyContact.trim() || undefined,
       notes: notes.trim() || undefined,
     });
+    if (!result.success) {
+      window.alert(result.errors.form ?? "Unable to save staff changes.");
+      return;
+    }
     setIsEditing(false);
   }
 
@@ -194,7 +198,13 @@ function StaffRow({ member }: { member: Staff }) {
         {member.status === "active" ? (
           <button
             type="button"
-            onClick={() => deactivateStaff(member.id)}
+            onClick={() => {
+              void deactivateStaff(member.id).then((result) => {
+                if (!result.success) {
+                  window.alert(result.errors.form ?? "Unable to deactivate staff.");
+                }
+              });
+            }}
             className="px-2 py-1 text-xs font-medium text-zinc-400 hover:text-amber-400 transition-colors"
           >
             Deactivate
@@ -202,7 +212,15 @@ function StaffRow({ member }: { member: Staff }) {
         ) : (
           <button
             type="button"
-            onClick={() => updateStaff(member.id, { status: "active", active: true })}
+            onClick={() => {
+              void updateStaff(member.id, { status: "active", active: true }).then(
+                (result) => {
+                  if (!result.success) {
+                    window.alert(result.errors.form ?? "Unable to activate staff.");
+                  }
+                }
+              );
+            }}
             className="px-2 py-1 text-xs font-medium text-zinc-400 hover:text-emerald-400 transition-colors"
           >
             Activate
@@ -304,11 +322,16 @@ export function StaffSection() {
         return;
       }
 
-      linkStaffAccount(
+      const linkResult = await linkStaffAccount(
         staffResult.staff.id,
         userResult.user.id,
         username.trim().toLowerCase()
       );
+
+      if (!linkResult.success) {
+        setErrors(linkResult.errors);
+        return;
+      }
     }
 
     setName("");

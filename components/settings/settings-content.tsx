@@ -18,13 +18,17 @@ export function SettingsContent() {
   const { updateTemplate } = useExpenseTemplates();
   const { canManageUsers, canImportHistoricalData, canManageRoles, canViewAuditLog } = useAuth();
 
-  function updateBranchName(branch: Branch, name: string) {
-    updateSettings({
+  async function updateBranchName(branch: Branch, name: string) {
+    const result = await updateSettings({
       branchNames: {
         ...settings.branchNames,
         [branch]: name,
       },
     });
+
+    if (!result.success) {
+      console.error(result.error ?? "Unable to save branch name.");
+    }
   }
 
   return (
@@ -37,14 +41,24 @@ export function SettingsContent() {
           <Input
             label="Business Name"
             value={settings.businessName}
-            onChange={(e) => updateSettings({ businessName: e.target.value })}
+            onChange={(e) => {
+              void updateSettings({ businessName: e.target.value }).then(
+                (result) => {
+                  if (!result.success) {
+                    console.error(result.error ?? "Unable to save business name.");
+                  }
+                }
+              );
+            }}
           />
           {branches.map((branch) => (
             <Input
               key={branch.id}
               label={`${settings.branchNames[branch.id]} Branch Name`}
               value={settings.branchNames[branch.id]}
-              onChange={(e) => updateBranchName(branch.id, e.target.value)}
+              onChange={(e) => {
+                void updateBranchName(branch.id, e.target.value);
+              }}
             />
           ))}
           <Input
@@ -55,8 +69,26 @@ export function SettingsContent() {
             value={String(settings.defaultLunchAmount)}
             onChange={(e) => {
               const amount = parseAmount(e.target.value);
-              updateSettings({ defaultLunchAmount: amount });
-              updateTemplate("common-lunch", { defaultAmount: amount });
+              void updateSettings({ defaultLunchAmount: amount }).then(
+                async (result) => {
+                  if (!result.success) {
+                    console.error(
+                      result.error ?? "Unable to save default lunch amount."
+                    );
+                    return;
+                  }
+
+                  const templateResult = await updateTemplate("common-lunch", {
+                    defaultAmount: amount,
+                  });
+                  if (!templateResult.success) {
+                    console.error(
+                      templateResult.error ??
+                        "Unable to save lunch template amount."
+                    );
+                  }
+                }
+              );
             }}
             hint={`New entries default to ${formatCurrency(settings.defaultLunchAmount)}`}
           />
@@ -70,7 +102,13 @@ export function SettingsContent() {
         <Input
           label="Owner Name"
           value={settings.ownerName}
-          onChange={(e) => updateSettings({ ownerName: e.target.value })}
+          onChange={(e) => {
+            void updateSettings({ ownerName: e.target.value }).then((result) => {
+              if (!result.success) {
+                console.error(result.error ?? "Unable to save owner name.");
+              }
+            });
+          }}
         />
       </Card>
 

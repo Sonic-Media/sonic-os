@@ -71,18 +71,18 @@ interface ExpensesModuleContextValue {
   loadError: string | null;
   getExpenseById: (id: string) => ExpenseRecord | undefined;
   getCategoryById: (id: string) => ExpenseCategory | undefined;
-  addExpense: (input: ExpenseRecordInput) => ExpenseValidationResult;
+  addExpense: (input: ExpenseRecordInput) => Promise<ExpenseValidationResult>;
   updateExpense: (
     id: string,
     input: ExpenseRecordUpdateInput
-  ) => ExpenseValidationResult;
-  deleteExpense: (id: string) => void;
-  addCategory: (input: ExpenseCategoryInput) => ExpenseValidationResult;
+  ) => Promise<ExpenseValidationResult>;
+  deleteExpense: (id: string) => Promise<ExpenseValidationResult>;
+  addCategory: (input: ExpenseCategoryInput) => Promise<ExpenseValidationResult>;
   updateCategory: (
     id: string,
     input: ExpenseCategoryUpdateInput
-  ) => ExpenseValidationResult;
-  deleteCategory: (id: string) => ExpenseValidationResult;
+  ) => Promise<ExpenseValidationResult>;
+  deleteCategory: (id: string) => Promise<ExpenseValidationResult>;
   /** @deprecated Staff payment expenses are created by the Staff Payments API. */
   upsertStaffPaymentExpense: (expense: ExpenseRecord) => ExpenseValidationResult;
   /** @deprecated Legacy localStorage linking removed. */
@@ -203,7 +203,7 @@ export function ExpensesModuleProvider({
   );
 
   const addExpense = useCallback(
-    (input: ExpenseRecordInput): ExpenseValidationResult => {
+    async (input: ExpenseRecordInput): Promise<ExpenseValidationResult> => {
       const errors = validateExpenseRecordInput(input);
       if (hasValidationErrors(errors)) {
         return createValidationResult(errors);
@@ -223,47 +223,46 @@ export function ExpensesModuleProvider({
         return createValidationResult({ categoryId: "Category not found." });
       }
 
-      void (async () => {
-        try {
-          await runOnApi(async () => {
-            const created = await createExpenseApi(input);
-            await refreshFromApi();
+      try {
+        await runOnApi(async () => {
+          const created = await createExpenseApi(input);
+          await refreshFromApi();
 
-            const actor = resolveCurrentStaffAction(input.branch);
-            recordStaffAction({
-              staffId: actor?.staffId,
-              staffName: actor?.staffName,
-              role: actor?.role,
-              branch: created.branch,
-              action: AUDIT_ACTIONS.EXPENSE_ADDED,
-              module: "expenses",
-              recordId: created.id,
-              newValues: pickAuditFields(created, [
-                "id",
-                "date",
-                "categoryName",
-                "description",
-                "amount",
-                "branch",
-                "paymentMethod",
-              ]),
-            });
+          const actor = resolveCurrentStaffAction(input.branch);
+          recordStaffAction({
+            staffId: actor?.staffId,
+            staffName: actor?.staffName,
+            role: actor?.role,
+            branch: created.branch,
+            action: AUDIT_ACTIONS.EXPENSE_ADDED,
+            module: "expenses",
+            recordId: created.id,
+            newValues: pickAuditFields(created, [
+              "id",
+              "date",
+              "categoryName",
+              "description",
+              "amount",
+              "branch",
+              "paymentMethod",
+            ]),
           });
-        } catch (error) {
-          console.error(getDataSourceErrorMessage(error));
-        }
-      })();
-
-      return createValidationResult({});
+        });
+        return createValidationResult({});
+      } catch (error) {
+        return createValidationResult({
+          form: getDataSourceErrorMessage(error),
+        });
+      }
     },
     [refreshFromApi]
   );
 
   const updateExpense = useCallback(
-    (
+    async (
       id: string,
       input: ExpenseRecordUpdateInput
-    ): ExpenseValidationResult => {
+    ): Promise<ExpenseValidationResult> => {
       const existing = expensesRef.current.find((expense) => expense.id === id);
       if (!existing) {
         return createValidationResult({ form: "Expense not found." });
@@ -294,57 +293,58 @@ export function ExpensesModuleProvider({
         return createValidationResult({ categoryId: "Category not found." });
       }
 
-      void (async () => {
-        try {
-          await runOnApi(async () => {
-            const updated = await updateExpenseApi(id, input);
-            await refreshFromApi();
+      try {
+        await runOnApi(async () => {
+          const updated = await updateExpenseApi(id, input);
+          await refreshFromApi();
 
-            const actor = resolveCurrentStaffAction(input.branch);
-            recordStaffAction({
-              staffId: actor?.staffId,
-              staffName: actor?.staffName,
-              role: actor?.role,
-              branch: updated.branch,
-              action: AUDIT_ACTIONS.EXPENSE_EDITED,
-              module: "expenses",
-              recordId: updated.id,
-              oldValues: pickAuditFields(existing, [
-                "date",
-                "categoryName",
-                "description",
-                "amount",
-                "branch",
-                "paymentMethod",
-              ]),
-              newValues: pickAuditFields(updated, [
-                "date",
-                "categoryName",
-                "description",
-                "amount",
-                "branch",
-                "paymentMethod",
-              ]),
-            });
+          const actor = resolveCurrentStaffAction(input.branch);
+          recordStaffAction({
+            staffId: actor?.staffId,
+            staffName: actor?.staffName,
+            role: actor?.role,
+            branch: updated.branch,
+            action: AUDIT_ACTIONS.EXPENSE_EDITED,
+            module: "expenses",
+            recordId: updated.id,
+            oldValues: pickAuditFields(existing, [
+              "date",
+              "categoryName",
+              "description",
+              "amount",
+              "branch",
+              "paymentMethod",
+            ]),
+            newValues: pickAuditFields(updated, [
+              "date",
+              "categoryName",
+              "description",
+              "amount",
+              "branch",
+              "paymentMethod",
+            ]),
           });
-        } catch (error) {
-          console.error(getDataSourceErrorMessage(error));
-        }
-      })();
-
-      return createValidationResult({});
+        });
+        return createValidationResult({});
+      } catch (error) {
+        return createValidationResult({
+          form: getDataSourceErrorMessage(error),
+        });
+      }
     },
     [refreshFromApi]
   );
 
   const deleteExpense = useCallback(
-    (id: string) => {
+    async (id: string): Promise<ExpenseValidationResult> => {
       const existing = expensesRef.current.find((expense) => expense.id === id);
       if (
         existing?.staffPaymentId ||
         (existing && isStaffPaymentExpense(existing))
       ) {
-        return;
+        return createValidationResult({
+          form: "Staff payment expenses are managed in Staff Payments.",
+        });
       }
 
       if (
@@ -352,35 +352,38 @@ export function ExpensesModuleProvider({
         (isBranchDayClosed(existing.branch, existing.date) ||
           !isBranchDayOpened(existing.branch, existing.date))
       ) {
-        return;
+        return createValidationResult({ form: DAY_CLOSED_EDIT_MESSAGE });
       }
 
-      void (async () => {
-        try {
-          await runOnApi(async () => {
-            await deleteExpenseApi(id);
-            await refreshFromApi();
+      if (!existing) {
+        return createValidationResult({ form: "Expense not found." });
+      }
 
-            if (existing) {
-              recordStaffAction({
-                branch: existing.branch,
-                action: AUDIT_ACTIONS.DELETE,
-                module: "expenses",
-                recordId: existing.id,
-                oldValues: pickAuditFields(existing, [
-                  "date",
-                  "categoryName",
-                  "description",
-                  "amount",
-                  "branch",
-                ]),
-              });
-            }
+      try {
+        await runOnApi(async () => {
+          await deleteExpenseApi(id);
+          await refreshFromApi();
+
+          recordStaffAction({
+            branch: existing.branch,
+            action: AUDIT_ACTIONS.DELETE,
+            module: "expenses",
+            recordId: existing.id,
+            oldValues: pickAuditFields(existing, [
+              "date",
+              "categoryName",
+              "description",
+              "amount",
+              "branch",
+            ]),
           });
-        } catch (error) {
-          console.error(getDataSourceErrorMessage(error));
-        }
-      })();
+        });
+        return createValidationResult({});
+      } catch (error) {
+        return createValidationResult({
+          form: getDataSourceErrorMessage(error),
+        });
+      }
     },
     [refreshFromApi]
   );
@@ -409,7 +412,7 @@ export function ExpensesModuleProvider({
   );
 
   const addCategory = useCallback(
-    (input: ExpenseCategoryInput): ExpenseValidationResult => {
+    async (input: ExpenseCategoryInput): Promise<ExpenseValidationResult> => {
       const errors = validateExpenseCategoryInput(input);
       if (hasValidationErrors(errors)) {
         return createValidationResult(errors);
@@ -426,33 +429,32 @@ export function ExpensesModuleProvider({
         });
       }
 
-      void (async () => {
-        try {
-          await runOnApi(async () => {
-            const category = await createExpenseCategoryApi(input);
-            await refreshFromApi();
-            recordStaffAction({
-              action: AUDIT_ACTIONS.CREATE,
-              module: "expenses",
-              recordId: category.id,
-              newValues: pickAuditFields(category, ["id", "name"]),
-            });
+      try {
+        await runOnApi(async () => {
+          const category = await createExpenseCategoryApi(input);
+          await refreshFromApi();
+          recordStaffAction({
+            action: AUDIT_ACTIONS.CREATE,
+            module: "expenses",
+            recordId: category.id,
+            newValues: pickAuditFields(category, ["id", "name"]),
           });
-        } catch (error) {
-          console.error(getDataSourceErrorMessage(error));
-        }
-      })();
-
-      return createValidationResult({});
+        });
+        return createValidationResult({});
+      } catch (error) {
+        return createValidationResult({
+          form: getDataSourceErrorMessage(error),
+        });
+      }
     },
     [refreshFromApi]
   );
 
   const updateCategory = useCallback(
-    (
+    async (
       id: string,
       input: ExpenseCategoryUpdateInput
-    ): ExpenseValidationResult => {
+    ): Promise<ExpenseValidationResult> => {
       const existing = categoriesRef.current.find(
         (category) => category.id === id
       );
@@ -483,31 +485,30 @@ export function ExpensesModuleProvider({
         });
       }
 
-      void (async () => {
-        try {
-          await runOnApi(async () => {
-            await updateExpenseCategoryApi(id, input);
-            await refreshFromApi();
-            recordStaffAction({
-              action: AUDIT_ACTIONS.EDIT,
-              module: "expenses",
-              recordId: existing.id,
-              oldValues: pickAuditFields(existing, ["name"]),
-              newValues: { name: normalizedName },
-            });
+      try {
+        await runOnApi(async () => {
+          await updateExpenseCategoryApi(id, input);
+          await refreshFromApi();
+          recordStaffAction({
+            action: AUDIT_ACTIONS.EDIT,
+            module: "expenses",
+            recordId: existing.id,
+            oldValues: pickAuditFields(existing, ["name"]),
+            newValues: { name: normalizedName },
           });
-        } catch (error) {
-          console.error(getDataSourceErrorMessage(error));
-        }
-      })();
-
-      return createValidationResult({});
+        });
+        return createValidationResult({});
+      } catch (error) {
+        return createValidationResult({
+          form: getDataSourceErrorMessage(error),
+        });
+      }
     },
     [refreshFromApi]
   );
 
   const deleteCategory = useCallback(
-    (id: string): ExpenseValidationResult => {
+    async (id: string): Promise<ExpenseValidationResult> => {
       if (id === STAFF_PAYMENT_CATEGORY_ID) {
         return createValidationResult({
           form: "Staff Payment is a system category and cannot be deleted.",
@@ -528,24 +529,23 @@ export function ExpensesModuleProvider({
         return createValidationResult({ form: "Category not found." });
       }
 
-      void (async () => {
-        try {
-          await runOnApi(async () => {
-            await deleteExpenseCategoryApi(id);
-            await refreshFromApi();
-            recordStaffAction({
-              action: AUDIT_ACTIONS.DELETE,
-              module: "expenses",
-              recordId: existing.id,
-              oldValues: pickAuditFields(existing, ["id", "name"]),
-            });
+      try {
+        await runOnApi(async () => {
+          await deleteExpenseCategoryApi(id);
+          await refreshFromApi();
+          recordStaffAction({
+            action: AUDIT_ACTIONS.DELETE,
+            module: "expenses",
+            recordId: existing.id,
+            oldValues: pickAuditFields(existing, ["id", "name"]),
           });
-        } catch (error) {
-          console.error(getDataSourceErrorMessage(error));
-        }
-      })();
-
-      return createValidationResult({});
+        });
+        return createValidationResult({});
+      } catch (error) {
+        return createValidationResult({
+          form: getDataSourceErrorMessage(error),
+        });
+      }
     },
     [refreshFromApi]
   );

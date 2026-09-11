@@ -77,7 +77,7 @@ export function UserDialog({ mode, user, onClose }: UserDialogProps) {
             password,
             staffId,
           })
-        : updateUser(user!.id, {
+        : await updateUser(user!.id, {
             displayName,
             role,
             branch,
@@ -89,11 +89,15 @@ export function UserDialog({ mode, user, onClose }: UserDialogProps) {
     }
 
     if (mode === "add" && result.user?.staffId) {
-      linkStaffAccount(
+      const linkResult = await linkStaffAccount(
         result.user.staffId,
         result.user.id,
         result.user.username
       );
+      if (!linkResult.success) {
+        setErrors(linkResult.errors);
+        return;
+      }
     }
 
     onClose();

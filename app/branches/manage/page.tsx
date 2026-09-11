@@ -34,17 +34,23 @@ export default function BranchesManagePage() {
     setSelectedBranch(null);
   }
 
-  function handleDeactivate(branch: BranchEntity) {
+  async function handleDeactivate(branch: BranchEntity) {
     const confirmed = window.confirm(
       `Deactivate ${branch.name}? It will be hidden from branch selectors.`
     );
-    if (confirmed) {
-      deactivateBranch(branch.id);
+    if (!confirmed) return;
+
+    const result = await deactivateBranch(branch.id);
+    if (!result.success) {
+      window.alert(result.errors.form ?? "Unable to deactivate this branch.");
     }
   }
 
-  function handleReactivate(branch: BranchEntity) {
-    reactivateBranch(branch.id);
+  async function handleReactivate(branch: BranchEntity) {
+    const result = await reactivateBranch(branch.id);
+    if (!result.success) {
+      window.alert(result.errors.form ?? "Unable to reactivate this branch.");
+    }
   }
 
   if (!isLoaded) {

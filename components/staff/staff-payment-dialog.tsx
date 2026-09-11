@@ -57,11 +57,11 @@ export function StaffPaymentDialog({
     [activeStaff, getBranchName]
   );
 
-  function handleSubmit(event: React.FormEvent) {
+  async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
 
     const parsedAmount = Number.parseFloat(amount);
-    const result = recordStaffPayment({
+    const result = await recordStaffPayment({
       staffId,
       date,
       paymentType: paymentType as StaffPaymentType,

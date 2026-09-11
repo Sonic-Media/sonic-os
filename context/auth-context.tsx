@@ -68,15 +68,18 @@ interface AuthContextValue {
   canManageRoles: boolean;
   canViewAuditLog: boolean;
   login: (input: LoginInput) => Promise<AuthValidationResult>;
-  logout: () => void;
-  lock: () => void;
+  logout: () => Promise<void>;
+  lock: () => Promise<void>;
   unlock: (password: string) => Promise<AuthValidationResult>;
   recordAction: (action: string, detail: string) => void;
   addUser: (input: AppUserInput) => Promise<AuthValidationResult>;
-  updateUser: (id: string, input: AppUserUpdateInput) => AuthValidationResult;
+  updateUser: (
+    id: string,
+    input: AppUserUpdateInput
+  ) => Promise<AuthValidationResult>;
   resetUserPassword: (id: string, password: string) => Promise<AuthValidationResult>;
-  disableUser: (id: string) => AuthValidationResult;
-  enableUser: (id: string) => void;
+  disableUser: (id: string) => Promise<AuthValidationResult>;
+  enableUser: (id: string) => Promise<AuthValidationResult>;
   deleteUser: (id: string) => Promise<AuthValidationResult>;
   getUserById: (id: string) => AppUser | undefined;
 }
@@ -206,32 +209,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     [applySession, refreshUsersFromApi]
   );
 
-  const logout = useCallback(() => {
-    void (async () => {
-      try {
-        await logoutApi();
-      } catch (error) {
-        console.error("[auth] logout failed:", getDataSourceErrorMessage(error));
-      }
+  const logout = useCallback(async () => {
+    try {
+      await logoutApi();
+    } catch (error) {
+      console.error("[auth] logout failed:", getDataSourceErrorMessage(error));
+    }
 
-      await applySession(null);
-      usersRef.current = [];
-      setUsers([]);
-    })();
+    await applySession(null);
+    usersRef.current = [];
+    setUsers([]);
   }, [applySession]);
 
-  const lock = useCallback(() => {
-    void (async () => {
-      const current = sessionRef.current;
-      if (!current) return;
+  const lock = useCallback(async () => {
+    const current = sessionRef.current;
+    if (!current) return;
 
-      try {
-        const nextSession = await lockSessionApi();
-        await applySession(nextSession);
-      } catch (error) {
-        console.error("[auth] lock failed:", getDataSourceErrorMessage(error));
-      }
-    })();
+    try {
+      const nextSession = await lockSessionApi();
+      await applySession(nextSession);
+    } catch (error) {
+      console.error("[auth] lock failed:", getDataSourceErrorMessage(error));
+    }
   }, [applySession]);
 
   const unlock = useCallback(
@@ -281,7 +280,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   );
 
   const updateUser = useCallback(
-    (id: string, input: AppUserUpdateInput): AuthValidationResult => {
+    async (
+      id: string,
+      input: AppUserUpdateInput
+    ): Promise<AuthValidationResult> => {
       const existing = usersRef.current.find((user) => user.id === id);
       if (!existing) {
         return createValidationResult({ form: "User not found." });
@@ -292,16 +294,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return createValidationResult(errors);
       }
 
-      void (async () => {
-        try {
-          await updateUserApi(id, input);
-          await refreshUsersFromApi();
-        } catch (error) {
-          console.error("[auth] update user failed:", getDataSourceErrorMessage(error));
-        }
-      })();
-
-      return createValidationResult({});
+      try {
+        await updateUserApi(id, input);
+        await refreshUsersFromApi();
+        return createValidationResult({});
+      } catch (error) {
+        return createValidationResult({
+          form: getAuthErrorMessage(error, "Failed to update user."),
+        });
+      }
     },
     [refreshUsersFromApi]
   );
@@ -332,7 +333,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   );
 
   const disableUser = useCallback(
-    (id: string): AuthValidationResult => {
+    async (id: string): Promise<AuthValidationResult> => {
       const existing = usersRef.current.find((user) => user.id === id);
       if (!existing) {
         return createValidationResult({ form: "User not found." });
@@ -344,33 +345,35 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         });
       }
 
-      void (async () => {
-        try {
-          await disableUserApi(id);
-          await refreshUsersFromApi();
-        } catch (error) {
-          console.error("[auth] disable user failed:", getDataSourceErrorMessage(error));
-        }
-      })();
-
-      return createValidationResult({});
+      try {
+        await disableUserApi(id);
+        await refreshUsersFromApi();
+        return createValidationResult({});
+      } catch (error) {
+        return createValidationResult({
+          form: getAuthErrorMessage(error, "Failed to disable user."),
+        });
+      }
     },
     [refreshUsersFromApi]
   );
 
   const enableUser = useCallback(
-    (id: string) => {
+    async (id: string): Promise<AuthValidationResult> => {
       const existing = usersRef.current.find((user) => user.id === id);
-      if (!existing) return;
+      if (!existing) {
+        return createValidationResult({ form: "User not found." });
+      }
 
-      void (async () => {
-        try {
-          await enableUserApi(id);
-          await refreshUsersFromApi();
-        } catch (error) {
-          console.error("[auth] enable user failed:", getDataSourceErrorMessage(error));
-        }
-      })();
+      try {
+        await enableUserApi(id);
+        await refreshUsersFromApi();
+        return createValidationResult({});
+      } catch (error) {
+        return createValidationResult({
+          form: getAuthErrorMessage(error, "Failed to enable user."),
+        });
+      }
     },
     [refreshUsersFromApi]
   );

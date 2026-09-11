@@ -26,7 +26,7 @@ export function CustomerDialog({
   const [notes, setNotes] = useState(customer?.notes ?? "");
   const [errors, setErrors] = useState<Record<string, string | undefined>>({});
 
-  function handleSubmit(event: React.FormEvent) {
+  async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
 
     const input = {
@@ -38,8 +38,8 @@ export function CustomerDialog({
 
     const result =
       mode === "add"
-        ? addCustomer(input)
-        : updateCustomer(customer!.id, input);
+        ? await addCustomer(input)
+        : await updateCustomer(customer!.id, input);
 
     if (!result.success) {
       setErrors(result.errors);
