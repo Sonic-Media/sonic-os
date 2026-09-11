@@ -1,6 +1,5 @@
+import { purgeSecuritySensitiveClientStorage } from "@/lib/auth/client-storage-keys";
 import { hashPassword } from "@/lib/auth/password";
-import { ACTIVE_BRANCH_STORAGE_KEY } from "@/lib/constants";
-import { removeLocalStorageItem } from "@/lib/safe-storage";
 import { isUserRole, normalizeUserRole } from "@/lib/auth/validation";
 import type { AppUser, AuthAuditRecord, AuthSession } from "@/types/auth";
 import type { Branch } from "@/types";
@@ -137,32 +136,7 @@ function normalizeAuthSession(value: unknown): AuthSession | null {
 }
 
 export function clearSession(): void {
-  if (typeof window === "undefined") return;
-
-  for (const key of [
-    "sonic-os-session",
-    "sonic-os-users",
-    "sonic-os-auth-audit",
-    "sonic-os-staff",
-    "sonic-os-settings",
-    "sonic-os-expense-templates",
-    "sonic-os-day-closings",
-    "sonic-os-audit-log",
-    "sonic-os-staff-audit",
-    "sonic-os-branches",
-    "sonic-os-activity-log",
-    "sonic-os-notifications",
-    "sonic-os-import-undo",
-    "sonic-os-stock-last-movement-branch",
-    ACTIVE_BRANCH_STORAGE_KEY,
-    "sonic-os-entries",
-    "sonic-os-sales",
-    "sonic-os-expenses-records",
-    "sonic-os-staff-payments",
-    "sonic-os-purchasing-purchases",
-  ]) {
-    removeLocalStorageItem(key);
-  }
+  purgeSecuritySensitiveClientStorage();
 }
 
 export function createSessionFromUser(user: AppUser): AuthSession {

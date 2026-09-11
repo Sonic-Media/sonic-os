@@ -1,18 +1,31 @@
-export function readLocalStorageItem(key: string): string | null {
-  if (typeof window === "undefined") return null;
+function getLocalStorage(): Storage | null {
+  const scope = globalThis as typeof globalThis & { window?: Window };
+  if (typeof scope.window === "undefined") return null;
 
   try {
-    return localStorage.getItem(key);
+    return scope.window.localStorage;
+  } catch {
+    return null;
+  }
+}
+
+export function readLocalStorageItem(key: string): string | null {
+  const storage = getLocalStorage();
+  if (!storage) return null;
+
+  try {
+    return storage.getItem(key);
   } catch {
     return null;
   }
 }
 
 export function writeLocalStorageItem(key: string, value: string): boolean {
-  if (typeof window === "undefined") return false;
+  const storage = getLocalStorage();
+  if (!storage) return false;
 
   try {
-    localStorage.setItem(key, value);
+    storage.setItem(key, value);
     return true;
   } catch {
     return false;
@@ -20,10 +33,11 @@ export function writeLocalStorageItem(key: string, value: string): boolean {
 }
 
 export function removeLocalStorageItem(key: string): void {
-  if (typeof window === "undefined") return;
+  const storage = getLocalStorage();
+  if (!storage) return;
 
   try {
-    localStorage.removeItem(key);
+    storage.removeItem(key);
   } catch {
     // Ignore quota or privacy-mode failures.
   }

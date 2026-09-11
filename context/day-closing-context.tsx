@@ -462,7 +462,7 @@ export function DayClosingProvider({ children }: { children: React.ReactNode }) 
         });
       }
     },
-    [recordStaffPaymentAsync, persistClosings, session, upsertEntry, entries, refreshEntries, settings.ownerName]
+    [recordStaffPaymentAsync, persistClosings, refreshClosingsFromApi, session, upsertEntry, entries, refreshEntries, settings.ownerName]
   );
 
   const reopenDay = useCallback(

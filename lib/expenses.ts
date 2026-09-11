@@ -33,8 +33,13 @@ export function removeExpense(expenses: Expense[], id: string): Expense[] {
   return expenses.filter((expense) => expense.id !== id);
 }
 
-export function prepareExpensesForSave(expenses: Expense[]): Expense[] {
+export function filterPersistableExpenses(expenses: Expense[]): Expense[] {
   return expenses.filter(
     (expense) => expense.amount > 0 && !isManualPayrollEntryExpense(expense)
   );
+}
+
+/** @deprecated Use filterPersistableExpenses */
+export function prepareExpensesForSave(expenses: Expense[]): Expense[] {
+  return filterPersistableExpenses(expenses);
 }

@@ -8,6 +8,7 @@ import type { Prisma } from "@/lib/generated/prisma/client";
 import { getBranchIdForSession } from "@/lib/server/branch-lookup";
 import { assertRecordInSessionBranchScope } from "@/lib/server/branch-record-guard";
 import { toJsonField } from "@/lib/server/json-fields";
+import { filterPersistableExpenses } from "@/lib/expenses";
 import { mapDailyOperationToEntry } from "@/lib/server/mappers/entities";
 import {
   assertBranchDayOpenForWrite,
@@ -98,7 +99,7 @@ export async function upsertDailyOperation(entry: Entry): Promise<Entry> {
 
   const branchId = await getBranchIdForSession(session, entry.branch);
   const data = entryToDailyOperationData(entry, branchId);
-  const expenseRows = entry.expenses.map((expense) => ({
+  const expenseRows = filterPersistableExpenses(entry.expenses).map((expense) => ({
     id: expenseIdForDb(expense),
     name: expense.name,
     amount: expense.amount,
@@ -237,11 +238,13 @@ export async function importDailyOperations(
       }
 
       const data = entryToDailyOperationData(entry, branchId);
-      const expenseRows = entry.expenses.map((expense) => ({
-        id: expenseIdForDb(expense),
-        name: expense.name,
-        amount: expense.amount,
-      }));
+      const expenseRows = filterPersistableExpenses(entry.expenses).map(
+        (expense) => ({
+          id: expenseIdForDb(expense),
+          name: expense.name,
+          amount: expense.amount,
+        })
+      );
 
       await tx.dailyOperation.create({
         data: {

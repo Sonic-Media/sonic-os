@@ -87,6 +87,8 @@ async function getUserPreference(userId: string) {
 function scanStaticAuthority(): void {
   const branchContext = readRepoFile("context/branch-context.tsx");
   const authStorage = readRepoFile("lib/auth-storage.ts");
+
+  const clientStorageKeys = readRepoFile("lib/auth/client-storage-keys.ts");
   const resolution = readRepoFile("lib/branch/active-branch-resolution.ts");
   const stockContext = readRepoFile("context/stock-context.tsx");
 
@@ -136,6 +138,8 @@ function scanStaticAuthority(): void {
     "H-static",
     "Logout clears active branch localStorage via clearSession",
     authStorage.includes("ACTIVE_BRANCH_STORAGE_KEY"),
+    clientStorageKeys.includes("ACTIVE_BRANCH_STORAGE_KEY") &&
+      authStorage.includes("purgeSecuritySensitiveClientStorage"),
     ""
   );
 
