@@ -111,6 +111,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [users, setUsers] = useState<AppUser[]>([]);
   const [isLoaded, setIsLoaded] = useState(false);
   const hasLoaded = useRef(false);
+  const sessionRequestId = useRef(0);
   const usersRef = useRef(users);
   const sessionRef = useRef(session);
 
@@ -122,12 +123,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     sessionRef.current = session;
   }, [session]);
 
-  const applySession = useCallback(async (next: AuthSession | null) => {
-    sessionRef.current = next;
-    setSession(next);
-    setClientSession(next);
-    clearSession();
-  }, []);
+  const applySession = useCallback(
+    async (next: AuthSession | null, requestId?: number) => {
+      if (
+        requestId !== undefined &&
+        requestId !== sessionRequestId.current
+      ) {
+        return;
+      }
+
+      clearSession();
+      sessionRef.current = next;
+      setSession(next);
+      setClientSession(next);
+    },
+    []
+  );
 
   useEffect(() => {
     if (hasLoaded.current) return;
@@ -135,14 +146,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     queueMicrotask(() => {
       void (async () => {
+        const requestId = ++sessionRequestId.current;
+
         try {
           clearSession();
 
           const payload = await fetchAuthSession();
-          await applySession(payload.session);
+          if (requestId !== sessionRequestId.current) return;
+
+          await applySession(payload.session, requestId);
+          if (requestId !== sessionRequestId.current) return;
 
           if (payload.session) {
             const usersList = await fetchUsers();
+            if (requestId !== sessionRequestId.current) return;
+
             const normalized = sortUsersByRole(
               normalizeUserList(usersList)
             );
@@ -153,24 +171,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             setUsers([]);
           }
         } catch (error) {
+          if (requestId !== sessionRequestId.current) return;
+
           console.error("[auth] failed to load session:", error);
+          clearSession();
           sessionRef.current = null;
           setSession(null);
+          setClientSession(null);
           usersRef.current = [];
           setUsers([]);
         } finally {
-          setIsLoaded(true);
+          if (requestId === sessionRequestId.current) {
+            setIsLoaded(true);
+          }
         }
       })();
     });
   }, [applySession]);
 
-  const refreshUsersFromApi = useCallback(async () => {
+  const refreshUsersFromApi = useCallback(async (requestId?: number) => {
     if (!sessionRef.current) {
       return;
     }
 
     const remoteUsers = await fetchUsers();
+    if (requestId !== undefined && requestId !== sessionRequestId.current) {
+      return;
+    }
+
     const normalized = sortUsersByRole(normalizeUserList(remoteUsers));
     usersRef.current = normalized;
     setUsers(normalized);
@@ -192,10 +220,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return createValidationResult(errors);
       }
 
+      const requestId = ++sessionRequestId.current;
+
       try {
+        clearSession();
         const nextSession = await loginApi(input);
-        await applySession(nextSession);
-        await refreshUsersFromApi();
+        if (requestId !== sessionRequestId.current) {
+          return createValidationResult({});
+        }
+
+        await applySession(nextSession, requestId);
+        if (requestId !== sessionRequestId.current) {
+          return createValidationResult({});
+        }
+
+        await refreshUsersFromApi(requestId);
         return createValidationResult({});
       } catch (error) {
         return createValidationResult({
@@ -207,6 +246,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   );
 
   const logout = useCallback(() => {
+    const requestId = ++sessionRequestId.current;
+    clearSession();
+
     void (async () => {
       try {
         await logoutApi();
@@ -214,7 +256,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         console.error("[auth] logout failed:", getDataSourceErrorMessage(error));
       }
 
-      await applySession(null);
+      if (requestId !== sessionRequestId.current) return;
+
+      await applySession(null, requestId);
       usersRef.current = [];
       setUsers([]);
     })();
@@ -225,9 +269,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const current = sessionRef.current;
       if (!current) return;
 
+      const requestId = ++sessionRequestId.current;
+
       try {
         const nextSession = await lockSessionApi();
-        await applySession(nextSession);
+        if (requestId !== sessionRequestId.current) return;
+
+        await applySession(nextSession, requestId);
       } catch (error) {
         console.error("[auth] lock failed:", getDataSourceErrorMessage(error));
       }
@@ -241,9 +289,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return createValidationResult({ form: "Session not found." });
       }
 
+      const requestId = ++sessionRequestId.current;
+
       try {
         const nextSession = await unlockSessionApi(password);
-        await applySession(nextSession);
+        if (requestId !== sessionRequestId.current) {
+          return createValidationResult({});
+        }
+
+        await applySession(nextSession, requestId);
         recordUserAction(
           "unlock",
           `${current.displayName} unlocked the session`,
