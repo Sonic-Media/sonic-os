@@ -36,11 +36,6 @@
     "verify:roles": "tsx scripts/verify-roles-permissions-module.ts",
     "verify:branch-isolation": "tsx scripts/verify-branch-isolation.ts",
     "verify:branch-operations": "tsx scripts/verify-branch-operations-isolation.ts",
-    "verify:auth-storage-isolation": "tsx scripts/verify-auth-storage-isolation.ts",
-    "verify:audit-cache-integrity": "tsx scripts/verify-audit-cache-integrity.ts",
-    "verify:financial-defaults": "tsx scripts/verify-financial-defaults.ts",
-    "verify:financial-assertions": "tsx scripts/verify-financial-assertions.ts",
-    "verify:branch-selection": "tsx scripts/verify-branch-selection-authority.ts",
     "db:studio": "prisma studio",
     "db:backup": "tsx scripts/backup-database.ts",
     "db:backup:schedule": "tsx scripts/scheduled-backup.ts",
@@ -63,7 +58,12 @@
     "verify:historical-save": "tsx scripts/verify-historical-save-persistence.ts",
     "verify:historical-import-undo": "tsx scripts/verify-historical-import-undo.ts",
     "verify:branch-authorization": "tsx scripts/verify-branch-authorization.ts",
-    "verify:branch-selection": "tsx scripts/verify-branch-selection-authority.ts"
+    "verify:branch-selection": "tsx scripts/verify-branch-selection-authority.ts",
+    "verify:auth-storage-isolation": "tsx scripts/verify-auth-storage-isolation.ts",
+    "verify:audit-cache-integrity": "tsx scripts/verify-audit-cache-integrity.ts",
+    "verify:financial-defaults": "tsx scripts/verify-financial-defaults.ts",
+    "verify:financial-assertions": "tsx scripts/verify-financial-assertions.ts",
+    "verify:default-staff": "tsx scripts/verify-default-staff.ts"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.9.1",
