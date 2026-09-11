@@ -263,8 +263,8 @@ export function StockProvider({ children }: { children: React.ReactNode }) {
   );
 
   const metrics = useMemo(
-    () => computeDashboardMetrics(products, movements, getTodayISO()),
-    [products, movements]
+    () => computeDashboardMetrics(products, movements, getTodayISO(), activeBranch),
+    [products, movements, activeBranch]
   );
 
   const addProduct = useCallback(

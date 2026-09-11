@@ -1,7 +1,9 @@
 import { getEquivalentBranchCodes } from "@/lib/branch/codes";
+import { computeInventoryValueByBranch } from "@/lib/branch/calculations";
 import { formatCurrency } from "@/lib/format";
-import { computeProductStatus } from "@/lib/stock/product-status";
+import type { BranchEntity } from "@/types/branch";
 import type { Branch } from "@/types";
+import { computeProductStatus } from "@/lib/stock/product-status";
 import type {
   StockDashboardMetrics,
   StockMovement,
@@ -199,7 +201,8 @@ export function buildProductTimeline(
 export function computeDashboardMetrics(
   products: StockProduct[],
   movements: StockMovement[],
-  todayISO: string
+  todayISO: string,
+  branch?: Branch
 ): StockDashboardMetrics {
   if (products.length === 0 && movements.length === 0) {
     return {
@@ -212,10 +215,16 @@ export function computeDashboardMetrics(
     };
   }
 
-  const inventoryValue = products.reduce(
-    (sum, product) => sum + computeInventoryValue(product),
-    0
-  );
+  const inventoryValue = branch
+    ? computeInventoryValueByBranch(
+        { code: branch, name: branch, id: branch, active: true } as BranchEntity,
+        products,
+        movements
+      )
+    : products.reduce(
+        (sum, product) => sum + computeInventoryValue(product),
+        0
+      );
 
   const todayMovements = movements.filter(
     (movement) => movement.date === todayISO

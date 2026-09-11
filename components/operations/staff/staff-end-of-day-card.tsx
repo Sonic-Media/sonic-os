@@ -21,6 +21,7 @@ interface StaffEndOfDayCardProps {
   staffPayouts: number;
   cashToHandIn: number;
   accessorySalesCount: number;
+  wageRecorded: boolean;
   isClosing: boolean;
   closeError?: string | null;
   updateField: <K extends keyof EntryFormData>(
@@ -86,6 +87,7 @@ export function StaffEndOfDayCard({
   staffPayouts,
   cashToHandIn,
   accessorySalesCount,
+  wageRecorded,
   isClosing,
   closeError,
   updateField,
@@ -96,7 +98,7 @@ export function StaffEndOfDayCard({
   const [movieError, setMovieError] = useState<string | null>(null);
   const accessoriesDone = accessorySalesCount > 0;
   const expensesDone = totalExpenses > 0;
-  const wageDone = staffPayouts > 0;
+  const wageDone = wageRecorded;
   const movieDone = movieRevenue > 0;
   const readyToClose =
     accessoriesDone && expensesDone && wageDone && movieDone;

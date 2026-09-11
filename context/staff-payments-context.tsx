@@ -9,7 +9,16 @@ import {
   useRef,
   useState,
 } from "react";
+import { useAuth } from "@/context/auth-context";
+import { useBranch } from "@/context/branch-context";
 import { useStaff } from "@/context/staff-context";
+import {
+  beginBranchScopedFetch,
+  beginFetchGeneration,
+  isCurrentFetchGeneration,
+  resetBranchScopedFetchRefs,
+  shouldSkipBranchScopedFetch,
+} from "@/lib/context/branch-scoped-load";
 import {
   createStaffPaymentApi,
   fetchStaffPayments,
@@ -19,12 +28,14 @@ import {
   loadFromApi,
   runOnApi,
 } from "@/lib/data-source/context-api";
+import type { Branch } from "@/types";
 import {
   DAY_CLOSED_EDIT_MESSAGE,
   isBranchDayClosed,
   isBranchDayOpened,
   SHOP_NOT_OPENED_MESSAGE,
 } from "@/lib/day-closing/storage";
+import { findStaffDailyWagePayment } from "@/lib/staff-payments/calculations";
 import {
   normalizeStaffPaymentList,
   sortStaffPaymentsByDate,
@@ -34,7 +45,6 @@ import { AUDIT_ACTIONS } from "@/lib/audit-log/constants";
 import { pickAuditFields } from "@/lib/audit-log/snapshots";
 import { recordStaffAction } from "@/lib/staff/audit";
 import { resolveCurrentStaffAction } from "@/lib/staff/session";
-import type { Branch } from "@/types";
 import type {
   StaffPaymentInput,
   StaffPaymentRecord,
@@ -79,12 +89,16 @@ export function StaffPaymentsProvider({
 }: {
   children: React.ReactNode;
 }) {
+  const { isAuthenticated, isLoaded: authLoaded } = useAuth();
+  const { activeBranch, isLoaded: branchLoaded } = useBranch();
   const { getStaffById } = useStaff();
 
   const [payments, setPayments] = useState<StaffPaymentRecord[]>([]);
   const [isLoaded, setIsLoaded] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const hasLoaded = useRef(false);
+  const lastFetchedBranch = useRef<Branch | null>(null);
+  const fetchGeneration = useRef(0);
   const paymentsRef = useRef(payments);
 
   useEffect(() => {
@@ -92,13 +106,49 @@ export function StaffPaymentsProvider({
   }, [payments]);
 
   useEffect(() => {
-    if (hasLoaded.current) return;
-    hasLoaded.current = true;
+    if (!authLoaded) return;
+
+    if (!isAuthenticated) {
+      beginFetchGeneration(fetchGeneration);
+      paymentsRef.current = [];
+      setPayments([]);
+      setLoadError(null);
+      resetBranchScopedFetchRefs(hasLoaded, lastFetchedBranch);
+      setIsLoaded(true);
+      return;
+    }
+
+    if (!branchLoaded) {
+      setIsLoaded(false);
+      return;
+    }
+
+    if (shouldSkipBranchScopedFetch(hasLoaded, lastFetchedBranch, activeBranch)) {
+      return;
+    }
+
+    const branchChanged = beginBranchScopedFetch(
+      hasLoaded,
+      lastFetchedBranch,
+      activeBranch
+    );
+    if (branchChanged) {
+      paymentsRef.current = [];
+      setPayments([]);
+      setLoadError(null);
+      setIsLoaded(false);
+    }
+
+    const generation = beginFetchGeneration(fetchGeneration);
 
     queueMicrotask(() => {
       void (async () => {
         try {
           const loaded = await loadFromApi(fetchStaffPayments);
+          if (!isCurrentFetchGeneration(fetchGeneration, generation)) {
+            return;
+          }
+
           const normalized = sortStaffPaymentsByDate(
             normalizeStaffPaymentList(loaded)
           );
@@ -106,13 +156,21 @@ export function StaffPaymentsProvider({
           setPayments(normalized);
           setLoadError(null);
         } catch (error) {
+          if (!isCurrentFetchGeneration(fetchGeneration, generation)) {
+            return;
+          }
+
+          paymentsRef.current = [];
+          setPayments([]);
           setLoadError(getDataSourceErrorMessage(error));
         } finally {
-          setIsLoaded(true);
+          if (isCurrentFetchGeneration(fetchGeneration, generation)) {
+            setIsLoaded(true);
+          }
         }
       })();
     });
-  }, []);
+  }, [authLoaded, isAuthenticated, branchLoaded, activeBranch]);
 
   const refreshPaymentsFromApi = useCallback(async () => {
     const remote = await fetchStaffPayments();
@@ -202,9 +260,20 @@ export function StaffPaymentsProvider({
 
         return createValidationResult({}, payment);
       } catch (error) {
-        return createValidationResult({
-          form: getDataSourceErrorMessage(error),
-        });
+        const message = getDataSourceErrorMessage(error);
+        if (/already recorded/i.test(message)) {
+          await refreshPaymentsFromApi();
+          const existing = findStaffDailyWagePayment(
+            input.staffId,
+            staff.branch,
+            input.date,
+            paymentsRef.current
+          );
+          if (existing) {
+            return createValidationResult({}, existing);
+          }
+        }
+        return createValidationResult({ form: message });
       }
     },
     [getStaffById, refreshPaymentsFromApi]

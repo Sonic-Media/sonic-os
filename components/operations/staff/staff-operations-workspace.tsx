@@ -12,7 +12,14 @@ import { StaffWelcomeCard } from "@/components/operations/staff/staff-welcome-ca
 import { StaffCashSummaryCard } from "@/components/operations/staff/staff-cash-summary-card";
 import { useToast } from "@/context/toast-context";
 import { useEntryForm } from "@/hooks/use-entry-form";
+import { useLinkedStaff } from "@/hooks/use-linked-staff";
 import { useStaffCloseDay } from "@/hooks/use-staff-close-day";
+import { useStaffPaymentsModule } from "@/context/staff-payments-context";
+import {
+  computeStaffPayoutTotalForStaffBranchDate,
+  findStaffDailyWagePayment,
+  hasStaffDailyWagePayment,
+} from "@/lib/staff-payments/calculations";
 import { useSales } from "@/context/sales-context";
 import { useActiveBranch } from "@/context/active-branch-context";
 import { filterByBranchField } from "@/lib/active-branch/filters";
@@ -47,6 +54,8 @@ export function StaffOperationsWorkspace({
 }: StaffOperationsWorkspaceProps) {
   const { sales } = useSales();
   const { activeBranch } = useActiveBranch();
+  const { payments } = useStaffPaymentsModule();
+  const { linkedStaff } = useLinkedStaff(branch);
   const { success: toastSuccess, error: toastError } = useToast();
 
   const {
@@ -71,6 +80,7 @@ export function StaffOperationsWorkspace({
     initialDate: entry?.date,
     lockDate: true,
     mode: "today",
+    scopedStaffId: linkedStaff?.id,
   });
 
   const { closeStaffDay, isClosing, error: closeError } = useStaffCloseDay(
@@ -93,7 +103,39 @@ export function StaffOperationsWorkspace({
     [form.expenses]
   );
 
-  const wageRecorded = staffPayouts > 0;
+  const ownDailyWagePayment = useMemo(() => {
+    if (!linkedStaff) return undefined;
+    return findStaffDailyWagePayment(
+      linkedStaff.id,
+      form.branch,
+      form.date,
+      payments
+    );
+  }, [linkedStaff, form.branch, form.date, payments]);
+
+  const wageRecorded = Boolean(ownDailyWagePayment);
+
+  const displayedStaffPayouts = useMemo(() => {
+    if (ownDailyWagePayment) {
+      return ownDailyWagePayment.amount;
+    }
+    if (!linkedStaff) {
+      return staffPayouts;
+    }
+    return computeStaffPayoutTotalForStaffBranchDate(
+      linkedStaff.id,
+      form.branch,
+      form.date,
+      payments
+    );
+  }, [
+    ownDailyWagePayment,
+    linkedStaff,
+    staffPayouts,
+    form.branch,
+    form.date,
+    payments,
+  ]);
 
   const [expandedSection, setExpandedSection] = useState<
     StaffWorkflowSection | null
@@ -198,8 +240,10 @@ export function StaffOperationsWorkspace({
         movieRevenue={movieRevenue}
         accessorySales={accessorySales}
         totalExpenses={totalExpenses}
-        staffPayouts={staffPayouts}
-        netCash={balance}
+        staffPayouts={displayedStaffPayouts}
+        netCash={
+          movieRevenue + accessorySales - totalExpenses - displayedStaffPayouts
+        }
         savingsAllocation={parseAmount(form.savingsAllocation)}
         collapsible={false}
       />
@@ -209,9 +253,16 @@ export function StaffOperationsWorkspace({
         movieRevenue={movieRevenue}
         accessorySales={accessorySales}
         totalExpenses={totalExpenses}
-        staffPayouts={staffPayouts}
-        cashToHandIn={remainingCash}
+        staffPayouts={displayedStaffPayouts}
+        cashToHandIn={
+          movieRevenue +
+          accessorySales -
+          totalExpenses -
+          displayedStaffPayouts -
+          parseAmount(form.savingsAllocation)
+        }
         accessorySalesCount={accessorySalesCount}
+        wageRecorded={wageRecorded}
         isClosing={isClosing || isSaving}
         closeError={closeError ?? saveError}
         updateField={updateField}

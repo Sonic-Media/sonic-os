@@ -1,19 +1,30 @@
+import { getActiveOpenDayRecord as resolveActiveOpenDayRecord } from "@/lib/day-closing/business-date";
 import { branchCodesReferToSameInventory } from "@/lib/branch/codes";
 import type { Branch } from "@/types";
 import type { DayClosingRecord, DayClosingStatus } from "@/types/day-closing";
 
-function matchesBranch(recordBranch: Branch, branch: Branch): boolean {
-  return branchCodesReferToSameInventory(recordBranch, branch);
-}
-
-let cachedClosings: DayClosingRecord[] = [];
+/**
+ * UI-only cache mirrored from PostgreSQL via DayClosingProvider.
+ * NEVER use this module for server-side authorization or mutation gates.
+ * Server authority lives in lib/server/services/day-closings-service.ts.
+ */
+let uiDayClosingsCache: DayClosingRecord[] = [];
 
 export function setDayClosingsCache(records: DayClosingRecord[]): void {
-  cachedClosings = records;
+  uiDayClosingsCache = records;
 }
 
+/** @deprecated Prefer explicit records from DayClosingProvider. UI cache only. */
 export function getDayClosings(): DayClosingRecord[] {
-  return cachedClosings;
+  return uiDayClosingsCache;
+}
+
+export function isUiDayClosingsCachePopulated(): boolean {
+  return uiDayClosingsCache.length > 0;
+}
+
+function matchesBranch(recordBranch: Branch, branch: Branch): boolean {
+  return branchCodesReferToSameInventory(recordBranch, branch);
 }
 
 function normalizeBranchCode(value: unknown): Branch {
@@ -45,7 +56,7 @@ export function normalizeDayClosingRecord(value: unknown): DayClosingRecord | nu
 export function getClosedDayRecord(
   branch: Branch,
   date: string,
-  records: DayClosingRecord[] = cachedClosings
+  records: DayClosingRecord[] = uiDayClosingsCache
 ): DayClosingRecord | undefined {
   return records.find(
     (record) =>
@@ -55,10 +66,18 @@ export function getClosedDayRecord(
   );
 }
 
+/** Earliest open business day for the branch (Close Day date source). */
+export function getActiveOpenDayRecord(
+  branch: Branch,
+  records: DayClosingRecord[] = uiDayClosingsCache
+): DayClosingRecord | undefined {
+  return resolveActiveOpenDayRecord(branch, records);
+}
+
 export function getOpenDayRecord(
   branch: Branch,
   date: string,
-  records: DayClosingRecord[] = cachedClosings
+  records: DayClosingRecord[] = uiDayClosingsCache
 ): DayClosingRecord | undefined {
   return records.find(
     (record) =>
@@ -69,20 +88,22 @@ export function getOpenDayRecord(
   );
 }
 
+/** UI hint only — server gates must query PostgreSQL. */
 export function isBranchDayOpened(
   branch: Branch,
   date: string,
-  records: DayClosingRecord[] = cachedClosings
+  records: DayClosingRecord[] = uiDayClosingsCache
 ): boolean {
   const record = getOpenDayRecord(branch, date, records);
   if (!record) return false;
   return !!(record.openedAt || record.reopenedAt);
 }
 
+/** UI hint only — server gates must query PostgreSQL. */
 export function needsShopOpening(
   branch: Branch,
   date: string,
-  records: DayClosingRecord[] = cachedClosings
+  records: DayClosingRecord[] = uiDayClosingsCache
 ): boolean {
   return (
     !isBranchDayClosed(branch, date, records) &&
@@ -90,10 +111,11 @@ export function needsShopOpening(
   );
 }
 
+/** UI hint only — server gates must query PostgreSQL. */
 export function canRecordTodaysActivity(
   branch: Branch,
   date: string,
-  records: DayClosingRecord[] = cachedClosings
+  records: DayClosingRecord[] = uiDayClosingsCache
 ): boolean {
   return (
     isBranchDayOpened(branch, date, records) &&
@@ -101,17 +123,18 @@ export function canRecordTodaysActivity(
   );
 }
 
+/** UI hint only — server gates must query PostgreSQL. */
 export function isBranchDayClosed(
   branch: Branch,
   date: string,
-  records: DayClosingRecord[] = cachedClosings
+  records: DayClosingRecord[] = uiDayClosingsCache
 ): boolean {
   return !!getClosedDayRecord(branch, date, records);
 }
 
 export function upsertDayClosingRecord(
   record: DayClosingRecord,
-  records: DayClosingRecord[] = cachedClosings
+  records: DayClosingRecord[] = uiDayClosingsCache
 ): DayClosingRecord[] {
   return [
     record,

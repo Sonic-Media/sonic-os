@@ -3,7 +3,10 @@ import { ApiError } from "@/lib/api/errors";
 import type { BranchIdFilter } from "@/lib/server/branch-scope";
 import { prisma } from "@/lib/db";
 import { Prisma } from "@/lib/prisma";
-import { getBranchIdForSession } from "@/lib/server/branch-lookup";
+import {
+  assertSessionCanAccessBranchCode,
+  getBranchIdForSession,
+} from "@/lib/server/branch-lookup";
 import { toJsonField } from "@/lib/server/json-fields";
 import {
   mapExpenseCategoryToEntity,
@@ -332,6 +335,10 @@ export async function updateExpense(
     );
   }
 
+  const session = await requireSession();
+  assertStaffOperationalRole(session);
+  assertSessionCanAccessBranchCode(session, existing.branch.code);
+
   assertValidExpenseInput(input);
 
   const category = await prisma.expenseCategory.findUnique({
@@ -345,8 +352,6 @@ export async function updateExpense(
     });
   }
 
-  const session = await requireSession();
-  assertStaffOperationalRole(session);
   await assertBranchDayOpenForWrite(input.branch, input.date);
   const branchId = await getBranchIdForSession(session, input.branch);
 
@@ -402,6 +407,7 @@ export async function deleteExpense(id: string): Promise<void> {
   assertStaffOperationalRole(session);
   assertDestructiveApiAllowed("Expense deletion");
   const branch = await getBranchCodeById(existing.branchId);
+  assertSessionCanAccessBranchCode(session, branch);
   await assertBranchDayOpenForWrite(branch, existing.date);
 
   await prisma.expenseRecord.update({

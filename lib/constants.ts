@@ -6,7 +6,6 @@ import type {
   HistorySortOrder,
   HistoryStatusFilter,
   ReportPeriod,
-  Staff,
   ExpenseTemplate,
 } from "@/types";
 
@@ -169,39 +168,6 @@ export const HISTORY_STATUS_OPTIONS: {
 export const HISTORY_SORT_OPTIONS: { id: HistorySortOrder; label: string }[] = [
   { id: "newest", label: "Newest" },
   { id: "oldest", label: "Oldest" },
-];
-
-export const DEFAULT_STAFF: Staff[] = [
-  {
-    id: "staff-p",
-    name: "Staff P",
-    branch: "salaama",
-    role: "cashier",
-    loginEnabled: false,
-    status: "active",
-    active: true,
-    dateJoined: "2024-01-01",
-  },
-  {
-    id: "staff-f",
-    name: "Staff F",
-    branch: "salaama",
-    role: "cashier",
-    loginEnabled: false,
-    status: "active",
-    active: true,
-    dateJoined: "2024-01-01",
-  },
-  {
-    id: "staff-k",
-    name: "Staff K",
-    branch: "kansanga",
-    role: "branch-manager",
-    loginEnabled: false,
-    status: "active",
-    active: true,
-    dateJoined: "2024-01-01",
-  },
 ];
 
 export const APP_VERSION = "Sonic OS V3.1";

@@ -18,6 +18,13 @@ import {
 } from "@/lib/api/customers";
 import { createSaleApi, fetchSales } from "@/lib/api/sales";
 import { useAuth } from "@/context/auth-context";
+import { useBranch } from "@/context/branch-context";
+import {
+  beginBranchScopedFetch,
+  resetBranchScopedFetchRefs,
+  shouldSkipBranchScopedFetch,
+} from "@/lib/context/branch-scoped-load";
+import type { Branch } from "@/types";
 import { roleHasModuleAccess } from "@/lib/staff/permissions";
 import {
   getDataSourceErrorMessage,
@@ -71,12 +78,12 @@ interface SalesContextValue {
   loadError: string | null;
   refreshSales: () => Promise<void>;
   getCustomerById: (id: string) => Customer | undefined;
-  addCustomer: (input: CustomerInput) => SaleValidationResult;
+  addCustomer: (input: CustomerInput) => Promise<SaleValidationResult>;
   updateCustomer: (
     id: string,
     input: CustomerUpdateInput
-  ) => SaleValidationResult;
-  deleteCustomer: (id: string) => SaleValidationResult;
+  ) => Promise<SaleValidationResult>;
+  deleteCustomer: (id: string) => Promise<SaleValidationResult>;
   completeSale: (input: SaleInput) => Promise<SaleValidationResult>;
 }
 
@@ -95,6 +102,7 @@ function createValidationResult(
 
 export function SalesProvider({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoaded: authLoaded, session } = useAuth();
+  const { activeBranch } = useBranch();
   const { getProductById, refreshStockFromApi, getBranchProductStock } = useStock();
   const canAccessStockModule =
     session !== null && roleHasModuleAccess(session.role, "stock");
@@ -104,6 +112,7 @@ export function SalesProvider({ children }: { children: React.ReactNode }) {
   const [isLoaded, setIsLoaded] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const hasLoaded = useRef(false);
+  const lastFetchedBranch = useRef<Branch | null>(null);
   const saleInFlight = useRef(false);
   const salesRef = useRef(sales);
   const customersRef = useRef(customers);
@@ -137,13 +146,28 @@ export function SalesProvider({ children }: { children: React.ReactNode }) {
       setSales([]);
       setCustomers([]);
       setLoadError(null);
-      hasLoaded.current = false;
+      resetBranchScopedFetchRefs(hasLoaded, lastFetchedBranch);
       setIsLoaded(true);
       return;
     }
 
-    if (hasLoaded.current) return;
-    hasLoaded.current = true;
+    if (shouldSkipBranchScopedFetch(hasLoaded, lastFetchedBranch, activeBranch)) {
+      return;
+    }
+
+    const branchChanged = beginBranchScopedFetch(
+      hasLoaded,
+      lastFetchedBranch,
+      activeBranch
+    );
+    if (branchChanged) {
+      salesRef.current = [];
+      customersRef.current = [];
+      setSales([]);
+      setCustomers([]);
+      setLoadError(null);
+      setIsLoaded(false);
+    }
 
     queueMicrotask(() => {
       void (async () => {
@@ -166,13 +190,17 @@ export function SalesProvider({ children }: { children: React.ReactNode }) {
           setCustomers(customersRef.current);
           setLoadError(null);
         } catch (error) {
+          salesRef.current = [];
+          customersRef.current = [];
+          setSales([]);
+          setCustomers([]);
           setLoadError(getDataSourceErrorMessage(error));
         } finally {
           setIsLoaded(true);
         }
       })();
     });
-  }, [authLoaded, isAuthenticated]);
+  }, [authLoaded, isAuthenticated, activeBranch]);
 
   const customerLookup = useMemo(
     () => new Map(customers.map((customer) => [customer.id, customer])),
@@ -190,30 +218,32 @@ export function SalesProvider({ children }: { children: React.ReactNode }) {
   );
 
   const addCustomer = useCallback(
-    (input: CustomerInput): SaleValidationResult => {
+    async (input: CustomerInput): Promise<SaleValidationResult> => {
       const errors = validateCustomerInput(input);
       if (hasValidationErrors(errors)) {
         return createValidationResult(errors);
       }
 
-      void (async () => {
-        try {
-          await runOnApi(async () => {
-            await createCustomerApi(input);
-            await refreshSalesFromApi();
-          });
-        } catch (error) {
-          console.error(getDataSourceErrorMessage(error));
-        }
-      })();
-
-      return createValidationResult({});
+      try {
+        await runOnApi(async () => {
+          await createCustomerApi(input);
+          await refreshSalesFromApi();
+        });
+        return createValidationResult({});
+      } catch (error) {
+        return createValidationResult({
+          form: getDataSourceErrorMessage(error),
+        });
+      }
     },
     [refreshSalesFromApi]
   );
 
   const updateCustomer = useCallback(
-    (id: string, input: CustomerUpdateInput): SaleValidationResult => {
+    async (
+      id: string,
+      input: CustomerUpdateInput
+    ): Promise<SaleValidationResult> => {
       const existing = customersRef.current.find(
         (customer) => customer.id === id
       );
@@ -226,24 +256,23 @@ export function SalesProvider({ children }: { children: React.ReactNode }) {
         return createValidationResult(errors);
       }
 
-      void (async () => {
-        try {
-          await runOnApi(async () => {
-            await updateCustomerApi(id, input);
-            await refreshSalesFromApi();
-          });
-        } catch (error) {
-          console.error(getDataSourceErrorMessage(error));
-        }
-      })();
-
-      return createValidationResult({});
+      try {
+        await runOnApi(async () => {
+          await updateCustomerApi(id, input);
+          await refreshSalesFromApi();
+        });
+        return createValidationResult({});
+      } catch (error) {
+        return createValidationResult({
+          form: getDataSourceErrorMessage(error),
+        });
+      }
     },
     [refreshSalesFromApi]
   );
 
   const deleteCustomer = useCallback(
-    (id: string): SaleValidationResult => {
+    async (id: string): Promise<SaleValidationResult> => {
       const inUse = salesRef.current.some((sale) => sale.customerId === id);
       if (inUse) {
         return createValidationResult({
@@ -251,18 +280,17 @@ export function SalesProvider({ children }: { children: React.ReactNode }) {
         });
       }
 
-      void (async () => {
-        try {
-          await runOnApi(async () => {
-            await deleteCustomerApi(id);
-            await refreshSalesFromApi();
-          });
-        } catch (error) {
-          console.error(getDataSourceErrorMessage(error));
-        }
-      })();
-
-      return createValidationResult({});
+      try {
+        await runOnApi(async () => {
+          await deleteCustomerApi(id);
+          await refreshSalesFromApi();
+        });
+        return createValidationResult({});
+      } catch (error) {
+        return createValidationResult({
+          form: getDataSourceErrorMessage(error),
+        });
+      }
     },
     [refreshSalesFromApi]
   );

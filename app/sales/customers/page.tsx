@@ -33,13 +33,13 @@ export default function SalesCustomersPage() {
     setSelectedCustomer(null);
   }
 
-  function handleDelete(customer: CustomerWithStats) {
+  async function handleDelete(customer: CustomerWithStats) {
     const confirmed = window.confirm(
       `Delete ${customer.name}? This cannot be undone.`
     );
     if (!confirmed) return;
 
-    const result = deleteCustomer(customer.id);
+    const result = await deleteCustomer(customer.id);
     if (!result.success) {
       window.alert(result.errors.form ?? "Unable to delete this customer.");
     }

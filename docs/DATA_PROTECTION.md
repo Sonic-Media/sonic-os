@@ -30,7 +30,7 @@ When production mode is active:
 
 | Method | Description |
 |--------|-------------|
-| Automatic | Daily scheduler in app process (`instrumentation.ts`) |
+| Automatic | Daily scheduler started on first DB request via `lib/server/bootstrap.ts` (`ensureApplicationInitialized`) unless `ENABLE_DAILY_BACKUP=false` |
 | Manual CLI | `npm run db:backup` |
 | Manual UI | Settings → Data Protection → **Backup Now** |
 | Cron | See `deploy/cron/sonic-os-backup.cron.example` |

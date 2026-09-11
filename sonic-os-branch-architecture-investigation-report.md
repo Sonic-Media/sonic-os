@@ -1,5 +1,7 @@
 # Sonic OS — Branch Architecture Investigation Report
 
+> **Status: HISTORICAL** — Point-in-time investigation report (2026). Canonical branch implementation is `context/branch-context.tsx`. Do not treat file paths or DB snapshots below as current production state.
+
 **Generated:** 2026-08-23 00:23 UTC+3  
 **Project:** `/Users/kvisualz/Desktop/sonic-os`  
 **Method:** Read-only Prisma queries against live PostgreSQL + read-only code inspection  

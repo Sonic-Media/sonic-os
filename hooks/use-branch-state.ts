@@ -10,7 +10,7 @@ import { useSales } from "@/context/sales-context";
 import { useStaffPaymentsModule } from "@/context/staff-payments-context";
 import { useStaffAttendance } from "@/hooks/use-staff-attendance";
 import { useSalesDashboard } from "@/hooks/use-sales-dashboard";
-import { calculateExpenses } from "@/lib/amounts";
+import { computeDashboardOperatingExpenses } from "@/lib/dashboard/operating-expenses";
 import { filterByBranchField } from "@/lib/active-branch/filters";
 import { getTodayISO } from "@/lib/dates";
 
@@ -39,9 +39,6 @@ export function useBranchState() {
     const isOpen = isBranchDayOpened(activeBranch, today);
     const status = isClosed ? "closed" : isOpen ? "open" : "waiting";
 
-    const branchExpenses = filterByBranchField(expenses, activeBranch).filter(
-      (expense) => expense.date === today && !expense.staffPaymentId
-    );
     const branchPurchases = filterByBranchField(purchases, activeBranch).filter(
       (purchase) => purchase.date === today
     );
@@ -63,14 +60,12 @@ export function useBranchState() {
       salesMetrics.todayRevenue ??
       branchSales.reduce((sum, sale) => sum + sale.total, 0);
 
-    const moduleOperatingExpenses = branchExpenses.reduce(
-      (sum, expense) => sum + expense.amount,
-      0
+    const operatingExpenses = computeDashboardOperatingExpenses(
+      activeBranch,
+      today,
+      expenses,
+      entries
     );
-    const entryOperatingExpenses = activeEntry
-      ? calculateExpenses(activeEntry)
-      : 0;
-    const operatingExpenses = moduleOperatingExpenses + entryOperatingExpenses;
 
     const staffWages = filterByBranchField(payments, activeBranch)
       .filter((payment) => payment.date === today)

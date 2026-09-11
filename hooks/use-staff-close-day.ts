@@ -20,7 +20,7 @@ import { getTodayISO } from "@/lib/dates";
 import { toStaffFacingError } from "@/lib/ux/staff-messages";
 import { useStaff } from "@/context/staff-context";
 
-export function useStaffCloseDay(date = getTodayISO()) {
+export function useStaffCloseDay(date?: string) {
   const { activeBranch } = useActiveBranch();
   const { activeBranches } = useBranches();
   const { sales } = useSales();
@@ -31,7 +31,9 @@ export function useStaffCloseDay(date = getTodayISO()) {
   const { staff } = useStaff();
   const { session } = useAuth();
   const { settings } = useSettings();
-  const { closeDay } = useDayClosing();
+  const { closeDay, getActiveOpenRecord } = useDayClosing();
+  const businessDate =
+    getActiveOpenRecord(activeBranch)?.date ?? date ?? getTodayISO();
   const [isClosing, setIsClosing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const closingRef = useRef(false);
@@ -47,9 +49,9 @@ export function useStaffCloseDay(date = getTodayISO()) {
       expenses,
       entries,
       payments,
-      date
+      businessDate
     );
-  }, [branchEntity, sales, purchases, expenses, entries, payments, date]);
+  }, [branchEntity, sales, purchases, expenses, entries, payments, businessDate]);
 
   const closeStaffDay = useCallback(
     async (closingNotes: string) => {
@@ -70,14 +72,14 @@ export function useStaffCloseDay(date = getTodayISO()) {
         staff,
         activeBranch,
         payments,
-        date
+        businessDate
       ).map((payout) => ({ ...payout, selected: false }));
 
       const expectedCash = computeExpectedCash(metrics.cashBeforeClosing, payoutRows);
 
       const result = await closeDay({
         branch: activeBranch,
-        date,
+        date: businessDate,
         metrics,
         staffPayouts: payoutRows,
         expectedCash,
@@ -102,7 +104,7 @@ export function useStaffCloseDay(date = getTodayISO()) {
     [
       activeBranch,
       closeDay,
-      date,
+      businessDate,
       isClosing,
       metrics,
       payments,

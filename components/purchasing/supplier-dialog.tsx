@@ -27,14 +27,14 @@ export function SupplierDialog({
   const [notes, setNotes] = useState(supplier?.notes ?? "");
   const [errors, setErrors] = useState<Record<string, string | undefined>>({});
 
-  function handleSubmit(event: React.FormEvent) {
+  async function handleSubmit(event: React.FormEvent) {
     event.preventDefault();
 
     const input = { name, phone, email, address, notes };
     const result =
       mode === "add"
-        ? addSupplier(input)
-        : updateSupplier(supplier!.id, input);
+        ? await addSupplier(input)
+        : await updateSupplier(supplier!.id, input);
 
     if (!result.success) {
       setErrors(result.errors);

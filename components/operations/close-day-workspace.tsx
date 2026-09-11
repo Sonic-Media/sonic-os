@@ -26,6 +26,7 @@ import {
   computeCashDifference,
   resolveCashStatus,
 } from "@/lib/day-closing/calculations";
+import { getActiveOpenDayRecord } from "@/lib/day-closing/business-date";
 import { canReopenDay } from "@/lib/day-closing/permissions";
 import { formatCurrency } from "@/lib/format";
 import { getStaffRoleName } from "@/lib/staff/roles";
@@ -84,7 +85,7 @@ export function CloseDayWorkspace({
   savings?: number;
 } = {}) {
   const router = useRouter();
-  const today = getTodayISO();
+  const calendarDate = getTodayISO();
   const { activeBranch } = useActiveBranch();
   const branch = activeBranch;
   const { activeBranches, getBranchName } = useBranches();
@@ -96,7 +97,7 @@ export function CloseDayWorkspace({
   const { staff } = useStaff();
   const { session } = useAuth();
   const { settings } = useSettings();
-  const { closeDay, reopenDay, getClosedRecord } = useDayClosing();
+  const { closings, closeDay, reopenDay, getClosedRecord } = useDayClosing();
 
   const [step, setStep] = useState(0);
   const [staffPayouts, setStaffPayouts] = useState<DayClosingStaffPayout[]>([]);
@@ -119,7 +120,11 @@ export function CloseDayWorkspace({
   }, [activeBranch]);
 
   const branchEntity = activeBranches.find((item) => item.code === branch);
-  const closedRecord = getClosedRecord(branch, today);
+  const businessDate = useMemo(
+    () => getActiveOpenDayRecord(branch, closings)?.date ?? calendarDate,
+    [branch, calendarDate, closings]
+  );
+  const closedRecord = getClosedRecord(branch, businessDate);
 
   const metrics = useMemo(() => {
     if (!branchEntity) return null;
@@ -130,14 +135,14 @@ export function CloseDayWorkspace({
       expenses,
       entries,
       payments,
-      today
+      businessDate
     );
-  }, [branchEntity, sales, purchases, expenses, entries, payments, today]);
+  }, [branchEntity, sales, purchases, expenses, entries, payments, businessDate]);
 
   const payoutRows = useMemo(() => {
     if (!metrics) return [];
-    return buildStaffPayoutRows(staff, branch, payments, today);
-  }, [metrics, staff, branch, payments, today]);
+    return buildStaffPayoutRows(staff, branch, payments, businessDate);
+  }, [metrics, staff, branch, payments, businessDate]);
 
   const effectivePayouts = staffPayouts.length > 0 ? staffPayouts : payoutRows;
   const expectedCash = metrics
@@ -205,7 +210,7 @@ export function CloseDayWorkspace({
 
     const result = await closeDay({
       branch,
-      date: today,
+      date: businessDate,
       metrics,
       staffPayouts: effectivePayouts,
       expectedCash,
@@ -254,7 +259,7 @@ export function CloseDayWorkspace({
   }
 
   async function handleReopen() {
-    const result = await reopenDay(branch, today);
+    const result = await reopenDay(branch, businessDate);
     if (!result.success) {
       setErrors(result.errors);
       return;
@@ -280,7 +285,7 @@ export function CloseDayWorkspace({
                 CLOSED
               </p>
               <p className="mt-2 text-sm text-zinc-400">
-                {getBranchName(branch)} · {today}
+                {getBranchName(branch)} · {businessDate}
               </p>
             </div>
             <div className="text-sm text-zinc-400">
@@ -551,7 +556,7 @@ export function CloseDayWorkspace({
             <p className="text-sm text-zinc-400">
               Confirm closing for{" "}
               <span className="text-white">{getBranchName(branch)}</span> on{" "}
-              <span className="text-white">{today}</span>. This will mark the
+              <span className="text-white">{businessDate}</span>. This will mark the
               day closed and prevent further editing of today&apos;s records.
             </p>
           </Card>

@@ -10,6 +10,7 @@ export function NewEntryForm() {
   const {
     form,
     isSaving,
+    saveError,
     status,
     sales,
     totalExpenses,
@@ -26,6 +27,7 @@ export function NewEntryForm() {
       <EntryForm
         form={form}
         isSaving={isSaving}
+        saveError={saveError}
         sales={sales}
         totalExpenses={totalExpenses}
         balance={balance}

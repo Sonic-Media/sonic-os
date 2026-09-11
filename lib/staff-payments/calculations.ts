@@ -1,7 +1,9 @@
+import { branchCodesReferToSameInventory } from "@/lib/branch/codes";
 import { getTodayISO } from "@/lib/dates";
 import {
   isStaffPaymentCategory,
 } from "@/lib/expenses-module/constants";
+import type { Branch } from "@/types";
 import type { CashFlowDateRange } from "@/types/expenses-module";
 import type { ExpenseRecord } from "@/types/expenses-module";
 import type {
@@ -207,6 +209,50 @@ export function getStaffPaymentHistory(
     });
 }
 
+function matchesStaffDailyWagePayment(
+  payment: StaffPaymentRecord,
+  staffId: string,
+  branch: Branch | string,
+  date: string
+): boolean {
+  return (
+    payment.staffId === staffId &&
+    payment.date === date &&
+    branchCodesReferToSameInventory(payment.branch, branch as Branch) &&
+    payment.paymentType !== "deduction"
+  );
+}
+
+export function findStaffDailyWagePayment(
+  staffId: string,
+  branch: Branch | string,
+  date: string,
+  payments: StaffPaymentRecord[]
+): StaffPaymentRecord | undefined {
+  return payments.find((payment) =>
+    matchesStaffDailyWagePayment(payment, staffId, branch, date)
+  );
+}
+
+export function hasStaffDailyWagePayment(
+  staffId: string,
+  branch: Branch | string,
+  date: string,
+  payments: StaffPaymentRecord[]
+): boolean {
+  return findStaffDailyWagePayment(staffId, branch, date, payments) !== undefined;
+}
+
+export function computeStaffPayoutTotalForStaffBranchDate(
+  staffId: string,
+  branch: Branch | string,
+  date: string,
+  payments: StaffPaymentRecord[]
+): number {
+  const payment = findStaffDailyWagePayment(staffId, branch, date, payments);
+  return payment?.amount ?? 0;
+}
+
 export function computeStaffPayoutTotalForBranchDate(
   payments: StaffPaymentRecord[],
   branch: string,
@@ -215,7 +261,7 @@ export function computeStaffPayoutTotalForBranchDate(
   return payments
     .filter(
       (payment) =>
-        payment.branch === branch &&
+        branchCodesReferToSameInventory(payment.branch, branch) &&
         payment.date === date &&
         payment.paymentType !== "deduction"
     )

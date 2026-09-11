@@ -33,13 +33,13 @@ export default function PurchasingSuppliersPage() {
     setSelectedSupplier(null);
   }
 
-  function handleDelete(supplier: SupplierWithStats) {
+  async function handleDelete(supplier: SupplierWithStats) {
     const confirmed = window.confirm(
       `Delete ${supplier.name}? This cannot be undone.`
     );
     if (!confirmed) return;
 
-    const result = deleteSupplier(supplier.id);
+    const result = await deleteSupplier(supplier.id);
     if (!result.success) {
       window.alert(result.errors.form ?? "Unable to delete this supplier.");
     }

@@ -1,36 +1,30 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Sonic OS
 
-## Getting Started
+Sonic OS is a Next.js business operations application backed by **PostgreSQL** (via Prisma). Business records (sales, expenses, purchases, staff payments, daily operations, day closings, stock) are loaded and saved through the API — not from browser `localStorage`.
 
-First, run the development server:
+## Documentation
+
+| Document | Purpose |
+|----------|---------|
+| [README.production.md](./README.production.md) | Production configuration, env profiles, health endpoints |
+| [docs/DEPLOYMENT.md](./docs/DEPLOYMENT.md) | Deployment, Docker, migrations, troubleshooting |
+| [docs/POSTGRES_MIGRATION.md](./docs/POSTGRES_MIGRATION.md) | PostgreSQL authority model, removed localStorage fallbacks |
+| [docs/SECURITY.md](./docs/SECURITY.md) | Authentication, authorization, CSRF, rate limiting |
+| [docs/MIGRATIONS.md](./docs/MIGRATIONS.md) | Safe migration policy (never `db push` / `migrate reset` in production) |
+| [docs/BACKUP.md](./docs/BACKUP.md) | Backup and restore procedures |
+| [docs/DATA_PROTECTION.md](./docs/DATA_PROTECTION.md) | Production mode, soft deletes, safe reset |
+| [docs/DOCUMENTATION-INVENTORY.md](./docs/DOCUMENTATION-INVENTORY.md) | Documentation catalog and status |
+
+## Quick start (development)
 
 ```bash
+npm install
+cp .env.example .env
+# Set DATABASE_URL to a local PostgreSQL instance
+npm run db:migrate
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
-
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Business modules require PostgreSQL and `NEXT_PUBLIC_USE_API=true`. See [docs/DEPLOYMENT.md](./docs/DEPLOYMENT.md) for the full environment checklist.

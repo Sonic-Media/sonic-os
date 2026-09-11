@@ -13,8 +13,18 @@ import type { BIInsight } from "@/lib/business-intelligence/types";
 export function generateWarningInsights(context: BIAnalysisContext): BIInsight[] {
   const insights: BIInsight[] = [];
   const seen = new Set<string>();
-  const { today, sales, entries, expenses, payments, products, movements, branches, backups } =
-    context;
+  const {
+    today,
+    sales,
+    entries,
+    expenses,
+    payments,
+    products,
+    movements,
+    branches,
+    backups,
+    staff,
+  } = context;
 
   const hasBackupToday = backups.some(
     (backup) =>
@@ -93,10 +103,20 @@ export function generateWarningInsights(context: BIAnalysisContext): BIInsight[]
       }
     }
 
-    const hasWages = payments.some(
-      (payment) => payment.date === today && matchesBranch(payment.branch, branch.code)
+    const branchStaff = staff.filter(
+      (member) => member.active && matchesBranch(member.branch, branch.code)
     );
-    if (!hasWages) {
+    const unpaidStaff = branchStaff.filter(
+      (member) =>
+        !payments.some(
+          (payment) =>
+            payment.staffId === member.id &&
+            payment.date === today &&
+            matchesBranch(payment.branch, branch.code) &&
+            payment.paymentType !== "deduction"
+        )
+    );
+    if (branchStaff.length > 0 && unpaidStaff.length > 0) {
       pushUniqueInsight(
         insights,
         {

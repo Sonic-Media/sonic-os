@@ -127,7 +127,7 @@ For the full Sonic OS backup flow (manifest, compression, unique names), run `np
 ## Operational notes
 
 1. **Retention** — Backups are never overwritten. Plan disk space and archive old files to object storage as needed.
-2. **Restore testing** — Periodically restore to a staging database and verify application health (`/api/ready`).
+2. **Restore testing** — Periodically restore to a **staging** database and verify application health (`/api/ready`). Restore is **not globally certified** for every deployment environment; treat untested restore paths as operational risk (historical issues have included BigInt serialization and ephemeral filesystem storage on some hosts).
 3. **Secrets** — Backup files contain full database data including credentials hashes. Store encrypted and restrict file permissions.
 4. **Migrations** — After restore, ensure migration history in the backup matches the application version you deploy.
 

@@ -15,7 +15,7 @@ import {
   setBranchActiveApi,
   updateBranchApi,
 } from "@/lib/api/branches";
-import { setActiveBranchApi } from "@/lib/api/auth";
+import { fetchAuthSession, setActiveBranchApi } from "@/lib/api/auth";
 import { registerActiveBranchGetter } from "@/lib/api/branch-request";
 import {
   getDataSourceErrorMessage,
@@ -29,6 +29,7 @@ import {
 import { sortBranchesByName } from "@/lib/branch-storage";
 import { resolveBranchDisplayName } from "@/lib/branch/display-name";
 import { canSwitchActiveBranch } from "@/lib/branch/access";
+import { resolveAuthoritativeActiveBranch } from "@/lib/branch/active-branch-resolution";
 import { resolveInventoryBranchCode } from "@/lib/branch/codes";
 import { filterByBranchField } from "@/lib/active-branch/filters";
 import {
@@ -38,6 +39,7 @@ import {
 } from "@/lib/constants";
 import {
   readLocalStorageItem,
+  removeLocalStorageItem,
   writeLocalStorageItem,
 } from "@/lib/safe-storage";
 import { useAuth } from "@/context/auth-context";
@@ -61,10 +63,13 @@ interface BranchContextValue {
   loadError: string | null;
   getBranchByCode: (code: Branch) => BranchEntity | undefined;
   getBranchName: (code: Branch) => string;
-  addBranch: (input: BranchInput) => BranchValidationResult;
-  updateBranch: (id: string, input: BranchUpdateInput) => BranchValidationResult;
-  deactivateBranch: (id: string) => void;
-  reactivateBranch: (id: string) => void;
+  addBranch: (input: BranchInput) => Promise<BranchValidationResult>;
+  updateBranch: (
+    id: string,
+    input: BranchUpdateInput
+  ) => Promise<BranchValidationResult>;
+  deactivateBranch: (id: string) => Promise<BranchValidationResult>;
+  reactivateBranch: (id: string) => Promise<BranchValidationResult>;
 
   // Global operating context
   activeBranch: Branch;
@@ -91,23 +96,11 @@ function createValidationResult(
   };
 }
 
-function readStoredActiveBranch(fallback: Branch): Branch {
-  const stored = readLocalStorageItem(ACTIVE_BRANCH_STORAGE_KEY)?.trim();
-  return stored ? (stored as Branch) : fallback;
-}
-
 function readStoredMovementBranch(fallback: Branch): Branch {
   const stored = readLocalStorageItem(
     STOCK_LAST_MOVEMENT_BRANCH_STORAGE_KEY
   )?.trim();
   return stored ? (stored as Branch) : fallback;
-}
-
-function isKnownBranch(
-  code: Branch,
-  activeBranches: { code: Branch }[]
-): boolean {
-  return activeBranches.some((branch) => branch.code === code);
 }
 
 export function BranchProvider({ children }: { children: React.ReactNode }) {
@@ -123,7 +116,10 @@ export function BranchProvider({ children }: { children: React.ReactNode }) {
     DEFAULT_BRANCH_CODE
   );
   const [selectionLoaded, setSelectionLoaded] = useState(false);
-  const hasInitializedSelection = useRef(false);
+  const selectionRequestId = useRef(0);
+  const branchSwitchRequestId = useRef(0);
+  const resolvedSessionUserId = useRef<string | null>(null);
+  const sessionRef = useRef(session);
 
   const [stockMovementBranch, setStockMovementBranchState] = useState<Branch>(
     DEFAULT_BRANCH_CODE
@@ -132,6 +128,10 @@ export function BranchProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     branchesRef.current = branches;
   }, [branches]);
+
+  useEffect(() => {
+    sessionRef.current = session;
+  }, [session]);
 
   const canSwitchBranch = session ? canSwitchActiveBranch(session.role) : false;
 
@@ -202,59 +202,56 @@ export function BranchProvider({ children }: { children: React.ReactNode }) {
     if (!authLoaded || !branchesLoaded) return;
 
     if (!isAuthenticated || !session) {
-      hasInitializedSelection.current = false;
+      resolvedSessionUserId.current = null;
+      selectionRequestId.current += 1;
       setActiveBranchState(DEFAULT_BRANCH_CODE);
       setStockMovementBranchState(DEFAULT_BRANCH_CODE);
+      removeLocalStorageItem(ACTIVE_BRANCH_STORAGE_KEY);
       setSelectionLoaded(true);
       return;
     }
 
-    if (hasInitializedSelection.current) return;
-    hasInitializedSelection.current = true;
+    if (
+      resolvedSessionUserId.current === session.userId &&
+      selectionLoaded
+    ) {
+      return;
+    }
+
+    const requestId = ++selectionRequestId.current;
+    const userId = session.userId;
+    const assignedBranch = resolveInventoryBranchCode(session.branch);
+    setSelectionLoaded(false);
 
     void (async () => {
-      const assignedBranch = resolveInventoryBranchCode(session.branch);
-      let nextBranch = readStoredActiveBranch(assignedBranch);
+      let serverBranchCode: string | null = null;
 
       try {
-        const response = await fetch("/api/auth/session", {
-          cache: "no-store",
-          credentials: "include",
-        });
+        const payload = await fetchAuthSession();
+        if (requestId !== selectionRequestId.current) return;
+        if (sessionRef.current?.userId !== userId) return;
 
-        if (response.ok) {
-          const payload = (await response.json()) as {
-            data?: {
-              activeBranchCode?: string | null;
-              session?: { branch?: Branch } | null;
-            };
-          };
-
-          const serverBranch =
-            payload.data?.activeBranchCode ??
-            payload.data?.session?.branch ??
-            assignedBranch;
-
-          if (canSwitchBranch) {
-            nextBranch = readStoredActiveBranch(serverBranch as Branch);
-          } else {
-            nextBranch = assignedBranch;
-          }
-        }
+        serverBranchCode =
+          payload.activeBranchCode ??
+          payload.session?.branch ??
+          assignedBranch;
       } catch {
-        nextBranch = canSwitchBranch
-          ? readStoredActiveBranch(assignedBranch)
-          : assignedBranch;
+        if (requestId !== selectionRequestId.current) return;
+        if (sessionRef.current?.userId !== userId) return;
+        serverBranchCode = assignedBranch;
       }
 
-      if (!isKnownBranch(nextBranch, activeBranches) && activeBranches[0]) {
-        nextBranch = activeBranches[0].code;
-      }
+      const nextBranch = resolveAuthoritativeActiveBranch({
+        serverBranchCode,
+        assignedBranch,
+        canSwitchBranch,
+        activeBranches,
+      });
 
-      if (!canSwitchBranch) {
-        nextBranch = assignedBranch;
-      }
+      if (requestId !== selectionRequestId.current) return;
+      if (sessionRef.current?.userId !== userId) return;
 
+      resolvedSessionUserId.current = userId;
       setActiveBranchState(nextBranch);
       setStockMovementBranchState(readStoredMovementBranch(nextBranch));
       writeLocalStorageItem(ACTIVE_BRANCH_STORAGE_KEY, nextBranch);
@@ -266,13 +263,16 @@ export function BranchProvider({ children }: { children: React.ReactNode }) {
     branchesLoaded,
     canSwitchBranch,
     isAuthenticated,
+    selectionLoaded,
     session,
   ]);
 
   useEffect(() => {
-    registerActiveBranchGetter(() => activeBranch);
+    registerActiveBranchGetter(() =>
+      selectionLoaded ? activeBranch : null
+    );
     return () => registerActiveBranchGetter(() => null);
-  }, [activeBranch]);
+  }, [activeBranch, selectionLoaded]);
 
   useEffect(() => {
     if (!selectionLoaded) return;
@@ -291,23 +291,27 @@ export function BranchProvider({ children }: { children: React.ReactNode }) {
       }
 
       const normalized = branch.trim().toLowerCase() as Branch;
+      const switchRequestId = ++branchSwitchRequestId.current;
+      const userId = session?.userId ?? null;
 
       if (session) {
         try {
-          await setActiveBranchApi(normalized);
+          const serverBranch = await setActiveBranchApi(normalized);
+          if (switchRequestId !== branchSwitchRequestId.current) return;
+          if (sessionRef.current?.userId !== userId) return;
+
+          const authoritative = serverBranch.trim().toLowerCase() as Branch;
+          setActiveBranchState(authoritative);
+          writeLocalStorageItem(ACTIVE_BRANCH_STORAGE_KEY, authoritative);
+          setStockMovementBranchState(authoritative);
+          writeLocalStorageItem(
+            STOCK_LAST_MOVEMENT_BRANCH_STORAGE_KEY,
+            authoritative
+          );
         } catch (error) {
           console.error(getDataSourceErrorMessage(error));
-          return;
         }
       }
-
-      setActiveBranchState(normalized);
-      writeLocalStorageItem(ACTIVE_BRANCH_STORAGE_KEY, normalized);
-      setStockMovementBranchState(normalized);
-      writeLocalStorageItem(
-        STOCK_LAST_MOVEMENT_BRANCH_STORAGE_KEY,
-        normalized
-      );
     },
     [canSwitchBranch, session]
   );
@@ -324,30 +328,32 @@ export function BranchProvider({ children }: { children: React.ReactNode }) {
   );
 
   const addBranch = useCallback(
-    (input: BranchInput): BranchValidationResult => {
+    async (input: BranchInput): Promise<BranchValidationResult> => {
       const errors = validateBranchInput(input, branchesRef.current);
       if (hasValidationErrors(errors)) {
         return createValidationResult(errors);
       }
 
-      void (async () => {
-        try {
-          await runOnApi(async () => {
-            await createBranchApi(input);
-            await refreshBranchesFromApi();
-          });
-        } catch (error) {
-          console.error(getDataSourceErrorMessage(error));
-        }
-      })();
-
-      return createValidationResult({});
+      try {
+        await runOnApi(async () => {
+          await createBranchApi(input);
+          await refreshBranchesFromApi();
+        });
+        return createValidationResult({});
+      } catch (error) {
+        return createValidationResult({
+          form: getDataSourceErrorMessage(error),
+        });
+      }
     },
     [refreshBranchesFromApi]
   );
 
   const updateBranch = useCallback(
-    (id: string, input: BranchUpdateInput): BranchValidationResult => {
+    async (
+      id: string,
+      input: BranchUpdateInput
+    ): Promise<BranchValidationResult> => {
       const existing = branchesRef.current.find((branch) => branch.id === id);
       if (!existing) {
         return createValidationResult({ form: "Branch not found." });
@@ -358,50 +364,61 @@ export function BranchProvider({ children }: { children: React.ReactNode }) {
         return createValidationResult(errors);
       }
 
-      void (async () => {
-        try {
-          await runOnApi(async () => {
-            await updateBranchApi(id, input);
-            await refreshBranchesFromApi();
-          });
-        } catch (error) {
-          console.error(getDataSourceErrorMessage(error));
-        }
-      })();
-
-      return createValidationResult({});
+      try {
+        await runOnApi(async () => {
+          await updateBranchApi(id, input);
+          await refreshBranchesFromApi();
+        });
+        return createValidationResult({});
+      } catch (error) {
+        return createValidationResult({
+          form: getDataSourceErrorMessage(error),
+        });
+      }
     },
     [refreshBranchesFromApi]
   );
 
   const deactivateBranch = useCallback(
-    (id: string) => {
-      void (async () => {
-        try {
-          await runOnApi(async () => {
-            await setBranchActiveApi(id, false);
-            await refreshBranchesFromApi();
-          });
-        } catch (error) {
-          console.error(getDataSourceErrorMessage(error));
-        }
-      })();
+    async (id: string): Promise<BranchValidationResult> => {
+      const existing = branchesRef.current.find((branch) => branch.id === id);
+      if (!existing) {
+        return createValidationResult({ form: "Branch not found." });
+      }
+
+      try {
+        await runOnApi(async () => {
+          await setBranchActiveApi(id, false);
+          await refreshBranchesFromApi();
+        });
+        return createValidationResult({});
+      } catch (error) {
+        return createValidationResult({
+          form: getDataSourceErrorMessage(error),
+        });
+      }
     },
     [refreshBranchesFromApi]
   );
 
   const reactivateBranch = useCallback(
-    (id: string) => {
-      void (async () => {
-        try {
-          await runOnApi(async () => {
-            await setBranchActiveApi(id, true);
-            await refreshBranchesFromApi();
-          });
-        } catch (error) {
-          console.error(getDataSourceErrorMessage(error));
-        }
-      })();
+    async (id: string): Promise<BranchValidationResult> => {
+      const existing = branchesRef.current.find((branch) => branch.id === id);
+      if (!existing) {
+        return createValidationResult({ form: "Branch not found." });
+      }
+
+      try {
+        await runOnApi(async () => {
+          await setBranchActiveApi(id, true);
+          await refreshBranchesFromApi();
+        });
+        return createValidationResult({});
+      } catch (error) {
+        return createValidationResult({
+          form: getDataSourceErrorMessage(error),
+        });
+      }
     },
     [refreshBranchesFromApi]
   );

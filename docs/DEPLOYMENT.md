@@ -201,7 +201,7 @@ npm run db:restore -- ./backups/<backup-file>.sql.gz --yes
 ### Development
 
 - [ ] `APP_ENV=development`
-- [ ] `DATABASE_URL` optional (localStorage fallback when unset)
+- [ ] `DATABASE_URL` optional for boot only (business modules require PostgreSQL when using the app)
 - [ ] Copy `deploy/env/development.env.example` for Docker dev
 
 ### Staging
@@ -230,7 +230,7 @@ npm run db:restore -- ./backups/<backup-file>.sql.gz --yes
 |---------|--------------|-----|
 | Process exits on boot | Missing required env var | Run `npm run validate:env` |
 | `/api/ready` → 503 | DB unreachable or migrations missing | Check `DATABASE_URL`, run `db:migrate:deploy` |
-| Client uses localStorage | `NEXT_PUBLIC_USE_API=false` or build-time env | Rebuild with `NEXT_PUBLIC_USE_API=true` |
+| Business data unavailable / load errors | `NEXT_PUBLIC_USE_API=false`, missing `DATABASE_URL`, or DB unreachable | Set `NEXT_PUBLIC_USE_API=true`, configure PostgreSQL, run `db:migrate:deploy` |
 | Docker app won't start | Missing `deploy/env/*.env` | Copy from `.example` templates |
 
 ## Rollback

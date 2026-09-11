@@ -9,7 +9,18 @@ Business modules now require PostgreSQL via the API. When the database is unavai
 | `lib/data-source/errors.ts` | `DataSourceUnavailableError` and message helper |
 | `lib/data-source/context-api.ts` | `loadFromApi()`, `runOnApi()`, `assertRemoteDataSourceAvailable()` |
 
-Legacy `loadRemoteOrLocal()` / `runRemoteOrLocal()` remain **only** for auth and UI-only modules (session, roles list).
+Legacy `loadRemoteOrLocal()` / `runRemoteOrLocal()` helpers were **fully removed**. All business contexts use `loadFromApi()` / `runOnApi()` from `lib/data-source/context-api.ts`.
+
+## Authority model (current)
+
+| Domain | Source of truth | Notes |
+|--------|-----------------|-------|
+| Business records | PostgreSQL via API | Sales, expenses, purchases, staff payments, daily operations, stock |
+| Day open/close | PostgreSQL `DayClosing` via `/api/day-closings` | In-memory cache in `lib/day-closing/storage.ts` is **not** authoritative |
+| Staff people | PostgreSQL via `/api/staff` | `DEFAULT_STAFF_ROLES` is role configuration only — not staff records |
+| Branch selection (owner) | Server session + PostgreSQL branch ownership via `context/branch-context.tsx` | Frontend branch state alone is not sufficient for security; staff users are limited to assigned branch |
+| Reports UI (`/reports`) | Aggregates **API-loaded** daily operations in the browser | Data originates from PostgreSQL; `/api/reports/summary` provides server-side aggregation for API consumers |
+| Auth session | Signed httpOnly cookie | Legacy `sonic-os-staff` localStorage key is purged on logout — not read as staff authority |
 
 ## Removed localStorage read/write functions
 
@@ -114,13 +125,23 @@ flowchart LR
 2. Business contexts set `loadError` to e.g. *"PostgreSQL is unavailable. Business data cannot be loaded or saved."*
 3. Mutations log the same error; no silent localStorage writes occur.
 
-## localStorage retained (non-business)
+## localStorage retained (non-authoritative UX only)
 
-- Theme, sidebar, filters, active branch preference
-- Settings, auth session, branches config, notifications
-- Expense templates (form presets)
-- Audit log client buffer, historical import undo
-- Day closing records (`lib/day-closing/storage.ts`) — not yet migrated to API
+These keys may exist for UX convenience or legacy purge targets. They are **not** sources of truth for business records:
+
+- Active branch preference (`ACTIVE_BRANCH_STORAGE_KEY`)
+- Stock movement branch UX keys
+- Notifications (`NOTIFICATIONS_STORAGE_KEY`)
+- Historical import undo snapshot (`IMPORT_UNDO_STORAGE_KEY`)
+- Legacy keys purged on logout via `lib/auth-storage.ts` (`clearSession`) — including `sonic-os-staff`, `sonic-os-entries`, `sonic-os-sales`, etc.
+
+Settings, branches, expense templates, audit log, and day closings load from PostgreSQL via API contexts.
+
+## Day closing (current)
+
+- **Load/save:** `DayClosingProvider` → `fetchDayClosings()` / `closeDayApi()` → PostgreSQL
+- **Cache:** `lib/day-closing/storage.ts` holds an in-memory process cache synchronized from API responses — not localStorage, not authoritative
+- **Close flow:** staff payouts are recorded via Staff Payments API **before** `closeDayApi()`; server performs the authoritative close
 
 ## Environment
 

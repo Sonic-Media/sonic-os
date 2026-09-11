@@ -18,6 +18,7 @@ export function HistoricalImportWorkspace() {
     isImporting,
     lastImportResult,
     undoSnapshot,
+    isUndoing,
     errorReport,
     selectedRowNumbers,
     selectedCount,
@@ -34,13 +35,13 @@ export function HistoricalImportWorkspace() {
     await runImport();
   }
 
-  function handleUndo() {
+  async function handleUndo() {
     const confirmed = window.confirm(
       "Undo the last import? This removes the imported daily records."
     );
     if (!confirmed) return;
 
-    const result = undoLastImport();
+    const result = await undoLastImport();
     window.alert(result.message);
   }
 
@@ -83,7 +84,7 @@ export function HistoricalImportWorkspace() {
             type="button"
             variant="secondary"
             onClick={handleUndo}
-            disabled={!undoSnapshot || isImporting}
+            disabled={!undoSnapshot || isImporting || isUndoing}
           >
             Undo Last Import
           </Button>
