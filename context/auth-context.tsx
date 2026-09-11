@@ -77,7 +77,7 @@ interface AuthContextValue {
   updateUser: (id: string, input: AppUserUpdateInput) => AuthValidationResult;
   resetUserPassword: (id: string, password: string) => Promise<AuthValidationResult>;
   disableUser: (id: string) => AuthValidationResult;
-  enableUser: (id: string) => void;
+  enableUser: (id: string) => Promise<AuthValidationResult>;
   deleteUser: (id: string) => Promise<AuthValidationResult>;
   getUserById: (id: string) => AppUser | undefined;
 }
@@ -418,18 +418,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   );
 
   const enableUser = useCallback(
-    (id: string) => {
+    async (id: string): Promise<AuthValidationResult> => {
       const existing = usersRef.current.find((user) => user.id === id);
-      if (!existing) return;
+      if (!existing) {
+        return createValidationResult({ form: "User not found." });
+      }
 
-      void (async () => {
-        try {
-          await enableUserApi(id);
-          await refreshUsersFromApi();
-        } catch (error) {
-          console.error("[auth] enable user failed:", getDataSourceErrorMessage(error));
-        }
-      })();
+      try {
+        await enableUserApi(id);
+        await refreshUsersFromApi();
+        return createValidationResult({});
+      } catch (error) {
+        return createValidationResult({
+          form: getAuthErrorMessage(error, "Failed to enable user."),
+        });
+      }
     },
     [refreshUsersFromApi]
   );

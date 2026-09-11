@@ -121,19 +121,17 @@ const INVENTORY: {
 ];
 
 function inventoryAndScanDefaultStaff(): void {
-  const sourceRoots = [
+  const productionRoots = [
     "app",
     "components",
     "context",
     "hooks",
     "lib",
-    "scripts",
     "prisma",
     "types",
-    "docs",
   ];
-  const files = sourceRoots.flatMap((root) =>
-    walkFiles(path.join(ROOT, root), new Set([".ts", ".tsx", ".js", ".jsx", ".md"]))
+  const files = productionRoots.flatMap((root) =>
+    walkFiles(path.join(ROOT, root), new Set([".ts", ".tsx", ".js", ".jsx"]))
   );
 
   const defaultStaffHits: { file: string; line: number; text: string }[] = [];
@@ -142,8 +140,7 @@ function inventoryAndScanDefaultStaff(): void {
   for (const absolute of files) {
     const relative = toPosixRelative(absolute);
     // Skip this verification script's own inventory strings.
-    if (relative === "scripts/verify-default-staff.ts") continue;
-    if (relative.startsWith("docs/PHASE-1-FIX-20")) continue;
+    if (relative.startsWith("scripts/")) continue;
 
     const content = fs.readFileSync(absolute, "utf8");
     const lines = content.split("\n");

@@ -137,9 +137,8 @@ function scanStaticAuthority(): void {
   recordCheck(
     "H-static",
     "Logout clears active branch localStorage via clearSession",
-    authStorage.includes("ACTIVE_BRANCH_STORAGE_KEY"),
-    clientStorageKeys.includes("ACTIVE_BRANCH_STORAGE_KEY") &&
-      authStorage.includes("purgeSecuritySensitiveClientStorage"),
+    authStorage.includes("purgeSecuritySensitiveClientStorage") &&
+      clientStorageKeys.includes("ACTIVE_BRANCH_STORAGE_KEY"),
     ""
   );
 

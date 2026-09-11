@@ -161,7 +161,8 @@ function scanStaticAuthority(): void {
     4,
     "DayClosingProvider refreshes from API before/after mutations",
     contextSource.includes("await refreshClosingsFromApi()") &&
-      contextSource.includes("openDayApi") &&
+      (contextSource.includes("openWithShiftApi") ||
+        contextSource.includes("openDayApi")) &&
       !contextSource.includes("persistClosings("),
     ""
   );

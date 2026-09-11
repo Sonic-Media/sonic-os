@@ -145,7 +145,7 @@ function scanAwaitedUndoPattern(): void {
         path.join(process.cwd(), "lib/server/services/daily-operations-service.ts"),
         "utf8"
       )
-      .includes("assertSessionCanAccessBranchCode(session, operation.branch.code)"),
+      .includes("assertRecordInSessionBranchScope(session, operation.branchId)"),
     ""
   );
 }

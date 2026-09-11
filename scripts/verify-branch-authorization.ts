@@ -243,13 +243,9 @@ async function testRecordScopeAndBulkDelete(): Promise<void> {
   });
 
   try {
-    const crossBranchDeleted = await removeDailyOperationsByIds(
-      [mainOp.id],
-      salaamaStaffSession
-    );
-    assert.equal(
-      crossBranchDeleted,
-      0,
+    await assert.rejects(
+      () => removeDailyOperationsByIds([mainOp.id], salaamaStaffSession),
+      (error: unknown) => error instanceof ApiError && error.status === 404,
       "Bulk delete must not cross branch boundaries"
     );
 
