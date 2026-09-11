@@ -20,6 +20,7 @@ import {
   loadFromApi,
 } from "@/lib/data-source/context-api";
 import {
+  clearStaffAuditClientCaches,
   setStaffListCache,
   syncStaffAuditCacheFromAuditLog,
 } from "@/lib/staff/audit";
@@ -62,6 +63,7 @@ export function AuditLogProvider({ children }: { children: React.ReactNode }) {
     if (!authLoaded) return;
     if (!isAuthenticated || !canViewAuditLog) {
       setRecords([]);
+      clearStaffAuditClientCaches();
       setLoadError(null);
       setIsLoaded(true);
       return;

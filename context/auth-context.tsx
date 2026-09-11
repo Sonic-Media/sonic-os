@@ -42,6 +42,7 @@ import {
   validateLoginInput,
   validatePasswordReset,
 } from "@/lib/auth/validation";
+import { clearClientDerivedCaches } from "@/lib/auth/client-derived-caches";
 import {
   clearSession,
   normalizeUserList,
@@ -133,6 +134,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       clearSession();
+      clearClientDerivedCaches();
       sessionRef.current = next;
       setSession(next);
       setClientSession(next);
@@ -150,6 +152,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         try {
           clearSession();
+          clearClientDerivedCaches();
 
           const payload = await fetchAuthSession();
           if (requestId !== sessionRequestId.current) return;
@@ -224,6 +227,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       try {
         clearSession();
+        clearClientDerivedCaches();
         const nextSession = await loginApi(input);
         if (requestId !== sessionRequestId.current) {
           return createValidationResult({});
@@ -248,6 +252,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const logout = useCallback(() => {
     const requestId = ++sessionRequestId.current;
     clearSession();
+    clearClientDerivedCaches();
 
     void (async () => {
       try {

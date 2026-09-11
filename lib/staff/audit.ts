@@ -11,6 +11,11 @@ import type { StaffAuditInput, StaffAuditRecord } from "@/types/staff-audit";
 let staffListCache: Staff[] = [];
 let auditRecordCache: StaffAuditRecord[] = [];
 
+export function clearStaffAuditClientCaches(): void {
+  staffListCache = [];
+  auditRecordCache = [];
+}
+
 export function setStaffAuditCache(records: StaffAuditRecord[]): void {
   auditRecordCache = records;
 }
