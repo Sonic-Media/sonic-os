@@ -29,6 +29,7 @@ import {
   runOnApi,
 } from "@/lib/data-source/context-api";
 import {
+  getActiveOpenDayRecord,
   getClosedDayRecord as findClosedDayRecord,
   getOpenDayRecord as findOpenDayRecord,
   isBranchDayClosed as checkBranchDayClosed,
@@ -300,16 +301,34 @@ export function DayClosingProvider({ children }: { children: React.ReactNode }) 
     async (input: CloseDayInput): Promise<DayClosingValidationResult> => {
       const errors: Record<string, string | undefined> = {};
 
-      if (checkBranchDayClosed(input.branch, input.date, closingsRef.current)) {
-        errors.form = "Today's shift has already been completed.";
+      if (!session) {
+        errors.form = "You must be signed in to close the day.";
       }
 
-      if (!checkBranchDayOpened(input.branch, input.date, closingsRef.current)) {
+      try {
+        await refreshClosingsFromApi();
+      } catch (error) {
+        return createValidationResult({
+          form: toStaffFacingError(getDataSourceErrorMessage(error), {
+            ownerName: settings.ownerName,
+            context: "close-day",
+          }),
+        });
+      }
+
+      const activeOpenRecord = getActiveOpenDayRecord(
+        input.branch,
+        closingsRef.current
+      );
+
+      if (!activeOpenRecord) {
         errors.form = "Start today's shift before closing the day.";
       }
 
-      if (!session) {
-        errors.form = "You must be signed in to close the day.";
+      const businessDate = activeOpenRecord?.date ?? input.date;
+
+      if (checkBranchDayClosed(input.branch, businessDate, closingsRef.current)) {
+        errors.form = "Today's shift has already been completed.";
       }
 
       const difference = computeCashDifference(
@@ -340,7 +359,7 @@ export function DayClosingProvider({ children }: { children: React.ReactNode }) 
 
       const payoutResult = await persistCloseDayStaffPayouts(
         input.staffPayouts,
-        input.date,
+        businessDate,
         recordStaffPaymentAsync
       );
 
@@ -365,7 +384,7 @@ export function DayClosingProvider({ children }: { children: React.ReactNode }) 
       try {
         const saved = await runOnApi(() =>
           closeDayApi({
-            date: input.date,
+            date: businessDate,
             branch: input.branch,
             metrics: input.metrics,
             staffPayouts: input.staffPayouts,
@@ -409,13 +428,13 @@ export function DayClosingProvider({ children }: { children: React.ReactNode }) 
         const draftEntry = findDraftForBranchDate(
           entries,
           input.branch,
-          input.date
+          businessDate
         );
 
         await upsertEntry(
           buildClosedDayDailyOperationEntry({
             branch: input.branch,
-            date: input.date,
+            date: businessDate,
             summary,
             closingNotes: input.closingNotes,
             existing: draftEntry,

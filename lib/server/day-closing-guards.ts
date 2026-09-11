@@ -4,7 +4,7 @@ import {
   canAccessCloseDay,
   canOpenShop,
 } from "@/lib/day-closing/permissions";
-import { isBranchDayClosed } from "@/lib/server/services/day-closings-service";
+import { getBranchDayState } from "@/lib/server/services/day-closings-service";
 import type { AuthSession } from "@/types/auth";
 import type { Branch } from "@/types";
 
@@ -51,10 +51,20 @@ export async function assertBranchDayOpenForWrite(
   branch: Branch,
   date: string
 ): Promise<void> {
-  if (await isBranchDayClosed(branch, date)) {
+  const state = await getBranchDayState(branch, date);
+
+  if (state === "closed") {
     throw new ApiError("This branch day is closed. Records cannot be changed.", {
       status: 409,
       code: "day_closed",
     });
   }
+
+  if (date === getTodayISO() && state !== "open") {
+    throw new ApiError("Start today's shift before recording today's activity.", {
+      status: 409,
+      code: "shop_not_opened",
+    });
+  }
 }
+

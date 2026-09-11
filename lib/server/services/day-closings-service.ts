@@ -11,6 +11,7 @@ import {
   getBranchCodeById,
   getBranchIdForSession,
 } from "@/lib/server/branch-lookup";
+import type { AuthSession } from "@/types/auth";
 import { mapStaffToEntity } from "@/lib/server/mappers/entities";
 import { requireSession } from "@/lib/server/session";
 import { isRoleGreetingLabel } from "@/lib/ux/user-display";
@@ -472,18 +473,57 @@ export async function openWithShift(input: unknown): Promise<OpenWithShiftResult
   };
 }
 
+async function resolveOpenBusinessDateForClose(
+  session: AuthSession,
+  branch: Branch,
+  hintDate?: string
+): Promise<{ branchId: string; businessDate: string }> {
+  const branchId = await getBranchIdForSession(session, branch);
+
+  const openRecords = await prisma.dayClosing.findMany({
+    where: {
+      branchId,
+      status: "open",
+      OR: [{ openedAt: { not: null } }, { reopenedAt: { not: null } }],
+    },
+    orderBy: [{ date: "asc" }, { openedAt: "asc" }],
+  });
+
+  if (openRecords.length === 0) {
+    throw new ApiError("Open the shop before closing the day.", {
+      status: 400,
+      code: "shop_not_opened",
+    });
+  }
+
+  if (hintDate) {
+    const matching = openRecords.find((record) => record.date === hintDate);
+    if (matching) {
+      return { branchId, businessDate: matching.date };
+    }
+  }
+
+  return { branchId, businessDate: openRecords[0]!.date };
+}
+
 export async function closeDay(input: unknown): Promise<DayClosingRecord> {
   const parsed = closeDaySchema.parse(input);
   const session = await requireSession();
   assertCanCloseDay(session);
-  const branchId = await getBranchIdForSession(session, parsed.branch);
   const summary = parsed.summary as unknown as DayClosingSummary;
+  const branch = parsed.branch as Branch;
+
+  const { branchId, businessDate } = await resolveOpenBusinessDateForClose(
+    session,
+    branch,
+    parsed.date
+  );
 
   const existing = await prisma.dayClosing.findUnique({
     where: {
       branchId_date: {
         branchId,
-        date: parsed.date,
+        date: businessDate,
       },
     },
   });
@@ -537,12 +577,12 @@ export async function closeDay(input: unknown): Promise<DayClosingRecord> {
     buildStaffActionRecord(
       mapStaffToEntity(actor.staff),
       now.toISOString(),
-      parsed.branch as Branch
+      branch
     );
 
   await syncClosedDayDailyOperation({
-    branch: parsed.branch as Branch,
-    date: parsed.date,
+    branch,
+    date: businessDate,
     summary,
     closingNotes: parsed.closingNotes,
     createdBy: createdBy || undefined,
@@ -552,7 +592,7 @@ export async function closeDay(input: unknown): Promise<DayClosingRecord> {
     where: {
       branchId_date: {
         branchId,
-        date: parsed.date,
+        date: businessDate,
       },
     },
     update: {
@@ -574,7 +614,7 @@ export async function closeDay(input: unknown): Promise<DayClosingRecord> {
       reopenedAt: null,
     },
     create: {
-      date: parsed.date,
+      date: businessDate,
       branchId,
       status: "closed",
       metrics: parsed.metrics as unknown as Prisma.InputJsonValue,
@@ -660,12 +700,11 @@ export async function getClosedDayRecord(
   return mapDayClosingRecord(record);
 }
 
-export async function isBranchDayOpened(
-  branch: Branch,
-  date: string
-): Promise<boolean> {
+export type BranchDayState = "closed" | "open" | "waiting";
+
+async function findDayClosingRow(branch: Branch, date: string) {
   const branchId = await getBranchIdByCode(branch);
-  const record = await prisma.dayClosing.findUnique({
+  return prisma.dayClosing.findUnique({
     where: {
       branchId_date: {
         branchId,
@@ -673,18 +712,39 @@ export async function isBranchDayOpened(
       },
     },
   });
+}
 
-  if (!record || record.status !== "open") {
-    return false;
+export async function getBranchDayState(
+  branch: Branch,
+  date: string
+): Promise<BranchDayState> {
+  const record = await findDayClosingRow(branch, date);
+
+  if (!record) {
+    return "waiting";
   }
 
-  return !!(record.openedAt || record.reopenedAt);
+  if (record.status === "closed") {
+    return "closed";
+  }
+
+  if (record.openedAt || record.reopenedAt) {
+    return "open";
+  }
+
+  return "waiting";
+}
+
+export async function isBranchDayOpened(
+  branch: Branch,
+  date: string
+): Promise<boolean> {
+  return (await getBranchDayState(branch, date)) === "open";
 }
 
 export async function isBranchDayClosed(
   branch: Branch,
   date: string
 ): Promise<boolean> {
-  const record = await getClosedDayRecord(branch, date);
-  return record !== null;
+  return (await getBranchDayState(branch, date)) === "closed";
 }
