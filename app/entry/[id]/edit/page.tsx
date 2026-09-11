@@ -15,6 +15,7 @@ function EditEntryForm({ entry }: { entry: Entry }) {
   const {
     form,
     isSaving,
+    saveError,
     status,
     isDraftEdit,
     lockBranch,
@@ -36,6 +37,7 @@ function EditEntryForm({ entry }: { entry: Entry }) {
       <EntryForm
         form={form}
         isSaving={isSaving}
+        saveError={saveError}
         sales={sales}
         totalExpenses={totalExpenses}
         balance={balance}
