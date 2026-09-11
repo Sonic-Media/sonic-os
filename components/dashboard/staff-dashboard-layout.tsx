@@ -19,7 +19,7 @@ import { getTodayISO } from "@/lib/dates";
 import { filterEntriesByDate } from "@/lib/entry-helpers";
 import { getBranchTotals } from "@/lib/aggregations";
 import { useEntriesContext } from "@/context/entries-context";
-import { useSettings } from "@/context/settings-context";
+import { useBranch } from "@/context/branch-context";
 import type { BranchProgress, Entry, ReportSummary } from "@/types";
 
 interface StaffDashboardLayoutProps {
@@ -47,8 +47,8 @@ export function StaffDashboardLayout({
   activeBranch,
   lastUpdatedAt,
 }: StaffDashboardLayoutProps) {
-  const { branches } = useSettings();
-  const activeBranchConfig = branches.find((branch) => branch.id === activeBranch);
+  const { getBranchByCode } = useBranch();
+  const activeBranchEntity = getBranchByCode(activeBranch);
 
   return (
     <PageContainer>
@@ -88,11 +88,11 @@ export function StaffDashboardLayout({
             Branch
           </h2>
           <div className="grid grid-cols-1 gap-3">
-            {activeBranchConfig ? (
+            {activeBranchEntity ? (
               <BranchCard
-                key={activeBranchConfig.id}
-                name={activeBranchConfig.name}
-                totals={getBranchTotals(summary.byBranch, activeBranchConfig.id)}
+                key={activeBranchEntity.code}
+                name={activeBranchEntity.name}
+                totals={getBranchTotals(summary.byBranch, activeBranchEntity.code)}
               />
             ) : null}
           </div>
