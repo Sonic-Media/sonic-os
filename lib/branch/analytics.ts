@@ -1,5 +1,6 @@
 import { branchCodesReferToSameInventory } from "@/lib/branch/codes";
 import { calculateExpenses, calculateSavingsFromTotals } from "@/lib/amounts";
+import { computeDashboardOperatingExpenses } from "@/lib/dashboard/operating-expenses";
 import {
   computeInventoryValueByBranch,
   computeTodayPurchaseCostByBranch,
@@ -74,20 +75,12 @@ function computeTodayExpenses(
   entries: Entry[],
   today: string
 ): number {
-  const moduleExpenses = expenses
-    .filter((expense) => expense.date === today && recordMatchesBranch(expense.branch, branch.code))
-    .reduce((sum, expense) => sum + expense.amount, 0);
-
-  const entryExpenses = entries
-    .filter(
-      (entry) =>
-        entry.date === today &&
-        entry.status === "completed" &&
-        recordMatchesBranch(entry.branch, branch.code)
-    )
-    .reduce((sum, entry) => sum + calculateExpenses(entry), 0);
-
-  return moduleExpenses + entryExpenses;
+  return computeDashboardOperatingExpenses(
+    branch.code,
+    today,
+    expenses,
+    entries
+  );
 }
 
 function computeTopSellingProduct(

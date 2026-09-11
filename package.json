@@ -27,9 +27,6 @@
     "verify:purchasing": "tsx scripts/verify-purchasing-module.ts",
     "verify:operations": "tsx scripts/verify-daily-operations-module.ts",
     "verify:historical-import": "tsx scripts/verify-historical-import.ts",
-    "verify:auth-gated-loading": "tsx scripts/verify-auth-gated-loading.ts",
-    "verify:day-closing-live-db": "tsx scripts/verify-day-closing-live-db.ts",
-    "verify:close-day-date": "tsx scripts/verify-close-day-date-consistency.ts",
     "verify:users": "tsx scripts/verify-users-module.ts",
     "verify:staff": "tsx scripts/verify-staff-module.ts",
     "verify:staff-payment-branch": "tsx scripts/verify-staff-payment-branch-authorization.ts",
@@ -63,7 +60,11 @@
     "verify:audit-cache-integrity": "tsx scripts/verify-audit-cache-integrity.ts",
     "verify:financial-defaults": "tsx scripts/verify-financial-defaults.ts",
     "verify:financial-assertions": "tsx scripts/verify-financial-assertions.ts",
-    "verify:default-staff": "tsx scripts/verify-default-staff.ts"
+    "verify:default-staff": "tsx scripts/verify-default-staff.ts",
+    "verify:auth-gated-loading": "tsx scripts/verify-auth-gated-loading.ts",
+    "verify:day-closing-live-db": "tsx scripts/verify-day-closing-live-db.ts",
+    "verify:close-day-date": "tsx scripts/verify-close-day-date-consistency.ts",
+    "verify:dashboard-expense-dedupe": "tsx scripts/verify-dashboard-expense-dedupe.ts"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.9.1",
