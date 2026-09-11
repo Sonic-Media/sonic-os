@@ -8,7 +8,7 @@ Sonic OS uses **`APP_ENV`** to distinguish runtime profiles:
 
 | Profile | `APP_ENV` | `NODE_ENV` | PostgreSQL | `SESSION_SECRET` |
 |---------|-----------|------------|------------|------------------|
-| Development | `development` (default) | `development` | Optional (localStorage fallback without DB) | Optional |
+| Development | `development` (default) | `development` | Optional for boot only (business modules require PostgreSQL — no localStorage fallback for business data) | Optional |
 | Staging | `staging` | `production` | Required | Required (≥ 32 chars) |
 | Production | `production` | `production` | Required | Required (≥ 32 chars) |
 
