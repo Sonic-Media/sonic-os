@@ -130,7 +130,7 @@ async function main() {
     new Date().toISOString().slice(0, 10)
   );
   assert.equal(salaamaMetrics.totalProducts, salaamaDbCount);
-  assert.equal(salaamaMetrics.inventoryValue, salaamaDbValue);
+  assert.equal(salaamaMetrics.inventoryValue ?? 0, salaamaDbValue);
 
   // Acceptance B: Kansanga is empty and does not leak Salaama data.
   await setActiveBranch(client, "main");

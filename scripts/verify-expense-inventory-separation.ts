@@ -164,6 +164,13 @@ async function main() {
 
   const owner = new InventoryVerifier();
   await loginWithCredentials(owner, VERIFY_OWNER_CREDENTIALS);
+  await owner.json("/api/auth/session", {
+    method: "POST",
+    body: JSON.stringify({
+      action: "set-active-branch",
+      branchCode: BRANCH,
+    }),
+  });
 
   let cashier: CertificationCashier | null = null;
   let productId: string | null = null;
@@ -186,6 +193,7 @@ async function main() {
       body: JSON.stringify({
         name: `${TEST_PREFIX} Accessory`,
         category: "flash-disks",
+        branch: BRANCH,
         buyingPrice: 10000,
         sellingPrice: 15000,
         minimumStockLevel: 1,

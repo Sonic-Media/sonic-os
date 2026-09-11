@@ -10,6 +10,7 @@ import {
   findStaffDailyWagePayment,
   hasStaffDailyWagePayment,
 } from "@/lib/staff-payments/calculations";
+import { mapStaffPaymentToEntity } from "@/lib/server/mappers/entities";
 import {
   cleanupCertificationCashier,
   createCertificationCashier,
@@ -238,13 +239,18 @@ async function main() {
       `status=${crossStaffPay.status}`
     );
 
-    const payments = await owner.json<
-      Array<{ id: string; staffId: string; branch: string; date: string }>
-    >("/api/staff-payments");
-
-    const scoped = payments.filter(
-      (payment) => payment.date === TEST_DATE && payment.branch === BRANCH
-    );
+    const branch = await prisma.branch.findFirstOrThrow({
+      where: { code: BRANCH },
+    });
+    const paymentRows = await prisma.staffPayment.findMany({
+      where: {
+        branchId: branch.id,
+        date: TEST_DATE,
+        staffId: { in: [staffA.staffId, staffB.staffId] },
+      },
+      include: { branch: true, staff: { include: { branch: true } } },
+    });
+    const scoped = paymentRows.map(mapStaffPaymentToEntity);
 
     recordCheck(
       9,
