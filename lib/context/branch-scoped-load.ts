@@ -6,9 +6,7 @@ export function shouldSkipBranchScopedFetch(
   lastFetchedBranch: MutableRefObject<Branch | null>,
   activeBranch: Branch
 ): boolean {
-  return (
-    hasLoaded.current && lastFetchedBranch.current === activeBranch
-  );
+  return hasLoaded.current && lastFetchedBranch.current === activeBranch;
 }
 
 /** Returns true when the active branch changed since the last successful fetch. */
@@ -33,4 +31,18 @@ export function resetBranchScopedFetchRefs(
 ): void {
   hasLoaded.current = false;
   lastFetchedBranch.current = null;
+}
+
+export function beginFetchGeneration(
+  fetchGeneration: MutableRefObject<number>
+): number {
+  fetchGeneration.current += 1;
+  return fetchGeneration.current;
+}
+
+export function isCurrentFetchGeneration(
+  fetchGeneration: MutableRefObject<number>,
+  generation: number
+): boolean {
+  return fetchGeneration.current === generation;
 }

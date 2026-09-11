@@ -14,6 +14,8 @@ import { useBranch } from "@/context/branch-context";
 import { useStaff } from "@/context/staff-context";
 import {
   beginBranchScopedFetch,
+  beginFetchGeneration,
+  isCurrentFetchGeneration,
   resetBranchScopedFetchRefs,
   shouldSkipBranchScopedFetch,
 } from "@/lib/context/branch-scoped-load";
@@ -26,6 +28,7 @@ import {
   loadFromApi,
   runOnApi,
 } from "@/lib/data-source/context-api";
+import type { Branch } from "@/types";
 import {
   DAY_CLOSED_EDIT_MESSAGE,
   isBranchDayClosed,
@@ -41,7 +44,6 @@ import { AUDIT_ACTIONS } from "@/lib/audit-log/constants";
 import { pickAuditFields } from "@/lib/audit-log/snapshots";
 import { recordStaffAction } from "@/lib/staff/audit";
 import { resolveCurrentStaffAction } from "@/lib/staff/session";
-import type { Branch } from "@/types";
 import type {
   StaffPaymentInput,
   StaffPaymentRecord,
@@ -71,9 +73,7 @@ interface StaffPaymentsContextValue {
   getPaymentById: (id: string) => StaffPaymentRecord | undefined;
   getPaymentByExpenseId: (expenseId: string) => StaffPaymentRecord | undefined;
   getPaymentsForBranchDate: (branch: Branch, date: string) => StaffPaymentRecord[];
-  recordStaffPayment: (
-    input: StaffPaymentInput
-  ) => Promise<StaffPaymentValidationResult>;
+  recordStaffPayment: (input: StaffPaymentInput) => StaffPaymentValidationResult;
   recordStaffPaymentAsync: (
     input: StaffPaymentInput
   ) => Promise<StaffPaymentValidationResult>;
@@ -89,7 +89,7 @@ export function StaffPaymentsProvider({
   children: React.ReactNode;
 }) {
   const { isAuthenticated, isLoaded: authLoaded } = useAuth();
-  const { activeBranch } = useBranch();
+  const { activeBranch, isLoaded: branchLoaded } = useBranch();
   const { getStaffById } = useStaff();
 
   const [payments, setPayments] = useState<StaffPaymentRecord[]>([]);
@@ -97,6 +97,7 @@ export function StaffPaymentsProvider({
   const [loadError, setLoadError] = useState<string | null>(null);
   const hasLoaded = useRef(false);
   const lastFetchedBranch = useRef<Branch | null>(null);
+  const fetchGeneration = useRef(0);
   const paymentsRef = useRef(payments);
 
   useEffect(() => {
@@ -107,11 +108,17 @@ export function StaffPaymentsProvider({
     if (!authLoaded) return;
 
     if (!isAuthenticated) {
+      beginFetchGeneration(fetchGeneration);
       paymentsRef.current = [];
       setPayments([]);
       setLoadError(null);
       resetBranchScopedFetchRefs(hasLoaded, lastFetchedBranch);
       setIsLoaded(true);
+      return;
+    }
+
+    if (!branchLoaded) {
+      setIsLoaded(false);
       return;
     }
 
@@ -131,10 +138,16 @@ export function StaffPaymentsProvider({
       setIsLoaded(false);
     }
 
+    const generation = beginFetchGeneration(fetchGeneration);
+
     queueMicrotask(() => {
       void (async () => {
         try {
           const loaded = await loadFromApi(fetchStaffPayments);
+          if (!isCurrentFetchGeneration(fetchGeneration, generation)) {
+            return;
+          }
+
           const normalized = sortStaffPaymentsByDate(
             normalizeStaffPaymentList(loaded)
           );
@@ -142,15 +155,21 @@ export function StaffPaymentsProvider({
           setPayments(normalized);
           setLoadError(null);
         } catch (error) {
+          if (!isCurrentFetchGeneration(fetchGeneration, generation)) {
+            return;
+          }
+
           paymentsRef.current = [];
           setPayments([]);
           setLoadError(getDataSourceErrorMessage(error));
         } finally {
-          setIsLoaded(true);
+          if (isCurrentFetchGeneration(fetchGeneration, generation)) {
+            setIsLoaded(true);
+          }
         }
       })();
     });
-  }, [authLoaded, isAuthenticated, activeBranch]);
+  }, [authLoaded, isAuthenticated, branchLoaded, activeBranch]);
 
   const refreshPaymentsFromApi = useCallback(async () => {
     const remote = await fetchStaffPayments();
@@ -249,9 +268,60 @@ export function StaffPaymentsProvider({
   );
 
   const recordStaffPayment = useCallback(
-    (input: StaffPaymentInput): Promise<StaffPaymentValidationResult> =>
-      recordStaffPaymentAsync(input),
-    [recordStaffPaymentAsync]
+    (input: StaffPaymentInput): StaffPaymentValidationResult => {
+      const errors = validateStaffPaymentInput(input);
+      if (hasValidationErrors(errors)) {
+        return createValidationResult(errors);
+      }
+
+      const staff = getStaffById(input.staffId);
+      if (!staff) {
+        return createValidationResult({ staffId: "Staff member not found." });
+      }
+
+      if (isBranchDayClosed(staff.branch, input.date)) {
+        return createValidationResult({ form: DAY_CLOSED_EDIT_MESSAGE });
+      }
+      if (!isBranchDayOpened(staff.branch, input.date)) {
+        return createValidationResult({ form: SHOP_NOT_OPENED_MESSAGE });
+      }
+
+      void (async () => {
+        try {
+          await runOnApi(async () => {
+            const payer = resolveCurrentStaffAction(staff.branch);
+            const created = await createStaffPaymentApi({
+              ...input,
+              paidBy: payer,
+            });
+            await refreshPaymentsFromApi();
+
+            recordStaffAction({
+              staffId: payer?.staffId ?? staff.id,
+              staffName: payer?.staffName ?? staff.name,
+              role: payer?.role ?? staff.role,
+              branch: staff.branch,
+              action: AUDIT_ACTIONS.STAFF_PAYMENT,
+              module: "staff",
+              recordId: created.id,
+              newValues: pickAuditFields(created, [
+                "id",
+                "staffName",
+                "amount",
+                "paymentType",
+                "branch",
+                "date",
+              ]),
+            });
+          });
+        } catch (error) {
+          console.error(getDataSourceErrorMessage(error));
+        }
+      })();
+
+      return createValidationResult({});
+    },
+    [getStaffById, refreshPaymentsFromApi]
   );
 
   const value = useMemo(
