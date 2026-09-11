@@ -15,7 +15,11 @@ import { useEntryForm } from "@/hooks/use-entry-form";
 import { useLinkedStaff } from "@/hooks/use-linked-staff";
 import { useStaffCloseDay } from "@/hooks/use-staff-close-day";
 import { useStaffPaymentsModule } from "@/context/staff-payments-context";
-import { hasStaffDailyWagePayment } from "@/lib/staff-payments/calculations";
+import {
+  computeStaffPayoutTotalForStaffBranchDate,
+  findStaffDailyWagePayment,
+  hasStaffDailyWagePayment,
+} from "@/lib/staff-payments/calculations";
 import { useSales } from "@/context/sales-context";
 import { useActiveBranch } from "@/context/active-branch-context";
 import { filterByBranchField } from "@/lib/active-branch/filters";
@@ -99,14 +103,39 @@ export function StaffOperationsWorkspace({
     [form.expenses]
   );
 
-  const wageRecorded = linkedStaff
-    ? hasStaffDailyWagePayment(
-        linkedStaff.id,
-        form.branch,
-        form.date,
-        payments
-      )
-    : false;
+  const ownDailyWagePayment = useMemo(() => {
+    if (!linkedStaff) return undefined;
+    return findStaffDailyWagePayment(
+      linkedStaff.id,
+      form.branch,
+      form.date,
+      payments
+    );
+  }, [linkedStaff, form.branch, form.date, payments]);
+
+  const wageRecorded = Boolean(ownDailyWagePayment);
+
+  const displayedStaffPayouts = useMemo(() => {
+    if (ownDailyWagePayment) {
+      return ownDailyWagePayment.amount;
+    }
+    if (!linkedStaff) {
+      return staffPayouts;
+    }
+    return computeStaffPayoutTotalForStaffBranchDate(
+      linkedStaff.id,
+      form.branch,
+      form.date,
+      payments
+    );
+  }, [
+    ownDailyWagePayment,
+    linkedStaff,
+    staffPayouts,
+    form.branch,
+    form.date,
+    payments,
+  ]);
 
   const [expandedSection, setExpandedSection] = useState<
     StaffWorkflowSection | null
@@ -211,8 +240,10 @@ export function StaffOperationsWorkspace({
         movieRevenue={movieRevenue}
         accessorySales={accessorySales}
         totalExpenses={totalExpenses}
-        staffPayouts={staffPayouts}
-        netCash={balance}
+        staffPayouts={displayedStaffPayouts}
+        netCash={
+          movieRevenue + accessorySales - totalExpenses - displayedStaffPayouts
+        }
         savingsAllocation={parseAmount(form.savingsAllocation)}
         collapsible={false}
       />
@@ -222,8 +253,14 @@ export function StaffOperationsWorkspace({
         movieRevenue={movieRevenue}
         accessorySales={accessorySales}
         totalExpenses={totalExpenses}
-        staffPayouts={staffPayouts}
-        cashToHandIn={remainingCash}
+        staffPayouts={displayedStaffPayouts}
+        cashToHandIn={
+          movieRevenue +
+          accessorySales -
+          totalExpenses -
+          displayedStaffPayouts -
+          parseAmount(form.savingsAllocation)
+        }
         accessorySalesCount={accessorySalesCount}
         wageRecorded={wageRecorded}
         isClosing={isClosing || isSaving}

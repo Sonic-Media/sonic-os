@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/shared/ui/button";
 import { Input } from "@/components/shared/ui/input";
 import { StaffOperationCard } from "@/components/operations/staff/staff-operation-card";
@@ -35,7 +35,13 @@ export function StaffDailyWageCard({
 }: StaffDailyWageCardProps) {
   const { linkedStaff: loggedInStaff, isLoaded: staffLoaded } =
     useLinkedStaff(branch);
-  const { payments, recordStaffPaymentAsync } = useStaffPaymentsModule();
+  const {
+    payments,
+    isLoaded: paymentsLoaded,
+    recordStaffPaymentAsync,
+    refreshPayments,
+  } = useStaffPaymentsModule();
+  const didRefreshPayments = useRef(false);
 
   const existingPayment = useMemo(() => {
     if (!loggedInStaff) return undefined;
@@ -63,6 +69,20 @@ export function StaffDailyWageCard({
     }
     setAmount(String(suggestedAmount));
   }, [existingPayment, suggestedAmount]);
+
+  useEffect(() => {
+    if (
+      !loggedInStaff ||
+      !paymentsLoaded ||
+      existingPayment ||
+      didRefreshPayments.current
+    ) {
+      return;
+    }
+
+    didRefreshPayments.current = true;
+    void refreshPayments();
+  }, [loggedInStaff, paymentsLoaded, existingPayment, refreshPayments]);
 
   async function handleRecordPayment() {
     if (!loggedInStaff || existingPayment || isSaving) return;
