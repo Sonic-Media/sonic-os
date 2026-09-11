@@ -27,7 +27,10 @@ import {
   generateStaffDayInsights,
   getTopAccessoryProduct,
 } from "@/lib/operations/staff-day-insights";
-import { computeStaffPayoutTotalForBranchDate } from "@/lib/staff-payments/calculations";
+import {
+  computeStaffPayoutTotalForStaffBranchDate,
+} from "@/lib/staff-payments/calculations";
+import { useLinkedStaff } from "@/hooks/use-linked-staff";
 import { resolveStaffDisplayName } from "@/lib/ux/user-display";
 import type { Branch, Entry } from "@/types";
 
@@ -46,6 +49,7 @@ export function StaffDayClosedView({
   const { sales } = useSales();
   const { payments } = useStaffPaymentsModule();
   const { getClosedRecord } = useDayClosing();
+  const { linkedStaff } = useLinkedStaff(branch);
 
   const closedRecord = getClosedRecord(branch, date);
   const entry: Entry | undefined = useMemo(() => {
@@ -67,8 +71,16 @@ export function StaffDayClosedView({
 
   const totalExpenses = entry ? calculateExpenses(entry) : 0;
   const dailyWage = useMemo(
-    () => computeStaffPayoutTotalForBranchDate(payments, branch, date),
-    [payments, branch, date]
+    () =>
+      linkedStaff
+        ? computeStaffPayoutTotalForStaffBranchDate(
+            linkedStaff.id,
+            branch,
+            date,
+            payments
+          )
+        : 0,
+    [linkedStaff, payments, branch, date]
   );
 
   const netCash = movieRevenue + accessoryRevenue - totalExpenses - dailyWage;

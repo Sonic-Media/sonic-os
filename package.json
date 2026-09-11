@@ -64,7 +64,9 @@
     "verify:auth-gated-loading": "tsx scripts/verify-auth-gated-loading.ts",
     "verify:day-closing-live-db": "tsx scripts/verify-day-closing-live-db.ts",
     "verify:close-day-date": "tsx scripts/verify-close-day-date-consistency.ts",
-    "verify:dashboard-expense-dedupe": "tsx scripts/verify-dashboard-expense-dedupe.ts"
+    "verify:dashboard-expense-dedupe": "tsx scripts/verify-dashboard-expense-dedupe.ts",
+    "verify:staff-daily-wage-isolation": "tsx scripts/verify-staff-daily-wage-isolation.ts",
+    "verify:expense-inventory-separation": "tsx scripts/verify-expense-inventory-separation.ts"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.9.1",

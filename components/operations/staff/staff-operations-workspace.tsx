@@ -12,7 +12,10 @@ import { StaffWelcomeCard } from "@/components/operations/staff/staff-welcome-ca
 import { StaffCashSummaryCard } from "@/components/operations/staff/staff-cash-summary-card";
 import { useToast } from "@/context/toast-context";
 import { useEntryForm } from "@/hooks/use-entry-form";
+import { useLinkedStaff } from "@/hooks/use-linked-staff";
 import { useStaffCloseDay } from "@/hooks/use-staff-close-day";
+import { useStaffPaymentsModule } from "@/context/staff-payments-context";
+import { hasStaffDailyWagePayment } from "@/lib/staff-payments/calculations";
 import { useSales } from "@/context/sales-context";
 import { useActiveBranch } from "@/context/active-branch-context";
 import { filterByBranchField } from "@/lib/active-branch/filters";
@@ -47,6 +50,8 @@ export function StaffOperationsWorkspace({
 }: StaffOperationsWorkspaceProps) {
   const { sales } = useSales();
   const { activeBranch } = useActiveBranch();
+  const { payments } = useStaffPaymentsModule();
+  const { linkedStaff } = useLinkedStaff(branch);
   const { success: toastSuccess, error: toastError } = useToast();
 
   const {
@@ -71,6 +76,7 @@ export function StaffOperationsWorkspace({
     initialDate: entry?.date,
     lockDate: true,
     mode: "today",
+    scopedStaffId: linkedStaff?.id,
   });
 
   const { closeStaffDay, isClosing, error: closeError } = useStaffCloseDay(
@@ -93,7 +99,14 @@ export function StaffOperationsWorkspace({
     [form.expenses]
   );
 
-  const wageRecorded = staffPayouts > 0;
+  const wageRecorded = linkedStaff
+    ? hasStaffDailyWagePayment(
+        linkedStaff.id,
+        form.branch,
+        form.date,
+        payments
+      )
+    : false;
 
   const [expandedSection, setExpandedSection] = useState<
     StaffWorkflowSection | null
@@ -212,6 +225,7 @@ export function StaffOperationsWorkspace({
         staffPayouts={staffPayouts}
         cashToHandIn={remainingCash}
         accessorySalesCount={accessorySalesCount}
+        wageRecorded={wageRecorded}
         isClosing={isClosing || isSaving}
         closeError={closeError ?? saveError}
         updateField={updateField}

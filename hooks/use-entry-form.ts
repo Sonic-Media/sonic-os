@@ -41,7 +41,10 @@ import {
   shouldApplySaveResult,
   trackInFlightSave,
 } from "@/lib/entry-form/save-coordination";
-import { computeStaffPayoutTotalForBranchDate } from "@/lib/staff-payments/calculations";
+import {
+  computeStaffPayoutTotalForBranchDate,
+  computeStaffPayoutTotalForStaffBranchDate,
+} from "@/lib/staff-payments/calculations";
 import type { Branch, Entry, EntryFormData, Expense } from "@/types";
 
 function createBlankForm(
@@ -70,6 +73,8 @@ interface UseEntryFormOptions {
   lockBranch?: boolean;
   lockDate?: boolean;
   mode?: OperationsMode;
+  /** When set, staff payout deductions use this staff member only (not whole branch). */
+  scopedStaffId?: string;
 }
 
 export function useEntryForm(options: UseEntryFormOptions = {}) {
@@ -123,15 +128,22 @@ export function useEntryForm(options: UseEntryFormOptions = {}) {
   );
   const savingsAllocation = parseAmount(form.savingsAllocation);
   const totalExpenses = calculateExpenses(form);
-  const staffPayouts = useMemo(
-    () =>
-      computeStaffPayoutTotalForBranchDate(
-        payments,
+  const staffPayouts = useMemo(() => {
+    if (options.scopedStaffId) {
+      return computeStaffPayoutTotalForStaffBranchDate(
+        options.scopedStaffId,
         form.branch,
-        form.date
-      ),
-    [payments, form.branch, form.date]
-  );
+        form.date,
+        payments
+      );
+    }
+
+    return computeStaffPayoutTotalForBranchDate(
+      payments,
+      form.branch,
+      form.date
+    );
+  }, [options.scopedStaffId, payments, form.branch, form.date]);
   const balance = movieRevenue + accessorySales - totalExpenses - staffPayouts;
   const remainingCash = balance - savingsAllocation;
   const mode = options.mode ?? "today";

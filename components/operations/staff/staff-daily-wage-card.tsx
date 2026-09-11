@@ -12,7 +12,7 @@ import {
 import { useStaffPaymentsModule } from "@/context/staff-payments-context";
 import { useToast } from "@/context/toast-context";
 import { useLinkedStaff } from "@/hooks/use-linked-staff";
-import { branchCodesReferToSameInventory } from "@/lib/branch/codes";
+import { findStaffDailyWagePayment } from "@/lib/staff-payments/calculations";
 import { validateMoneyInput } from "@/lib/amounts";
 import { formatCurrency } from "@/lib/format";
 import { DEFAULT_DAILY_WAGE } from "@/lib/staff/constants";
@@ -39,12 +39,11 @@ export function StaffDailyWageCard({
 
   const existingPayment = useMemo(() => {
     if (!loggedInStaff) return undefined;
-    return payments.find(
-      (payment) =>
-        payment.staffId === loggedInStaff.id &&
-        payment.date === date &&
-        branchCodesReferToSameInventory(payment.branch, branch) &&
-        payment.paymentType !== "deduction"
+    return findStaffDailyWagePayment(
+      loggedInStaff.id,
+      branch,
+      date,
+      payments
     );
   }, [loggedInStaff, payments, date, branch]);
 
