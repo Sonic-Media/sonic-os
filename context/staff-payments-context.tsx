@@ -9,7 +9,14 @@ import {
   useRef,
   useState,
 } from "react";
+import { useAuth } from "@/context/auth-context";
+import { useBranch } from "@/context/branch-context";
 import { useStaff } from "@/context/staff-context";
+import {
+  beginBranchScopedFetch,
+  resetBranchScopedFetchRefs,
+  shouldSkipBranchScopedFetch,
+} from "@/lib/context/branch-scoped-load";
 import {
   createStaffPaymentApi,
   fetchStaffPayments,
@@ -81,12 +88,15 @@ export function StaffPaymentsProvider({
 }: {
   children: React.ReactNode;
 }) {
+  const { isAuthenticated, isLoaded: authLoaded } = useAuth();
+  const { activeBranch } = useBranch();
   const { getStaffById } = useStaff();
 
   const [payments, setPayments] = useState<StaffPaymentRecord[]>([]);
   const [isLoaded, setIsLoaded] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const hasLoaded = useRef(false);
+  const lastFetchedBranch = useRef<Branch | null>(null);
   const paymentsRef = useRef(payments);
 
   useEffect(() => {
@@ -94,8 +104,32 @@ export function StaffPaymentsProvider({
   }, [payments]);
 
   useEffect(() => {
-    if (hasLoaded.current) return;
-    hasLoaded.current = true;
+    if (!authLoaded) return;
+
+    if (!isAuthenticated) {
+      paymentsRef.current = [];
+      setPayments([]);
+      setLoadError(null);
+      resetBranchScopedFetchRefs(hasLoaded, lastFetchedBranch);
+      setIsLoaded(true);
+      return;
+    }
+
+    if (shouldSkipBranchScopedFetch(hasLoaded, lastFetchedBranch, activeBranch)) {
+      return;
+    }
+
+    const branchChanged = beginBranchScopedFetch(
+      hasLoaded,
+      lastFetchedBranch,
+      activeBranch
+    );
+    if (branchChanged) {
+      paymentsRef.current = [];
+      setPayments([]);
+      setLoadError(null);
+      setIsLoaded(false);
+    }
 
     queueMicrotask(() => {
       void (async () => {
@@ -108,13 +142,15 @@ export function StaffPaymentsProvider({
           setPayments(normalized);
           setLoadError(null);
         } catch (error) {
+          paymentsRef.current = [];
+          setPayments([]);
           setLoadError(getDataSourceErrorMessage(error));
         } finally {
           setIsLoaded(true);
         }
       })();
     });
-  }, []);
+  }, [authLoaded, isAuthenticated, activeBranch]);
 
   const refreshPaymentsFromApi = useCallback(async () => {
     const remote = await fetchStaffPayments();

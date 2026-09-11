@@ -18,6 +18,13 @@ import {
 } from "@/lib/api/customers";
 import { createSaleApi, fetchSales } from "@/lib/api/sales";
 import { useAuth } from "@/context/auth-context";
+import { useBranch } from "@/context/branch-context";
+import {
+  beginBranchScopedFetch,
+  resetBranchScopedFetchRefs,
+  shouldSkipBranchScopedFetch,
+} from "@/lib/context/branch-scoped-load";
+import type { Branch } from "@/types";
 import { roleHasModuleAccess } from "@/lib/staff/permissions";
 import {
   getDataSourceErrorMessage,
@@ -95,6 +102,7 @@ function createValidationResult(
 
 export function SalesProvider({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoaded: authLoaded, session } = useAuth();
+  const { activeBranch } = useBranch();
   const { getProductById, refreshStockFromApi, getBranchProductStock } = useStock();
   const canAccessStockModule =
     session !== null && roleHasModuleAccess(session.role, "stock");
@@ -104,6 +112,7 @@ export function SalesProvider({ children }: { children: React.ReactNode }) {
   const [isLoaded, setIsLoaded] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const hasLoaded = useRef(false);
+  const lastFetchedBranch = useRef<Branch | null>(null);
   const saleInFlight = useRef(false);
   const salesRef = useRef(sales);
   const customersRef = useRef(customers);
@@ -137,13 +146,28 @@ export function SalesProvider({ children }: { children: React.ReactNode }) {
       setSales([]);
       setCustomers([]);
       setLoadError(null);
-      hasLoaded.current = false;
+      resetBranchScopedFetchRefs(hasLoaded, lastFetchedBranch);
       setIsLoaded(true);
       return;
     }
 
-    if (hasLoaded.current) return;
-    hasLoaded.current = true;
+    if (shouldSkipBranchScopedFetch(hasLoaded, lastFetchedBranch, activeBranch)) {
+      return;
+    }
+
+    const branchChanged = beginBranchScopedFetch(
+      hasLoaded,
+      lastFetchedBranch,
+      activeBranch
+    );
+    if (branchChanged) {
+      salesRef.current = [];
+      customersRef.current = [];
+      setSales([]);
+      setCustomers([]);
+      setLoadError(null);
+      setIsLoaded(false);
+    }
 
     queueMicrotask(() => {
       void (async () => {
@@ -166,13 +190,17 @@ export function SalesProvider({ children }: { children: React.ReactNode }) {
           setCustomers(customersRef.current);
           setLoadError(null);
         } catch (error) {
+          salesRef.current = [];
+          customersRef.current = [];
+          setSales([]);
+          setCustomers([]);
           setLoadError(getDataSourceErrorMessage(error));
         } finally {
           setIsLoaded(true);
         }
       })();
     });
-  }, [authLoaded, isAuthenticated]);
+  }, [authLoaded, isAuthenticated, activeBranch]);
 
   const customerLookup = useMemo(
     () => new Map(customers.map((customer) => [customer.id, customer])),

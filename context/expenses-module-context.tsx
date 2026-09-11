@@ -19,11 +19,19 @@ import {
   updateExpenseApi,
   updateExpenseCategoryApi,
 } from "@/lib/api/expenses";
+import { useAuth } from "@/context/auth-context";
+import { useBranch } from "@/context/branch-context";
 import {
   getDataSourceErrorMessage,
   loadFromApi,
   runOnApi,
 } from "@/lib/data-source/context-api";
+import {
+  beginBranchScopedFetch,
+  resetBranchScopedFetchRefs,
+  shouldSkipBranchScopedFetch,
+} from "@/lib/context/branch-scoped-load";
+import type { Branch } from "@/types";
 import { getTodayISO } from "@/lib/dates";
 import {
   normalizeExpenseCategoryList,
@@ -109,11 +117,14 @@ export function ExpensesModuleProvider({
 }: {
   children: React.ReactNode;
 }) {
+  const { isAuthenticated, isLoaded: authLoaded } = useAuth();
+  const { activeBranch } = useBranch();
   const [expenses, setExpenses] = useState<ExpenseRecord[]>([]);
   const [categories, setCategories] = useState<ExpenseCategory[]>([]);
   const [isLoaded, setIsLoaded] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const hasLoaded = useRef(false);
+  const lastFetchedBranch = useRef<Branch | null>(null);
   const expensesRef = useRef(expenses);
   const categoriesRef = useRef(categories);
 
@@ -145,8 +156,34 @@ export function ExpensesModuleProvider({
   }, []);
 
   useEffect(() => {
-    if (hasLoaded.current) return;
-    hasLoaded.current = true;
+    if (!authLoaded) return;
+
+    if (!isAuthenticated) {
+      categoriesRef.current = [];
+      expensesRef.current = [];
+      setCategories([]);
+      setExpenses([]);
+      setLoadError(null);
+      resetBranchScopedFetchRefs(hasLoaded, lastFetchedBranch);
+      setIsLoaded(true);
+      return;
+    }
+
+    if (shouldSkipBranchScopedFetch(hasLoaded, lastFetchedBranch, activeBranch)) {
+      return;
+    }
+
+    const branchChanged = beginBranchScopedFetch(
+      hasLoaded,
+      lastFetchedBranch,
+      activeBranch
+    );
+    if (branchChanged) {
+      expensesRef.current = [];
+      setExpenses([]);
+      setLoadError(null);
+      setIsLoaded(false);
+    }
 
     queueMicrotask(() => {
       void (async () => {
@@ -169,13 +206,15 @@ export function ExpensesModuleProvider({
           setExpenses(normalizedExpenses);
           setLoadError(null);
         } catch (error) {
+          expensesRef.current = [];
+          setExpenses([]);
           setLoadError(getDataSourceErrorMessage(error));
         } finally {
           setIsLoaded(true);
         }
       })();
     });
-  }, []);
+  }, [authLoaded, isAuthenticated, activeBranch]);
 
   const expenseLookup = useMemo(
     () => new Map(expenses.map((expense) => [expense.id, expense])),

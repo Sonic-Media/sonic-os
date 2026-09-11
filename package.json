@@ -33,11 +33,6 @@
     "verify:branch-isolation": "tsx scripts/verify-branch-isolation.ts",
     "verify:branch-authorization": "tsx scripts/verify-branch-authorization.ts",
     "verify:branch-operations": "tsx scripts/verify-branch-operations-isolation.ts",
-    "verify:attendance": "tsx scripts/verify-attendance-flow.ts",
-    "verify:awaited-mutations": "tsx scripts/verify-awaited-mutations.ts",
-    "verify:close-day-payouts": "tsx scripts/verify-close-day-payout-sequencing.ts",
-    "verify:documentation-drift": "tsx scripts/verify-documentation-drift.ts",
-    "verify:data-integrity": "tsx scripts/verify-data-integrity.ts",
     "db:studio": "prisma studio",
     "db:backup": "tsx scripts/backup-database.ts",
     "db:backup:schedule": "tsx scripts/scheduled-backup.ts",
@@ -50,7 +45,13 @@
     "docker:up:dev": "docker compose --profile development up",
     "docker:up:staging": "SONIC_ENV_FILE=deploy/env/staging.env docker compose --profile staging up -d",
     "docker:up:prod": "SONIC_ENV_FILE=deploy/env/production.env docker compose --profile production up -d",
-    "docker:down": "docker compose --profile development --profile staging --profile production down"
+    "docker:down": "docker compose --profile development --profile staging --profile production down",
+    "verify:attendance": "tsx scripts/verify-attendance-flow.ts",
+    "verify:awaited-mutations": "tsx scripts/verify-awaited-mutations.ts",
+    "verify:close-day-payouts": "tsx scripts/verify-close-day-payout-sequencing.ts",
+    "verify:documentation-drift": "tsx scripts/verify-documentation-drift.ts",
+    "verify:data-integrity": "tsx scripts/verify-data-integrity.ts",
+    "verify:branch-switch-refresh": "tsx scripts/verify-branch-switch-refresh.ts"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.9.1",
