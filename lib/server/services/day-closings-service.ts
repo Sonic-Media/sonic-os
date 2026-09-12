@@ -586,7 +586,7 @@ export async function closeDay(input: unknown): Promise<DayClosingRecord> {
 
   const staffOnShift = await getStaffOnShiftAtBranch(
     parsed.branch as Branch,
-    parsed.date
+    businessDate
   );
   if (staffOnShift.length > 0) {
     const names = staffOnShift.map((member) => member.staffName).join(", ");

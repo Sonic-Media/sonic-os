@@ -75,6 +75,23 @@ export function mapCloseDayError(message: string, code?: string): string {
   }
 
   if (
+    normalizedCode === "validation_error" ||
+    normalized.includes("validation failed")
+  ) {
+    return "Close data could not be validated. Refresh the page and try again.";
+  }
+
+  if (normalizedCode === "csrf_blocked") {
+    return "We couldn't close the business day. Check your connection and try again.";
+  }
+
+  if (
+    normalized.includes("this branch day is closed. records cannot be changed")
+  ) {
+    return "This business day is already closed.";
+  }
+
+  if (
     normalized.includes("reconciliation") ||
     normalized.includes("cash is short or over")
   ) {

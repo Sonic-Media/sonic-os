@@ -98,8 +98,8 @@ export function OperationsWorkspace({
         onCloseDay={
           mode === "today" && session && canAccessCloseDay(session.role)
             ? () => {
-                void handleSubmitRequest().then((saved) => {
-                  if (saved) {
+                void handleSubmitRequest().then((result) => {
+                  if (result.success) {
                     setCloseFlowActive(true);
                   }
                 });

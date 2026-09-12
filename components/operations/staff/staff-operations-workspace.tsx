@@ -178,13 +178,9 @@ export function StaffOperationsWorkspace({
     setCloseFlowError(null);
     clearCloseError();
 
-    const saved = await handleSubmitRequest();
-    if (!saved) {
-      setCloseFlowError(
-        mapCloseDayError(
-          saveError ?? "We couldn't close the business day. Check your connection and try again."
-        )
-      );
+    const saveResult = await handleSubmitRequest();
+    if (!saveResult.success) {
+      setCloseFlowError(mapCloseDayError(saveResult.error ?? ""));
       return false;
     }
 
@@ -204,7 +200,6 @@ export function StaffOperationsWorkspace({
     closeStaffDay,
     form.notes,
     handleSubmitRequest,
-    saveError,
     toastSuccess,
   ]);
 

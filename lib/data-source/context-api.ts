@@ -1,5 +1,6 @@
 "use client";
 
+import { isApiError } from "@/lib/api/errors";
 import { isApiAvailable } from "@/lib/data-source";
 import {
   DataSourceUnavailableError,
@@ -33,7 +34,7 @@ export async function loadFromApi<T>(remote: () => Promise<T>): Promise<T> {
   try {
     return await remote();
   } catch (error) {
-    if (error instanceof DataSourceUnavailableError) {
+    if (error instanceof DataSourceUnavailableError || isApiError(error)) {
       throw error;
     }
 

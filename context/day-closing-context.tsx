@@ -39,6 +39,7 @@ import {
 } from "@/lib/day-closing/storage";
 import { persistCloseDayStaffPayouts } from "@/lib/day-closing/persist-close-day-payouts";
 import { getTodayISO } from "@/lib/dates";
+import { toCloseDayFacingError } from "@/lib/ux/close-day-messages";
 import { toStaffFacingError } from "@/lib/ux/staff-messages";
 import { AUDIT_ACTIONS } from "@/lib/audit-log/constants";
 import { pickAuditFields } from "@/lib/audit-log/snapshots";
@@ -303,10 +304,7 @@ export function DayClosingProvider({ children }: { children: React.ReactNode }) 
         await refreshClosingsFromApi();
       } catch (error) {
         return createValidationResult({
-          form: toStaffFacingError(getDataSourceErrorMessage(error), {
-            ownerName: settings.ownerName,
-            context: "close-day",
-          }),
+          form: toCloseDayFacingError(error),
         });
       }
 
@@ -388,7 +386,14 @@ export function DayClosingProvider({ children }: { children: React.ReactNode }) 
           })
         );
 
-        await refreshClosingsFromApi();
+        try {
+          await refreshClosingsFromApi();
+        } catch (refreshError) {
+          console.error(
+            "Close day persisted but closings refresh failed:",
+            getDataSourceErrorMessage(refreshError)
+          );
+        }
 
         const linkedStaff = session?.userId
           ? resolveStaffByUserId(session.userId)
@@ -411,15 +416,19 @@ export function DayClosingProvider({ children }: { children: React.ReactNode }) 
           ]),
         });
 
-        await refreshEntries();
+        try {
+          await refreshEntries();
+        } catch (refreshError) {
+          console.error(
+            "Close day persisted but entries refresh failed:",
+            getDataSourceErrorMessage(refreshError)
+          );
+        }
 
         return createValidationResult({}, saved);
       } catch (error) {
         return createValidationResult({
-          form: toStaffFacingError(getDataSourceErrorMessage(error), {
-            ownerName: settings.ownerName,
-            context: "close-day",
-          }),
+          form: toCloseDayFacingError(error),
         });
       }
     },

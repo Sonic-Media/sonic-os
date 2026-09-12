@@ -69,7 +69,8 @@
     "verify:expense-inventory-separation": "tsx scripts/verify-expense-inventory-separation.ts",
     "verify:reports-branch-code-alignment": "tsx scripts/verify-reports-branch-code-alignment.ts",
     "verify:targeted-go-live-ux": "tsx scripts/verify-targeted-go-live-ux-fixes.ts",
-    "verify:final-open-day-guard": "tsx scripts/verify-final-open-day-guard.ts"
+    "verify:final-open-day-guard": "tsx scripts/verify-final-open-day-guard.ts",
+    "verify:close-time-flexibility": "tsx scripts/verify-close-time-flexibility.ts"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.9.1",

@@ -1,4 +1,7 @@
-import { mapCloseDayError } from "@/lib/ux/close-day-messages";
+import {
+  mapCloseDayError,
+  toCloseDayFacingError,
+} from "@/lib/ux/close-day-messages";
 
 const TECHNICAL_PATTERNS = [
   "unexpected server error",
@@ -15,21 +18,39 @@ function normalizeMessage(message: string): string {
   return message.trim().toLowerCase();
 }
 
+function getCloseDayMessageFromUnknown(error: unknown): string {
+  if (typeof error === "string") {
+    return error;
+  }
+
+  if (error instanceof Error && error.message.trim()) {
+    return error.message;
+  }
+
+  return "";
+}
+
 export interface StaffMessageOptions {
   ownerName?: string;
   context?: "start-shift" | "close-day" | "general";
 }
 
 export function toStaffFacingError(
-  message: string,
+  messageOrError: string | unknown,
   options: StaffMessageOptions = {}
 ): string {
+  const message =
+    typeof messageOrError === "string"
+      ? messageOrError
+      : getCloseDayMessageFromUnknown(messageOrError);
   const normalized = normalizeMessage(message);
   const ownerName = options.ownerName?.trim() || "your manager";
   const context = options.context ?? "general";
 
   if (context === "close-day") {
-    return mapCloseDayError(message);
+    return typeof messageOrError === "string"
+      ? mapCloseDayError(message)
+      : toCloseDayFacingError(messageOrError);
   }
 
   if (
