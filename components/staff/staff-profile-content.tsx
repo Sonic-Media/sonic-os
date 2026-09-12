@@ -3,9 +3,16 @@
 import { StaffPaymentHistory } from "@/components/staff/staff-payment-history";
 import { StaffPaymentStatusBadge } from "@/components/staff/staff-payment-status-badge";
 import { Card } from "@/components/shared/ui/card";
+import { useStaffAttendance } from "@/hooks/use-staff-attendance";
 import { DATE_FORMATS } from "@/lib/constants";
 import { formatCurrency } from "@/lib/format";
+import {
+  formatAttendanceHours,
+  formatClockTime,
+} from "@/lib/staff/attendance";
 import { getStaffRoleName } from "@/lib/staff/roles";
+import { uiSurface } from "@/lib/ui/design-tokens";
+import { cn } from "@/lib/utils";
 import type { StaffActivityItem } from "@/lib/staff/dashboard";
 import type { AuthAuditRecord } from "@/types/auth";
 import type { ExpenseRecord } from "@/types/expenses-module";
@@ -48,9 +55,9 @@ function formatTimestamp(value: string): string {
 
 function EmptyState({ message }: { message: string }) {
   return (
-    <Card>
+    <div className={cn(uiSurface.card, "p-5")}>
       <p className="text-sm text-zinc-500">{message}</p>
-    </Card>
+    </div>
   );
 }
 
@@ -98,6 +105,9 @@ export function StaffProfileContent({
   auditLog,
   tab,
 }: StaffProfileContentProps) {
+  const { getAttendanceForStaff } = useStaffAttendance();
+  const attendance = getAttendanceForStaff(member.id);
+
   if (tab === "overview") {
     return (
       <div className="space-y-6">
@@ -187,6 +197,50 @@ export function StaffProfileContent({
             </div>
           </dl>
         </Card>
+      </div>
+    );
+  }
+
+  if (tab === "attendance") {
+    if (!attendance || attendance.sessions.length === 0) {
+      return <EmptyState message="No attendance recorded for today." />;
+    }
+
+    return (
+      <div className="space-y-4">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div className={cn(uiSurface.card, "p-4")}>
+            <p className="text-[10px] uppercase tracking-wide text-zinc-500">
+              Today&apos;s Hours
+            </p>
+            <p className="mt-2 text-xl font-semibold text-white">
+              {formatAttendanceHours(attendance.todayTotalHours)}
+            </p>
+          </div>
+          <div className={cn(uiSurface.card, "p-4")}>
+            <p className="text-[10px] uppercase tracking-wide text-zinc-500">
+              Presence
+            </p>
+            <p className="mt-2 text-xl font-semibold capitalize text-white">
+              {attendance.presence.replace("-", " ")}
+            </p>
+          </div>
+        </div>
+        <div className="space-y-2">
+          {attendance.sessions.map((session) => (
+            <div
+              key={session.id}
+              className={cn(uiSurface.card, "px-4 py-3 text-sm")}
+            >
+              <p className="font-medium text-white">
+                {formatClockTime(session.clockInAt)}
+                {session.clockOutAt
+                  ? ` → ${formatClockTime(session.clockOutAt)}`
+                  : " → Active"}
+              </p>
+            </div>
+          ))}
+        </div>
       </div>
     );
   }
