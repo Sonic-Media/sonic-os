@@ -83,10 +83,10 @@ export function AppShell({ children }: AppShellProps) {
   }
 
   return (
-    <div className="flex min-h-full">
+    <div className="sonic-app-backdrop flex min-h-full">
       <Sidebar />
       <div className="flex min-w-0 flex-1 flex-col">
-        <div className="flex items-center justify-between gap-3 border-b border-zinc-800/80 px-4 py-3 lg:hidden">
+        <div className="flex items-center justify-between gap-3 border-b border-white/[0.06] bg-[rgba(8,10,18,0.6)] px-4 py-3 backdrop-blur-md lg:hidden">
           <BranchSwitcher />
           <AppNotificationCenter />
         </div>
