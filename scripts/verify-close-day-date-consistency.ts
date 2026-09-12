@@ -225,6 +225,9 @@ async function main() {
 
   try {
     await loginWithCredentials(owner, VERIFY_OWNER_CREDENTIALS);
+    await closeStaleOpenDays(mainBranch);
+    await closeStaleOpenDays(salaamaBranch);
+
     kansangaCashier = await createCertificationCashier(
       owner,
       `${TEST_PREFIX}-k`,
@@ -496,7 +499,9 @@ async function main() {
       `status=${kansangaTriesSalaama.status}, salaama=${salaamaStillOpen}`
     );
 
-    // Reopen behavior preserved
+    // Reopen behavior preserved (only one open business day allowed at a time)
+    await closeStaleOpenDays(mainBranch);
+
     await owner.json("/api/day-closings", {
       method: "POST",
       body: JSON.stringify({

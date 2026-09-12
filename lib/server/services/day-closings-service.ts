@@ -297,6 +297,8 @@ export async function openDay(input: unknown): Promise<DayClosingRecord> {
     });
   }
 
+  await assertCanOpenRequestedBusinessDay(branchId, parsed.date);
+
   const now = new Date();
   const record = await prisma.dayClosing.upsert({
     where: {
@@ -402,6 +404,8 @@ export async function openWithShift(input: unknown): Promise<OpenWithShiftResult
     });
   }
 
+  await assertCanOpenRequestedBusinessDay(branchId, parsed.date);
+
   const now = new Date();
   const openedBy = parsed.openedBy ?? session.userId;
 
@@ -473,14 +477,13 @@ export async function openWithShift(input: unknown): Promise<OpenWithShiftResult
   };
 }
 
-async function resolveOpenBusinessDateForClose(
-  session: AuthSession,
-  branch: Branch,
-  hintDate?: string
-): Promise<{ branchId: string; businessDate: string }> {
-  const branchId = await getBranchIdForSession(session, branch);
+function formatBusinessWeekday(dateStr: string): string {
+  const date = new Date(`${dateStr}T12:00:00`);
+  return date.toLocaleDateString("en-US", { weekday: "long" });
+}
 
-  const openRecords = await prisma.dayClosing.findMany({
+async function findActiveOpenBusinessDays(branchId: string) {
+  return prisma.dayClosing.findMany({
     where: {
       branchId,
       status: "open",
@@ -488,6 +491,45 @@ async function resolveOpenBusinessDateForClose(
     },
     orderBy: [{ date: "asc" }, { openedAt: "asc" }],
   });
+}
+
+function assertNoPreviousOpenBusinessDay(
+  openRecords: Array<{ date: string }>,
+  requestedDate: string
+): void {
+  const conflicting = openRecords.find((record) => record.date !== requestedDate);
+  if (!conflicting) {
+    return;
+  }
+
+  throw new ApiError(
+    `Previous business day still open. Close ${formatBusinessWeekday(conflicting.date)}'s business day before opening ${formatBusinessWeekday(requestedDate)}.`,
+    {
+      status: 409,
+      code: "previous_business_day_open",
+      details: {
+        openBusinessDate: conflicting.date,
+        requestedDate,
+      },
+    }
+  );
+}
+
+async function assertCanOpenRequestedBusinessDay(
+  branchId: string,
+  requestedDate: string
+): Promise<void> {
+  const openRecords = await findActiveOpenBusinessDays(branchId);
+  assertNoPreviousOpenBusinessDay(openRecords, requestedDate);
+}
+
+async function resolveOpenBusinessDateForClose(
+  session: AuthSession,
+  branch: Branch,
+  hintDate?: string
+): Promise<{ branchId: string; businessDate: string }> {
+  const branchId = await getBranchIdForSession(session, branch);
+  const openRecords = await findActiveOpenBusinessDays(branchId);
 
   if (openRecords.length === 0) {
     throw new ApiError("Open the shop before closing the day.", {
@@ -665,6 +707,8 @@ export async function reopenDay(input: unknown): Promise<DayClosingRecord> {
       code: "day_not_closed",
     });
   }
+
+  await assertCanOpenRequestedBusinessDay(branchId, parsed.date);
 
   const record = await prisma.dayClosing.update({
     where: { id: existing.id },
