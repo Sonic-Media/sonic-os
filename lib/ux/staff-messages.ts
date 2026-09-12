@@ -27,6 +27,13 @@ export function toStaffFacingError(
   const context = options.context ?? "general";
 
   if (
+    normalized.includes("previous business day still open") ||
+    normalized.includes("previous_business_day_open")
+  ) {
+    return message.trim();
+  }
+
+  if (
     normalized.includes("already open") ||
     normalized.includes("already started") ||
     normalized.includes("day_already_open")
