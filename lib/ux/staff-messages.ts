@@ -1,3 +1,5 @@
+import { mapCloseDayError } from "@/lib/ux/close-day-messages";
+
 const TECHNICAL_PATTERNS = [
   "unexpected server error",
   "internal_error",
@@ -25,6 +27,10 @@ export function toStaffFacingError(
   const normalized = normalizeMessage(message);
   const ownerName = options.ownerName?.trim() || "your manager";
   const context = options.context ?? "general";
+
+  if (context === "close-day") {
+    return mapCloseDayError(message);
+  }
 
   if (
     normalized.includes("previous business day still open") ||

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useCallback } from "react";
 import { DuplicateEntryDialog } from "@/components/entry/duplicate-entry-dialog";
 import { StaffDailyWageCard } from "@/components/operations/staff/staff-daily-wage-card";
 import { StaffEndOfDayCard } from "@/components/operations/staff/staff-end-of-day-card";
@@ -22,9 +22,11 @@ import {
 } from "@/lib/staff-payments/calculations";
 import { useSales } from "@/context/sales-context";
 import { useActiveBranch } from "@/context/active-branch-context";
+import { useBranches } from "@/context/branches-context";
 import { filterByBranchField } from "@/lib/active-branch/filters";
 import { parseAmount } from "@/lib/amounts";
 import { isPayrollEntryExpense } from "@/lib/expenses";
+import { mapCloseDayError } from "@/lib/ux/close-day-messages";
 import { uiSpacing } from "@/lib/ui/design-tokens";
 import { cn } from "@/lib/utils";
 import type { Branch, Entry } from "@/types";
@@ -54,9 +56,11 @@ export function StaffOperationsWorkspace({
 }: StaffOperationsWorkspaceProps) {
   const { sales } = useSales();
   const { activeBranch } = useActiveBranch();
+  const { getBranchName } = useBranches();
   const { payments } = useStaffPaymentsModule();
   const { linkedStaff } = useLinkedStaff(branch);
-  const { success: toastSuccess, error: toastError } = useToast();
+  const { success: toastSuccess } = useToast();
+  const [closeFlowError, setCloseFlowError] = useState<string | null>(null);
 
   const {
     form,
@@ -83,9 +87,13 @@ export function StaffOperationsWorkspace({
     scopedStaffId: linkedStaff?.id,
   });
 
-  const { closeStaffDay, isClosing, error: closeError } = useStaffCloseDay(
-    form.date
-  );
+  const {
+    closeStaffDay,
+    isClosing,
+    clearError: clearCloseError,
+    shopOpen,
+    businessDate,
+  } = useStaffCloseDay(form.date);
 
   const accessorySalesCount = useMemo(
     () =>
@@ -166,32 +174,39 @@ export function StaffOperationsWorkspace({
     setExpandedSection(section);
   }
 
-  async function handleCloseDay() {
-    if (movieRevenue <= 0) {
-      toastError("Enter movie revenue before closing the day.");
-      expandSection("end-of-day");
-      return;
-    }
+  const handleCloseDay = useCallback(async (): Promise<boolean> => {
+    setCloseFlowError(null);
+    clearCloseError();
 
     const saved = await handleSubmitRequest();
     if (!saved) {
-      toastError(saveError ?? "Could not save today's operations. Please try again.");
-      expandSection("end-of-day");
-      return;
+      setCloseFlowError(
+        mapCloseDayError(
+          saveError ?? "We couldn't close the business day. Check your connection and try again."
+        )
+      );
+      return false;
     }
 
     const result = await closeStaffDay(form.notes.trim());
     if (result.success) {
-      toastSuccess("Day Closed");
-      return;
+      setCloseFlowError(null);
+      toastSuccess("Business day closed.");
+      return true;
     }
 
-    toastError(
-      ("message" in result && result.message) ||
-        "Could not close the day. Please try again."
-    );
-    expandSection("end-of-day");
-  }
+    if ("message" in result && result.message) {
+      setCloseFlowError(result.message);
+    }
+    return false;
+  }, [
+    clearCloseError,
+    closeStaffDay,
+    form.notes,
+    handleSubmitRequest,
+    saveError,
+    toastSuccess,
+  ]);
 
   return (
     <div className={cn("mx-auto max-w-3xl", uiSpacing.page, uiSpacing.section)}>
@@ -250,6 +265,8 @@ export function StaffOperationsWorkspace({
 
       <StaffEndOfDayCard
         form={form}
+        branchName={getBranchName(form.branch)}
+        businessDate={businessDate}
         movieRevenue={movieRevenue}
         accessorySales={accessorySales}
         totalExpenses={totalExpenses}
@@ -261,14 +278,12 @@ export function StaffOperationsWorkspace({
           displayedStaffPayouts -
           parseAmount(form.savingsAllocation)
         }
-        accessorySalesCount={accessorySalesCount}
         wageRecorded={wageRecorded}
+        shopOpen={shopOpen}
         isClosing={isClosing || isSaving}
-        closeError={closeError ?? saveError}
+        closeError={closeFlowError}
         updateField={updateField}
-        onCloseDay={() => void handleCloseDay()}
-        expanded={expandedSection === "end-of-day"}
-        onExpandedChange={(open) => expandSection(open ? "end-of-day" : null)}
+        onCloseDay={handleCloseDay}
       />
 
       {duplicateEntry ? (

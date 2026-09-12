@@ -592,7 +592,7 @@ export function CloseDayWorkspace({
           </Button>
         ) : (
           <Button type="button" onClick={handleCloseDay} disabled={isSubmitting}>
-            {isSubmitting ? "Closing..." : "Close Day"}
+            {isSubmitting ? "Closing business day..." : "Close Day"}
           </Button>
         )}
       </div>
