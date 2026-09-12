@@ -9,11 +9,17 @@ import type { ReportSummary } from "@/types";
 
 interface ReportsBranchTotalsProps {
   byBranch: ReportSummary["byBranch"];
+  branchScope?: string;
 }
 
-export function ReportsBranchTotals({ byBranch }: ReportsBranchTotalsProps) {
+export function ReportsBranchTotals({
+  byBranch,
+  branchScope = "all",
+}: ReportsBranchTotalsProps) {
   const { activeBranches, isLoaded: branchesLoaded } = useBranch();
-  const reportBranches = getActiveBranchesForReports(activeBranches);
+  const reportBranches = getActiveBranchesForReports(activeBranches).filter(
+    (branch) => branchScope === "all" || branch.code === branchScope
+  );
 
   if (!branchesLoaded) {
     return null;

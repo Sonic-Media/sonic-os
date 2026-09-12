@@ -1,7 +1,11 @@
 import { ApiError } from "@/lib/api/errors";
 import { isOwnerRole } from "@/lib/auth/validation";
 import { DEFAULT_BRANCH_CODE } from "@/lib/constants";
-import { resolveInventoryBranchCode, branchCodesReferToSameInventory } from "@/lib/branch/codes";
+import {
+  branchCodesReferToSameInventory,
+  getEquivalentBranchCodes,
+  resolveInventoryBranchCode,
+} from "@/lib/branch/codes";
 import { prisma } from "@/lib/db";
 import { ensureApplicationInitialized } from "@/lib/server/bootstrap";
 import { getActiveBranchPreference } from "@/lib/server/services/auth-service";
@@ -59,21 +63,24 @@ function invalidateBranchCache(code?: string, id?: string): void {
 }
 
 async function loadActiveBranchIdByCode(code: string): Promise<string> {
-  const normalized = resolveInventoryBranchCode(code.trim().toLowerCase());
-  const branch = await prisma.branch.findFirst({
-    where: { code: normalized, active: true },
-    select: { id: true, code: true },
-  });
+  const candidates = getEquivalentBranchCodes(code.trim().toLowerCase());
 
-  if (!branch) {
-    throw new ApiError(`Branch not found: ${code}`, {
-      status: 404,
-      code: "branch_not_found",
+  for (const candidate of candidates) {
+    const branch = await prisma.branch.findFirst({
+      where: { code: candidate, active: true },
+      select: { id: true, code: true },
     });
+
+    if (branch) {
+      cacheBranch(branch.code, branch.id);
+      return branch.id;
+    }
   }
 
-  cacheBranch(branch.code, branch.id);
-  return branch.id;
+  throw new ApiError(`Branch not found: ${code}`, {
+    status: 404,
+    code: "branch_not_found",
+  });
 }
 
 export async function getBranchIdByCode(code: string): Promise<string> {

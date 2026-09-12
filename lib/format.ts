@@ -32,6 +32,23 @@ export function getPeriodLabel(period: ReportPeriod): string {
   return PERIOD_LABELS[period];
 }
 
+export function getReportsSubtitle(
+  period: ReportPeriod,
+  referenceDateISO?: string
+): string {
+  if (period === "daily" && referenceDateISO) {
+    const date = new Date(`${referenceDateISO}T12:00:00`);
+    return date.toLocaleDateString("en-US", {
+      weekday: "long",
+      month: "long",
+      day: "numeric",
+      year: "numeric",
+    });
+  }
+
+  return PERIOD_LABELS[period];
+}
+
 export function formatPercent(value: number): string {
   return `${Math.round(value)}%`;
 }

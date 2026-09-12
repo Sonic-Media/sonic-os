@@ -1,4 +1,7 @@
-import { getEquivalentBranchCodes } from "@/lib/branch/codes";
+import {
+  getEquivalentBranchCodes,
+  resolveInventoryBranchCode,
+} from "@/lib/branch/codes";
 import { isOwnerRole } from "@/lib/auth/validation";
 import { getBranchIdByCode } from "@/lib/server/branch-lookup";
 import { getActiveBranchPreference } from "@/lib/server/services/auth-service";
@@ -62,4 +65,33 @@ export function assertOwnerCanSwitchBranch(session: AuthSession): void {
   if (!isOwnerRole(session.role)) {
     throw new Error("Only the owner can switch the active branch.");
   }
+}
+
+export type ReportsBranchScope = "all" | Branch;
+
+/**
+ * Server-authoritative branch filter for Reports.
+ * Owners may request all branches or one branch code; staff always receive
+ * their assigned branch regardless of client input.
+ */
+export async function resolveReportsBranchFilter(
+  session: AuthSession,
+  requestedScope?: string | null
+): Promise<{ filter: BranchIdFilter | undefined; scope: ReportsBranchScope }> {
+  if (!isOwnerRole(session.role)) {
+    const filter = await resolveBranchListFilter(session);
+    const scope = resolveInventoryBranchCode(session.branch) as Branch;
+    return { filter, scope };
+  }
+
+  const normalized = requestedScope?.trim().toLowerCase();
+  if (!normalized || normalized === "all") {
+    return { filter: undefined, scope: "all" };
+  }
+
+  const branchIds = await resolveBranchIdsForCodes(normalized);
+  return {
+    filter: { branchId: { in: branchIds } },
+    scope: normalized as Branch,
+  };
 }

@@ -2,7 +2,30 @@
 
 **Date:** 2026-09-12  
 **Branch:** `cursor/final-open-day-guard-b6e7`  
+**PR:** #37  
 **Final result:** **PASS**
+
+---
+
+## Merge Reconciliation (PR #36 + PR #37)
+
+- **PR #36** (*Targeted Go-Live UX: All Branches + Reports date picker*) was **merged into `main`** before this branch was updated.
+- **PR #37** (*Final Open-Day Guard*) was **reconciled against current `main`** on branch `cursor/final-open-day-guard-b6e7`.
+- **Merge conflict:** `package.json` only — resolved by keeping **both** verify scripts:
+  - `verify:targeted-go-live-ux` (from PR #36)
+  - `verify:final-open-day-guard` (from PR #37)
+- **Additional fix after merge:** `lib/server/branch-lookup.ts` now tries all equivalent branch codes (`salaama` / `branch2`) when resolving DB branch IDs, so PR #36 alias compatibility works in environments where PostgreSQL stores either code.
+
+**Preserved from PR #36 (now on main):**
+- Owner Reports: All Branches / Kansanga / Salaama
+- Reports exact business-date calendar picker
+- `salaama` → `branch2` alias in `lib/branch/codes.ts`
+- Clock-in clarity messaging
+
+**Preserved from PR #37 (this PR):**
+- One open business day per branch
+- `previous_business_day_open` guard on `openDay`, `openWithShift`, `reopenDay`
+- Branch isolation; no midnight auto-close
 
 ---
 
@@ -24,7 +47,7 @@ This violated the Sonic Media business rule: **one open business day per branch 
 
 ## Root Cause
 
-`openDay` and `openWithShift` in `lib/server/services/day-closings-service.ts` only checked the **requested calendar date's** `DayClosing` row. They did not inspect whether **another date** for the same branch was already open with `openedAt` / `reopenedAt`.
+`openDay` and `openWithShift` only checked the **requested calendar date's** `DayClosing` row. They did not inspect whether **another date** for the same branch was already open with `openedAt` / `reopenedAt`.
 
 Close Day already used a branch-wide open lookup via `resolveOpenBusinessDateForClose`; Open Shop did not reuse that guard.
 
@@ -34,47 +57,35 @@ Close Day already used a branch-wide open lookup via `resolveOpenBusinessDateFor
 
 **File:** `lib/server/services/day-closings-service.ts`
 
-1. Extracted shared query `findActiveOpenBusinessDays(branchId)` — same criteria as close-day resolution (`status: "open"` with `openedAt` or `reopenedAt`).
-2. Added `assertCanOpenRequestedBusinessDay(branchId, requestedDate)` — throws `409` with code `previous_business_day_open` when any **other** date is still open.
-3. Called the guard in:
-   - `openDay`
-   - `openWithShift`
-   - `reopenDay` (prevents reopening one date while another remains open)
+1. `findActiveOpenBusinessDays(branchId)` — shared query (same criteria as close-day resolution)
+2. `assertCanOpenRequestedBusinessDay(branchId, requestedDate)` — throws `409` / `previous_business_day_open` when another date is still open
+3. Guard applied to `openDay`, `openWithShift`, and `reopenDay`
 
 **Error message example:**
 
 > Previous business day still open. Close Monday's business day before opening Tuesday.
 
-**File:** `lib/ux/staff-messages.ts`
+**File:** `lib/ux/staff-messages.ts` — passes through `previous_business_day_open` to staff UI
 
-- Passes through `previous_business_day_open` messages to staff UI without generic masking.
+**File:** `lib/server/branch-lookup.ts` — equivalent-code fallback for `salaama` / `branch2` DB codes (post-merge)
 
-**Verifier updates:**
-
+**Verifiers:**
 - `scripts/verify-final-open-day-guard.ts` (new)
-- `scripts/verify-close-day-date-consistency.ts` — stale-day cleanup before tests; close open days before reopen check
+- `scripts/verify-close-day-date-consistency.ts` — stale-day cleanup adjustments
 
 ---
 
-## Tests and Results
+## Tests and Results (after merge reconciliation)
 
-| Check | Command | Result |
-|-------|---------|--------|
-| TypeScript | `npx tsc --noEmit` | **PASS** |
-| Final open-day guard | `npm run verify:final-open-day-guard` | **PASS** (10/10) |
-| Close-day / midnight behavior | `npm run verify:close-day-date` | **PASS** (16/16) |
-| Branch selection / authorization | `npm run verify:branch-selection` | **PASS** |
-
-### Cases verified (live API)
-
-1. No open business day → open allowed  
-2. Previous business day still open → open rejected (`previous_business_day_open`)  
-3. Previous day closed → next day can open  
-4. Same-day duplicate open → rejected (`day_already_open`)  
-5. Branch isolation → Kansanga open does not block Salaama  
-6. Staff cannot open foreign branch → 403  
-7. After-midnight close still closes actual open business day (unchanged)  
-8. Reopen works when no other business day is open (unchanged)
+| Command | Result |
+|---------|--------|
+| `npx tsc --noEmit` | **PASS** |
+| `npm run verify:final-open-day-guard` | **PASS** (10/10) |
+| `npm run verify:close-day-date` | **PASS** (16/16) |
+| `npm run verify:branch-selection` | **PASS** |
+| `npm run verify:reports-branch-code-alignment` | **PASS** (10/10) |
+| `npm run verify:reports` | **PASS** (6/6) |
+| `npm run verify:targeted-go-live-ux` | **PASS** (11/11) |
 
 ---
 
@@ -84,22 +95,19 @@ Close Day already used a branch-wide open lookup via `resolveOpenBusinessDateFor
 - **Schema changes:** None  
 - **Production data mutations:** None  
 - **prisma db push:** Not run  
-- Server now rejects overlapping open business days per branch  
-- Midnight auto-close **not** introduced  
-- Close Day business-date resolution **unchanged**
+- **PR #37 not merged or deployed** — branch updated and ready for review only
 
 ---
 
 ## Intentionally Left Unchanged
 
-- Client-side gate hints (`needsShopOpening`, etc.) — server remains authoritative  
-- Automatic close of forgotten days  
-- Silent business-date rollover on open  
-- Broader data-integrity / historical verification suites  
+- Midnight auto-close behavior  
+- Close Day business-date resolution logic  
+- Broader data-integrity suites  
 - Mission Control and attendance flows
 
 ---
 
 ## Code Change Required?
 
-**Yes.** Server-side guard added in `day-closings-service.ts` and staff message handling in `staff-messages.ts`.
+**Yes.** Open-day guard in `day-closings-service.ts`, staff messages, branch-lookup equivalent-code fallback, and merge conflict resolution in `package.json`.
