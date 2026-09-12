@@ -220,10 +220,6 @@ export async function triggerDatabaseBackup(
       },
     });
 
-    if (status === "failed") {
-      throw toBackupApiError(new Error(error ?? "Database backup failed."));
-    }
-
     return mapBackupRecord(record, result.manifest.engine);
   } catch (caught) {
     logBackupFailure(caught);

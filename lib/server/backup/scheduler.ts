@@ -34,6 +34,13 @@ function shouldStartDailyBackupScheduler(): boolean {
 async function runScheduledBackupSafely(): Promise<void> {
   try {
     const result = await triggerDatabaseBackup({ trigger: "scheduled" });
+    if (result.status === "failed") {
+      console.error(
+        `[sonic-os] Scheduled database backup failed: ${result.error ?? "Unknown error"}`
+      );
+      return;
+    }
+
     console.info(
       `[sonic-os] Scheduled database backup completed (${result.filePath}).`
     );
