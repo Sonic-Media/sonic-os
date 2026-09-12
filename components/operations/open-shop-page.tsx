@@ -252,10 +252,13 @@ export function OpenShopPage({
           {!isStartShift ? (
             <div className="rounded-2xl border border-emerald-500/10 bg-emerald-500/[0.04] px-4 py-4 text-center">
               <p className="text-sm text-emerald-300">
-                The branch is already open. Clock in to start your session.
+                The branch is already open for business today. Clock in to
+                record that you are on shift.
               </p>
               <p className="mt-1 text-xs text-zinc-500">
-                Last check: {formatClockTime(now.toISOString())}
+                Opening the shop and clocking in are separate steps. If you
+                opened the shop earlier, you may still need to clock in after
+                returning or after clocking out.
               </p>
             </div>
           ) : (
