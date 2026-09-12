@@ -28,7 +28,11 @@ function createDraftLineItem(productId = "", buyingPrice = ""): PurchaseDraftLin
   };
 }
 
-export function NewPurchaseForm() {
+interface NewPurchaseFormProps {
+  onSuccess?: () => void;
+}
+
+export function NewPurchaseForm({ onSuccess }: NewPurchaseFormProps = {}) {
   const router = useRouter();
   const { activeBranch } = useActiveBranch();
   const { products } = useStock();
@@ -141,6 +145,11 @@ export function NewPurchaseForm() {
 
     if (!result.success) {
       setErrors(result.errors);
+      return;
+    }
+
+    if (onSuccess) {
+      onSuccess();
       return;
     }
 
