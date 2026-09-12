@@ -29,6 +29,16 @@ export const navItems: NavItem[] = [
     ),
   },
   {
+    href: "/calendar",
+    label: "Calendar",
+    accent: "purple",
+    icon: (
+      <svg className="h-[18px] w-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M4.5 19.5v2.25A2.25 2.25 0 006.75 24h10.5A2.25 2.25 0 0019.5 21.75V19.5m-15 0V6.75A2.25 2.25 0 016.75 4.5h10.5A2.25 2.25 0 0119.5 6.75V19.5M9 10.5h6M9 14.25h6" />
+      </svg>
+    ),
+  },
+  {
     href: "/sales",
     label: "Sales",
     accent: "blue",
@@ -115,6 +125,9 @@ export function isNavItemActive(pathname: string, href: string): boolean {
   if (href === "/") return pathname === "/";
   if (href === "/operations/today") {
     return pathname.startsWith("/operations") || pathname.startsWith("/entry");
+  }
+  if (href === "/calendar") {
+    return pathname.startsWith("/calendar");
   }
   return pathname.startsWith(href);
 }
