@@ -9,7 +9,7 @@ export const EXPENSES_NAV_ITEMS: {
   label: string;
   exact?: boolean;
 }[] = [
-  { href: "/expenses", label: "Dashboard", exact: true },
+  { href: "/expenses", label: "Overview", exact: true },
   { href: "/expenses/history", label: "History" },
   { href: "/expenses/cash-flow", label: "Cash Flow" },
   { href: "/expenses/reports", label: "Reports" },
