@@ -150,7 +150,7 @@ StaffEndOfDayCard → staff-operations-workspace.handleCloseDay
 ## Deployment / Commit
 
 - **Branch:** `cursor/close-shop-ux-fix-b6e7`
-- **Fix commit:** `f425844` (diagnostic + error propagation)
+- **Fix commit:** `74c5c62` (diagnostic + error propagation)
 - **Prior UX commit:** `962b219` (Close Shop UI)
 - **PR #39:** Updated, remains **OPEN — not merged**
 - **Preview:** Vercel Preview from branch push (unchanged merge policy)
