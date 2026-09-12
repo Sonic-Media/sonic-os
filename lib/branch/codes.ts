@@ -7,6 +7,8 @@ import type { Branch } from "@/types";
  */
 const INVENTORY_BRANCH_ALIASES: Record<string, Branch> = {
   kansanga: DEFAULT_BRANCH_CODE,
+  /** Legacy settings/UI code; production PostgreSQL branch code is branch2. */
+  salaama: "branch2",
 };
 
 export function resolveInventoryBranchCode(branchCode: string): Branch {
