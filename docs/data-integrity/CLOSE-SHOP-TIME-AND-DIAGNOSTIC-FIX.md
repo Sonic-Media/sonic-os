@@ -89,7 +89,8 @@ StaffEndOfDayCard → staff-operations-workspace.handleCloseDay
 | `components/operations/operations-workspace.tsx` | Adapt to `SubmitRequestResult` |
 | `lib/server/services/day-closings-service.ts` | Staff-on-shift check uses `businessDate` |
 | `scripts/verify-close-time-flexibility.ts` | New certification script (24 checks) |
-| `package.json` | `verify:close-time-flexibility` script |
+| `scripts/verify-preview-close-day-e2e.ts` | Preview/local Close Day E2E with API log capture |
+| `package.json` | `verify:close-time-flexibility`, `verify:preview-close-day-e2e` |
 | `docs/data-integrity/CLOSE-SHOP-TIME-AND-DIAGNOSTIC-FIX.md` | This report |
 | `docs/data-integrity/CLOSE-SHOP-TIME-AND-DIAGNOSTIC-FIX.docx` | Matching Word report |
 
@@ -121,7 +122,7 @@ StaffEndOfDayCard → staff-operations-workspace.handleCloseDay
 
 ---
 
-## Tests Run (this session)
+## A. Automated / Static Certification (local CI scripts)
 
 | Command | Result |
 |---------|--------|
@@ -132,7 +133,7 @@ StaffEndOfDayCard → staff-operations-workspace.handleCloseDay
 | `npm run verify:branch-selection` | **PASS** |
 | `npm run verify:close-day-payouts` | **PASS** |
 
-### Close-time certification coverage
+### Close-time certification coverage (automated)
 
 1. Close at normal evening time → **PASS**
 2. Close at 12:30 AM (after-midnight hint) → **PASS**
@@ -141,9 +142,79 @@ StaffEndOfDayCard → staff-operations-workspace.handleCloseDay
 5. Previous-business-day-open guard → **PASS**
 6. Branch isolation → **PASS**
 7. Unauthorized close (owner) → **PASS**
-8. Already-closed day → **PASS** (400 `shop_not_opened` — no open day to close)
+8. Already-closed day → **PASS** (400 `shop_not_opened`)
 9. Zero-revenue close → **PASS**
 10. Error code preservation (`staff_on_shift`, `previous_business_day_open`) → **PASS**
+
+---
+
+## B. Actual Deployed Preview Close Day Verification
+
+### Preview deployment confirmed
+
+| Item | Value |
+|------|-------|
+| Preview URL | https://sonic-os-git-cursor-close-shop-ux-fix-b6e7-sonic9.vercel.app |
+| Vercel deployment | **Ready** (SUCCESS 2026-09-12T21:18:41Z) |
+| Includes fix commit | **74c5c62** (and report commit ec96098) |
+| PR | #39 — **OPEN, not merged** |
+
+### Direct Preview access result: **BLOCKED**
+
+Automated access to the Preview URL is blocked by **Vercel Deployment Protection** (Vercel SSO):
+
+```
+POST /api/auth/session → 401
+{"error":{"code":"401","message":"Protected deployment"},"protection":{"vercel_auth_enabled":true}}
+```
+
+Root URL returns HTTP 302 → `vercel.com/sso-api`. No `VERCEL_AUTOMATION_BYPASS_SECRET` is available in the agent environment, so the cloud agent **cannot** log in or exercise Close Day on the live Preview deployment directly.
+
+**To complete Preview-only verification:** provide `VERCEL_AUTOMATION_BYPASS_SECRET` (Vercel → Project → Deployment Protection → Automation bypass) and re-run:
+
+```bash
+VERCEL_AUTOMATION_BYPASS_SECRET=... \
+VERIFY_BASE_URL=https://sonic-os-git-cursor-close-shop-ux-fix-b6e7-sonic9.vercel.app \
+npm run verify:preview-close-day-e2e
+```
+
+### Same-commit substitute verification (localhost, code identical to Preview)
+
+Because Preview is SSO-gated, the agent ran **full Close Day E2E** against `http://localhost:3000` at commit **74c5c62+** (same branch code Vercel deployed):
+
+#### B1. API E2E (`npm run verify:preview-close-day-e2e` on localhost) — **PASS**
+
+| Step | Request | Status | Result |
+|------|---------|--------|--------|
+| Staff login | POST `/api/auth/session` | 200 | Cashier session |
+| Open shop | POST `/api/day-closings` (open-with-shift) | 201 | Business date **2018-08-24** open |
+| Close day | POST `/api/day-closings` | **201** | **status=closed** |
+| Post-close refresh | GET `/api/day-closings` | 200 | Day shows **closed** |
+| Branch isolation | POST `/api/day-closings` (foreign branch) | **403** | Blocked |
+
+Verified:
+
+- No generic connection fallback (close returned **201**, not masked error)
+- Business day **CLOSED** in PostgreSQL
+- Persisted business date **2018-08-24** (not calendar hint)
+- `closedAt` = **2026-09-12T22:16:23.795Z** (actual wall-clock timestamp)
+- Post-close refresh succeeded (did not flip success to error)
+- Branch isolation **403**
+
+#### B2. Browser UI E2E (localhost `/operations/today`) — **PASS**
+
+| Item | Result |
+|------|--------|
+| User | `teststaff` (Cashier) |
+| End of Day checklist | Visible; Ready to Close = Ready |
+| Confirmation dialog | Branch Kansanga, date **2026-09-12**, totals shown |
+| POST `/api/day-closings` | **201 Created** |
+| Generic connection error | **NOT shown** |
+| Outcome | Close **succeeded**; subsequent state shows day already closed (expected) |
+
+### Preview-specific scenario (user-reported 2026-08-24 Kansanga)
+
+The original failing Preview scenario (open day **2026-08-24** with sales/expenses/wage) **could not be re-tested on Preview** due to SSO protection. The localhost API E2E deliberately used business date **2018-08-24** with matching totals to validate the same close path against PostgreSQL.
 
 ---
 
@@ -151,9 +222,10 @@ StaffEndOfDayCard → staff-operations-workspace.handleCloseDay
 
 - **Branch:** `cursor/close-shop-ux-fix-b6e7`
 - **Fix commit:** `74c5c62` (diagnostic + error propagation)
+- **Report / E2E script commit:** (see git log after push)
 - **Prior UX commit:** `962b219` (Close Shop UI)
 - **PR #39:** Updated, remains **OPEN — not merged**
-- **Preview:** Vercel Preview from branch push (unchanged merge policy)
+- **Preview build:** Vercel Ready; automated agent blocked by SSO
 
 ---
 
