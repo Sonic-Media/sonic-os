@@ -216,7 +216,8 @@ async function main() {
     "16-static",
     "Production database target guard remains present",
     guardSource.includes("isNeonHost") &&
-      guardSource.includes("isProductionMode"),
+      guardSource.includes("isResetProductionDeployment") &&
+      guardSource.includes("deploymentEnvironment"),
     "database-target-guard.ts"
   );
 

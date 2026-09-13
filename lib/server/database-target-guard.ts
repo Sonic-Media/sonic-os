@@ -1,6 +1,12 @@
 import { createHash } from "crypto";
 import { ApiError } from "@/lib/api/errors";
 import { getDatabaseUrlDiagnostics } from "@/lib/db/connection";
+import {
+  getDeploymentEnvironmentLabel,
+  isResetGuardProductionDeployment,
+  resolveDeploymentEnvironment,
+  type DeploymentEnvironment,
+} from "@/lib/env/deployment-environment";
 import { isProductionMode } from "@/lib/env/production-mode";
 
 export interface SafeDatabaseIdentity {
@@ -14,7 +20,11 @@ export interface SafeDatabaseIdentity {
   isNeonHost: boolean;
   appEnv: string;
   appMode: string;
+  vercelEnv: string;
+  nodeEnv: string;
+  deploymentEnvironment: DeploymentEnvironment;
   isProductionMode: boolean;
+  isResetProductionDeployment: boolean;
 }
 
 export interface ResetTargetGuardEnv {
@@ -30,7 +40,10 @@ export interface ResetTargetAuthorization {
   fingerprint: string;
   hostCategory: "local" | "neon" | "remote";
   database: string;
+  deploymentEnvironment: DeploymentEnvironment;
+  deploymentLabel: string;
   isProductionMode: boolean;
+  isResetProductionDeployment: boolean;
   code?: string;
   message?: string;
   requiredEnvVars?: string[];
@@ -100,9 +113,21 @@ function remoteRequiredEnvVars(identity: SafeDatabaseIdentity): string[] {
   return required;
 }
 
-export function describeDatabaseTarget(): SafeDatabaseIdentity {
+function productionDeploymentRefusalMessage(
+  identity: SafeDatabaseIdentity
+): string {
+  if (identity.deploymentEnvironment === "vercel-production") {
+    return "Shop reset is disabled on Vercel Production. Set ALLOW_DESTRUCTIVE_OPS=true only for controlled maintenance windows.";
+  }
+
+  return "Shop reset is disabled on this production deployment. Set ALLOW_DESTRUCTIVE_OPS=true only for controlled maintenance windows.";
+}
+
+export function describeDatabaseTarget(
+  env: NodeJS.ProcessEnv = process.env
+): SafeDatabaseIdentity {
   const diagnostics = getDatabaseUrlDiagnostics();
-  const rawUrl = process.env.DATABASE_URL?.trim() ?? "";
+  const rawUrl = env.DATABASE_URL?.trim() ?? "";
 
   if (!diagnostics.configured || diagnostics.invalid) {
     throw new ApiError(
@@ -114,6 +139,10 @@ export function describeDatabaseTarget(): SafeDatabaseIdentity {
 
   const host = diagnostics.host ?? "unknown";
   const database = diagnostics.database ?? "unknown";
+  const isLocalHost = LOCAL_HOSTS.has(host);
+  const deploymentEnvironment = resolveDeploymentEnvironment(env, {
+    isLocalHost,
+  });
 
   return {
     host,
@@ -122,11 +151,17 @@ export function describeDatabaseTarget(): SafeDatabaseIdentity {
     user: diagnostics.user ?? "unknown",
     schema: diagnostics.schema ?? "public",
     fingerprint: fingerprintHostDatabase(host, database),
-    isLocalHost: LOCAL_HOSTS.has(host),
+    isLocalHost,
     isNeonHost: /neon/i.test(rawUrl) || host.includes("neon.tech"),
-    appEnv: process.env.APP_ENV?.trim() || "(unset)",
-    appMode: process.env.APP_MODE?.trim() || "(unset)",
+    appEnv: env.APP_ENV?.trim() || "(unset)",
+    appMode: env.APP_MODE?.trim() || "(unset)",
+    vercelEnv: env.VERCEL_ENV?.trim() || "(unset)",
+    nodeEnv: env.NODE_ENV?.trim() || "(unset)",
+    deploymentEnvironment,
     isProductionMode: isProductionMode(),
+    isResetProductionDeployment: isResetGuardProductionDeployment(env, {
+      isLocalHost,
+    }),
   };
 }
 
@@ -144,20 +179,23 @@ export function evaluateTransactionalResetTarget(
       details: {
         reason: "blocked_database_name",
         fingerprint: identity.fingerprint,
+        deploymentEnvironment: identity.deploymentEnvironment,
       },
     };
   }
 
-  if (identity.isProductionMode && !env.allowDestructiveOps) {
+  if (identity.isResetProductionDeployment && !env.allowDestructiveOps) {
     return {
       ok: false,
       status: 403,
       code: "reset_target_forbidden",
-      message:
-        "Shop reset is disabled in production mode. Set ALLOW_DESTRUCTIVE_OPS=true only for controlled maintenance windows.",
+      message: productionDeploymentRefusalMessage(identity),
       details: {
-        reason: "production_mode",
+        reason: "production_deployment",
         fingerprint: identity.fingerprint,
+        deploymentEnvironment: identity.deploymentEnvironment,
+        appEnv: identity.appEnv,
+        vercelEnv: identity.vercelEnv,
       },
     };
   }
@@ -180,6 +218,7 @@ export function evaluateTransactionalResetTarget(
         reason: "non_local_not_authorized",
         fingerprint: identity.fingerprint,
         hostCategory: hostCategory(identity),
+        deploymentEnvironment: identity.deploymentEnvironment,
         requiredEnvVars: remoteRequiredEnvVars(identity),
       },
     };
@@ -195,6 +234,7 @@ export function evaluateTransactionalResetTarget(
       details: {
         reason: "neon_not_authorized",
         fingerprint: identity.fingerprint,
+        deploymentEnvironment: identity.deploymentEnvironment,
         requiredEnvVars: remoteRequiredEnvVars(identity),
       },
     };
@@ -210,6 +250,7 @@ export function evaluateTransactionalResetTarget(
       details: {
         reason: "fingerprint_required",
         fingerprint: identity.fingerprint,
+        deploymentEnvironment: identity.deploymentEnvironment,
         requiredEnvVars: remoteRequiredEnvVars(identity),
       },
     };
@@ -225,6 +266,7 @@ export function evaluateTransactionalResetTarget(
       details: {
         reason: "fingerprint_mismatch",
         fingerprint: identity.fingerprint,
+        deploymentEnvironment: identity.deploymentEnvironment,
       },
     };
   }
@@ -235,7 +277,7 @@ export function evaluateTransactionalResetTarget(
 export function describeResetTargetAuthorization(
   env: NodeJS.ProcessEnv = process.env
 ): ResetTargetAuthorization {
-  const identity = describeDatabaseTarget();
+  const identity = describeDatabaseTarget(env);
   const evaluation = evaluateTransactionalResetTarget(
     identity,
     readResetTargetGuardEnv(env)
@@ -246,7 +288,10 @@ export function describeResetTargetAuthorization(
     fingerprint: identity.fingerprint,
     hostCategory: hostCategory(identity),
     database: identity.database,
+    deploymentEnvironment: identity.deploymentEnvironment,
+    deploymentLabel: getDeploymentEnvironmentLabel(identity.deploymentEnvironment),
     isProductionMode: identity.isProductionMode,
+    isResetProductionDeployment: identity.isResetProductionDeployment,
   };
 
   if (evaluation.ok) {
@@ -263,7 +308,9 @@ export function describeResetTargetAuthorization(
   };
 }
 
-function throwResetTargetGuardError(evaluation: Extract<ResetTargetEvaluation, { ok: false }>): never {
+function throwResetTargetGuardError(
+  evaluation: Extract<ResetTargetEvaluation, { ok: false }>
+): never {
   throw new ApiError(evaluation.message, {
     status: evaluation.status,
     code: evaluation.code,

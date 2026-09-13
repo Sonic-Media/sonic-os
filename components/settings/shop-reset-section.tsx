@@ -270,6 +270,8 @@ export function ShopResetSection() {
               <p className="mt-2">{preview.resetTarget.message}</p>
             ) : null}
             <p className="mt-2 text-xs text-red-200/80">
+              Deployment: {preview.resetTarget.deploymentLabel}
+              {" · "}
               Database fingerprint:{" "}
               <span className="font-mono">{preview.resetTarget.fingerprint}</span>
               {" · "}

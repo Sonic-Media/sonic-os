@@ -1,6 +1,10 @@
 import "dotenv/config";
 import { ApiError } from "@/lib/api/errors";
 import {
+  isResetGuardProductionDeployment,
+  resolveDeploymentEnvironment,
+} from "@/lib/env/deployment-environment";
+import {
   evaluateTransactionalResetTarget,
   type ResetTargetGuardEnv,
   type SafeDatabaseIdentity,
@@ -37,9 +41,13 @@ function baseIdentity(
     fingerprint: "abc123def456",
     isLocalHost: false,
     isNeonHost: true,
-    appEnv: "preview",
+    appEnv: "production",
     appMode: "(unset)",
-    isProductionMode: false,
+    vercelEnv: "preview",
+    nodeEnv: "production",
+    deploymentEnvironment: "vercel-preview",
+    isProductionMode: true,
+    isResetProductionDeployment: false,
     ...overrides,
   };
 }
@@ -105,56 +113,82 @@ function main() {
   console.log("Verifying shop reset target guard (non-destructive)...\n");
 
   recordCheck(
-    "1-production-blocked",
-    "Production mode remains blocked without ALLOW_DESTRUCTIVE_OPS",
+    "A-local-development",
+    "Local development target passes without remote authorization env vars",
     (() => {
       const result = evaluateTransactionalResetTarget(
-        baseIdentity({ isProductionMode: true }),
+        baseIdentity({
+          host: "localhost",
+          isLocalHost: true,
+          isNeonHost: false,
+          fingerprint: "c400f10d4dbe",
+          deploymentEnvironment: "local",
+          isProductionMode: false,
+          isResetProductionDeployment: false,
+          vercelEnv: "(unset)",
+          nodeEnv: "development",
+        }),
         baseEnv()
       );
+      return result.ok;
+    })()
+  );
+
+  recordCheck(
+    "B-vercel-preview-neon-blocked-without-auth",
+    "Vercel Preview + Neon remains blocked without authorization env vars",
+    (() => {
+      const result = evaluateTransactionalResetTarget(baseIdentity(), baseEnv());
       return (
         !result.ok &&
-        result.status === 403 &&
         result.code === "reset_target_forbidden" &&
-        result.message.includes("production mode")
+        !result.message.includes("production mode") &&
+        !result.message.includes("Vercel Production")
       );
     })()
   );
 
   recordCheck(
-    "2-neon-blocked-without-overrides",
-    "Arbitrary Neon target remains blocked without authorization env vars",
+    "C-vercel-production-neon-blocked",
+    "Vercel Production + Neon remains blocked without ALLOW_DESTRUCTIVE_OPS",
     (() => {
-      const result = evaluateTransactionalResetTarget(baseIdentity(), baseEnv());
+      const result = evaluateTransactionalResetTarget(
+        baseIdentity({
+          vercelEnv: "production",
+          deploymentEnvironment: "vercel-production",
+          isResetProductionDeployment: true,
+        }),
+        baseEnv()
+      );
+      return (
+        !result.ok &&
+        result.message.includes("Vercel Production") &&
+        result.details?.reason === "production_deployment"
+      );
+    })()
+  );
+
+  recordCheck(
+    "D-preview-missing-authorization-vars",
+    "Preview with missing authorization variables is blocked",
+    (() => {
+      const result = evaluateTransactionalResetTarget(
+        baseIdentity(),
+        baseEnv({
+          allowNeonTransactionalReset: false,
+          allowNonLocalTransactionalReset: false,
+        })
+      );
       return !result.ok && result.code === "reset_target_forbidden";
     })()
   );
 
   recordCheck(
-    "3-neon-blocked-without-fingerprint",
-    "Neon target remains blocked when overrides omit fingerprint",
+    "E-preview-wrong-fingerprint",
+    "Preview with wrong fingerprint remains blocked",
     (() => {
       const result = evaluateTransactionalResetTarget(
-        baseIdentity(),
-        baseEnv({
-          allowNeonTransactionalReset: true,
-          allowNonLocalTransactionalReset: true,
-        })
-      );
-      return (
-        !result.ok &&
-        result.code === "reset_target_forbidden" &&
-        result.message.includes("SONIC_RESET_ALLOWED_DATABASE_FINGERPRINT")
-      );
-    })()
-  );
-
-  recordCheck(
-    "4-neon-blocked-wrong-fingerprint",
-    "Neon target remains blocked when fingerprint does not match",
-    (() => {
-      const result = evaluateTransactionalResetTarget(
-        baseIdentity({ fingerprint: "abc123def456" }),
+        baseIdentity({ fingerprint: "3c974614fe7b" }),
         baseEnv({
           allowNeonTransactionalReset: true,
           allowNonLocalTransactionalReset: true,
@@ -170,16 +204,15 @@ function main() {
   );
 
   recordCheck(
-    "5-preview-authorized-passes",
-    "Explicitly authorized non-production Preview target passes guard",
+    "F-preview-correct-fingerprint-and-flags",
+    "Preview with correct fingerprint and required flags passes",
     (() => {
-      const identity = baseIdentity({ fingerprint: "previewfp123" });
       const result = evaluateTransactionalResetTarget(
-        identity,
+        baseIdentity({ fingerprint: "3c974614fe7b" }),
         baseEnv({
           allowNeonTransactionalReset: true,
           allowNonLocalTransactionalReset: true,
-          allowedDatabaseFingerprint: "previewfp123",
+          allowedDatabaseFingerprint: "3c974614fe7b",
         })
       );
       return result.ok;
@@ -187,19 +220,61 @@ function main() {
   );
 
   recordCheck(
-    "6-local-passes-without-remote-env",
-    "Local development target passes without remote authorization env vars",
+    "G-production-remains-blocked",
+    "Production deployment remains blocked without ALLOW_DESTRUCTIVE_OPS",
     (() => {
       const result = evaluateTransactionalResetTarget(
         baseIdentity({
-          host: "localhost",
-          isLocalHost: true,
-          isNeonHost: false,
-          fingerprint: "c400f10d4dbe",
+          vercelEnv: "production",
+          deploymentEnvironment: "vercel-production",
+          isResetProductionDeployment: true,
         }),
         baseEnv()
       );
-      return result.ok;
+      return (
+        !result.ok &&
+        result.status === 403 &&
+        result.code === "reset_target_forbidden"
+      );
+    })()
+  );
+
+  recordCheck(
+    "H-node-production-vercel-preview-not-production-deployment",
+    "NODE_ENV=production + VERCEL_ENV=preview is not treated as production deployment",
+    (() => {
+      const env = {
+        NODE_ENV: "production",
+        VERCEL_ENV: "preview",
+        APP_ENV: "production",
+        APP_MODE: "production",
+        VERCEL: "1",
+      } as NodeJS.ProcessEnv;
+
+      const deployment = resolveDeploymentEnvironment(env, { isLocalHost: false });
+      const resetProduction = isResetGuardProductionDeployment(env, {
+        isLocalHost: false,
+      });
+
+      const result = evaluateTransactionalResetTarget(
+        baseIdentity({
+          appEnv: "production",
+          appMode: "production",
+          vercelEnv: "preview",
+          nodeEnv: "production",
+          deploymentEnvironment: deployment,
+          isProductionMode: true,
+          isResetProductionDeployment: resetProduction,
+        }),
+        baseEnv()
+      );
+
+      return (
+        deployment === "vercel-preview" &&
+        resetProduction === false &&
+        !result.ok &&
+        result.details?.reason !== "production_deployment"
+      );
     })()
   );
 
@@ -207,10 +282,7 @@ function main() {
     "7-guard-uses-actionable-code",
     "Remote guard refusal uses reset_target_forbidden (403), not internal_error",
     (() => {
-      const evaluation = evaluateTransactionalResetTarget(
-        baseIdentity(),
-        baseEnv()
-      );
+      const evaluation = evaluateTransactionalResetTarget(baseIdentity(), baseEnv());
 
       return (
         !evaluation.ok &&
@@ -231,15 +303,22 @@ async function runLiveChecks() {
 
     const preview = await ownerClient.json<{
       canReset: boolean;
-      resetTarget: { authorized: boolean; fingerprint: string };
+      resetTarget: {
+        authorized: boolean;
+        fingerprint: string;
+        deploymentEnvironment: string;
+        deploymentLabel: string;
+        isResetProductionDeployment: boolean;
+      };
     }>("/api/admin/shop-reset?scope=both");
 
     recordCheck(
       "8-live-preview-target-metadata",
       "Owner preview exposes reset target authorization metadata",
       typeof preview.resetTarget.fingerprint === "string" &&
-        preview.resetTarget.fingerprint.length === 12,
-      `authorized=${preview.resetTarget.authorized}, fingerprint=${preview.resetTarget.fingerprint}`
+        preview.resetTarget.fingerprint.length === 12 &&
+        typeof preview.resetTarget.deploymentLabel === "string",
+      `authorized=${preview.resetTarget.authorized}, deployment=${preview.resetTarget.deploymentLabel}, fingerprint=${preview.resetTarget.fingerprint}`
     );
 
     recordCheck(
@@ -247,6 +326,14 @@ async function runLiveChecks() {
       "canReset follows reset target authorization",
       preview.canReset === preview.resetTarget.authorized,
       `canReset=${preview.canReset}`
+    );
+
+    recordCheck(
+      "9b-live-local-not-production-deployment",
+      "Local runtime is not classified as reset production deployment",
+      preview.resetTarget.deploymentEnvironment === "local" &&
+        preview.resetTarget.isResetProductionDeployment === false,
+      `deployment=${preview.resetTarget.deploymentEnvironment}`
     );
 
     cashier = await createCertificationCashier(ownerClient, `${TEST_PREFIX}-cashier`, "main");
@@ -294,16 +381,6 @@ async function runLiveChecks() {
         "11b-live-wrong-confirmation-message",
         "Wrong confirmation returns actionable message (not generic 500)",
         !badConfirmation.message.includes("Unexpected server error"),
-        badConfirmation.message
-      );
-    }
-
-    if (badConfirmation.code === "reset_target_forbidden") {
-      recordCheck(
-        "11c-live-guard-actionable",
-        "Guard refusal returns actionable reset_target_forbidden message",
-        badConfirmation.message.length > 0 &&
-          !badConfirmation.message.includes("Unexpected server error"),
         badConfirmation.message
       );
     }

@@ -63,9 +63,9 @@ async function main() {
   try {
     identity = assertSafeTransactionalResetTarget();
   } catch (error) {
-    console.error(
-      error instanceof Error ? error.message : "Reset target is not safe."
-    );
+    const message =
+      error instanceof Error ? error.message : "Reset target is not safe.";
+    console.error(message);
     process.exit(1);
   }
 
@@ -81,6 +81,8 @@ async function main() {
   console.log(`  APP_ENV: ${identity.appEnv}`);
   console.log(`  APP_MODE: ${identity.appMode}`);
   console.log(`  production mode: ${identity.isProductionMode}`);
+  console.log(`  deployment: ${identity.deploymentEnvironment}`);
+  console.log(`  reset production deployment: ${identity.isResetProductionDeployment}`);
 
   if (dryRun) {
     const preview = await getSafeTransactionalResetPreview();

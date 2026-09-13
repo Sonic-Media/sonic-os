@@ -41,7 +41,10 @@ export interface ShopResetPreviewResponse {
     fingerprint: string;
     hostCategory: "local" | "neon" | "remote";
     database: string;
+    deploymentEnvironment: "local" | "vercel-preview" | "vercel-production" | "remote";
+    deploymentLabel: string;
     isProductionMode: boolean;
+    isResetProductionDeployment: boolean;
     code?: string;
     message?: string;
     requiredEnvVars?: string[];
