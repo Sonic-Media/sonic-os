@@ -1,6 +1,7 @@
 # Sonic OS — Closing Request Approval Flow
 
 **Branch:** `cursor/close-shop-ux-fix-b6e7`  
+**Commit:** `788aeac`  
 **Date:** 2026-09-13  
 **PR:** [#39](https://github.com/Sonic-Media/sonic-os/pull/39) — **OPEN, NOT MERGED**  
 **Schema changed:** No  
