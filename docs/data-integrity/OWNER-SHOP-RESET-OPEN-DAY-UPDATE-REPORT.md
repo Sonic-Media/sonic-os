@@ -91,7 +91,7 @@ The reset itself is now authoritative: it deletes all branch-scoped `DayClosing`
 ## Preview Deployment
 
 - **Branch pushed:** `cursor/close-shop-ux-fix-b6e7`
-- **Preview deployment commit:** *(filled after push — see git log)*
+- **Preview deployment commit:** `0560ed5`
 - **Production touched:** **NO**
 - **Destructive reset executed:** **NO**
 
