@@ -6,6 +6,7 @@ import {
 } from "@/lib/env/deployment-environment";
 import {
   evaluateTransactionalResetTarget,
+  getAuthorizedPreviewResetMessage,
   type ResetTargetGuardEnv,
   type SafeDatabaseIdentity,
 } from "@/lib/server/database-target-guard";
@@ -162,7 +163,9 @@ function main() {
       );
       return (
         !result.ok &&
-        result.message.includes("Vercel Production") &&
+        result.message.includes(
+          "Business data reset is disabled in production mode."
+        ) &&
         result.details?.reason === "production_deployment"
       );
     })()
@@ -198,7 +201,8 @@ function main() {
       return (
         !result.ok &&
         result.code === "reset_target_forbidden" &&
-        result.message.includes("fingerprint")
+        result.details?.reason === "fingerprint_mismatch" &&
+        result.message.includes("Reset target not authorized for this deployment.")
       );
     })()
   );
@@ -216,6 +220,37 @@ function main() {
         })
       );
       return result.ok;
+    })()
+  );
+
+  recordCheck(
+    "F2-exact-user-facing-messages",
+    "Production/unauthorized/authorized copy matches required Preview UX strings",
+    (() => {
+      const production = evaluateTransactionalResetTarget(
+        baseIdentity({
+          vercelEnv: "production",
+          deploymentEnvironment: "vercel-production",
+          isResetProductionDeployment: true,
+        }),
+        baseEnv()
+      );
+      const unauthorized = evaluateTransactionalResetTarget(
+        baseIdentity(),
+        baseEnv()
+      );
+      const authorizedPreviewMessage = getAuthorizedPreviewResetMessage();
+
+      return (
+        !production.ok &&
+        production.message ===
+          "Business data reset is disabled in production mode." &&
+        !unauthorized.ok &&
+        unauthorized.message ===
+          "Reset target not authorized for this deployment." &&
+        authorizedPreviewMessage ===
+          "Preview reset enabled for authorized test database."
+      );
     })()
   );
 

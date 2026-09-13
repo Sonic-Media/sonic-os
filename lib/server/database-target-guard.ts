@@ -117,10 +117,51 @@ function productionDeploymentRefusalMessage(
   identity: SafeDatabaseIdentity
 ): string {
   if (identity.deploymentEnvironment === "vercel-production") {
-    return "Shop reset is disabled on Vercel Production. Set ALLOW_DESTRUCTIVE_OPS=true only for controlled maintenance windows.";
+    return "Business data reset is disabled in production mode.";
   }
 
-  return "Shop reset is disabled on this production deployment. Set ALLOW_DESTRUCTIVE_OPS=true only for controlled maintenance windows.";
+  return "Business data reset is disabled in production mode.";
+}
+
+function unauthorizedResetTargetMessage(
+  identity: SafeDatabaseIdentity,
+  reason: string
+): string {
+  if (identity.deploymentEnvironment === "vercel-preview") {
+    return "Reset target not authorized for this deployment.";
+  }
+
+  switch (reason) {
+    case "non_local_not_authorized":
+      return "Shop reset requires explicit authorization for this non-local database. Configure Preview-only reset env vars and set SONIC_RESET_ALLOWED_DATABASE_FINGERPRINT to this database fingerprint.";
+    case "neon_not_authorized":
+      return "Shop reset requires ALLOW_NEON_TRANSACTIONAL_RESET=true for Neon databases, plus a matching SONIC_RESET_ALLOWED_DATABASE_FINGERPRINT.";
+    case "fingerprint_required":
+      return "Shop reset requires SONIC_RESET_ALLOWED_DATABASE_FINGERPRINT for non-local databases. Set it to this database fingerprint on Preview only.";
+    case "fingerprint_mismatch":
+      return "Reset target not authorized for this deployment.";
+    default:
+      return "Reset target not authorized for this deployment.";
+  }
+}
+
+function authorizedResetTargetMessage(
+  identity: SafeDatabaseIdentity
+): string | undefined {
+  if (identity.deploymentEnvironment === "vercel-preview") {
+    return "Preview reset enabled for authorized test database.";
+  }
+
+  if (identity.isLocalHost) {
+    return "Local development reset enabled.";
+  }
+
+  return "Reset enabled for authorized database target.";
+}
+
+/** Test/helper export for exact authorized Preview copy. */
+export function getAuthorizedPreviewResetMessage(): string {
+  return "Preview reset enabled for authorized test database.";
 }
 
 export function describeDatabaseTarget(
@@ -212,8 +253,10 @@ export function evaluateTransactionalResetTarget(
       ok: false,
       status: 403,
       code: "reset_target_forbidden",
-      message:
-        "Shop reset requires explicit authorization for this non-local database. Configure Preview-only reset env vars and set SONIC_RESET_ALLOWED_DATABASE_FINGERPRINT to this database fingerprint.",
+      message: unauthorizedResetTargetMessage(
+        identity,
+        "non_local_not_authorized"
+      ),
       details: {
         reason: "non_local_not_authorized",
         fingerprint: identity.fingerprint,
@@ -229,8 +272,7 @@ export function evaluateTransactionalResetTarget(
       ok: false,
       status: 403,
       code: "reset_target_forbidden",
-      message:
-        "Shop reset requires ALLOW_NEON_TRANSACTIONAL_RESET=true for Neon databases, plus a matching SONIC_RESET_ALLOWED_DATABASE_FINGERPRINT.",
+      message: unauthorizedResetTargetMessage(identity, "neon_not_authorized"),
       details: {
         reason: "neon_not_authorized",
         fingerprint: identity.fingerprint,
@@ -245,8 +287,7 @@ export function evaluateTransactionalResetTarget(
       ok: false,
       status: 403,
       code: "reset_target_forbidden",
-      message:
-        "Shop reset requires SONIC_RESET_ALLOWED_DATABASE_FINGERPRINT for non-local databases. Set it to this database fingerprint on Preview only.",
+      message: unauthorizedResetTargetMessage(identity, "fingerprint_required"),
       details: {
         reason: "fingerprint_required",
         fingerprint: identity.fingerprint,
@@ -261,8 +302,7 @@ export function evaluateTransactionalResetTarget(
       ok: false,
       status: 403,
       code: "reset_target_forbidden",
-      message:
-        "Shop reset refused: configured database fingerprint does not match this deployment target.",
+      message: unauthorizedResetTargetMessage(identity, "fingerprint_mismatch"),
       details: {
         reason: "fingerprint_mismatch",
         fingerprint: identity.fingerprint,
@@ -295,7 +335,10 @@ export function describeResetTargetAuthorization(
   };
 
   if (evaluation.ok) {
-    return base;
+    return {
+      ...base,
+      message: authorizedResetTargetMessage(identity),
+    };
   }
 
   return {

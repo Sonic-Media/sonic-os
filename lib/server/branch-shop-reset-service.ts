@@ -399,7 +399,17 @@ export async function runBranchShopReset(
   const branchIds = targets.map((target) => target.id);
   const branchCodes = targets.map((target) => target.code);
 
-  const backup = await createDatabaseBackup();
+  let backup;
+  try {
+    backup = await createDatabaseBackup();
+  } catch (error) {
+    throw new ApiError(
+      error instanceof Error
+        ? `Backup failed — shop reset was not started. ${error.message}`
+        : "Backup failed — shop reset was not started.",
+      { status: 500, code: "backup_failed" }
+    );
+  }
   const backupPath = backup.archivePath ?? backup.sqlPath;
   if (!backupPath) {
     throw new ApiError("Backup failed — shop reset was not started.", {

@@ -265,10 +265,10 @@ export function ShopResetSection() {
 
         {preview?.resetTarget && !preview.resetTarget.authorized ? (
           <div className="rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-200">
-            <p className="font-medium">Reset target not authorized for this deployment.</p>
-            {preview.resetTarget.message ? (
-              <p className="mt-2">{preview.resetTarget.message}</p>
-            ) : null}
+            <p className="font-medium">
+              {preview.resetTarget.message ??
+                "Reset target not authorized for this deployment."}
+            </p>
             <p className="mt-2 text-xs text-red-200/80">
               Deployment: {preview.resetTarget.deploymentLabel}
               {" · "}
@@ -284,6 +284,23 @@ export function ShopResetSection() {
                 ))}
               </ul>
             ) : null}
+          </div>
+        ) : null}
+
+        {preview?.resetTarget?.authorized ? (
+          <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200">
+            <p className="font-medium">
+              {preview.resetTarget.message ??
+                "Preview reset enabled for authorized test database."}
+            </p>
+            <p className="mt-2 text-xs text-emerald-200/80">
+              Deployment: {preview.resetTarget.deploymentLabel}
+              {" · "}
+              Database fingerprint:{" "}
+              <span className="font-mono">{preview.resetTarget.fingerprint}</span>
+              {" · "}
+              Host category: {preview.resetTarget.hostCategory}
+            </p>
           </div>
         ) : null}
 

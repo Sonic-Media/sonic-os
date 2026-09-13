@@ -19,7 +19,11 @@ import {
   expandBusinessResetSelection,
   type BusinessResetCategory,
 } from "@/lib/business-reset/categories";
-import { isProductionModeClient } from "@/lib/env/production-mode-client";
+import {
+  isProductionModeClient,
+  isVercelPreviewClient,
+  isVercelProductionClient,
+} from "@/lib/env/production-mode-client";
 import { useAppDataRefresh } from "@/hooks/use-app-data-refresh";
 
 function resolveErrorMessage(error: unknown, fallback: string): string {
@@ -53,6 +57,8 @@ export function ResetBusinessDataSection() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const productionMode = isProductionModeClient();
+  const vercelPreview = isVercelPreviewClient();
+  const vercelProduction = isVercelProductionClient();
 
   const selectedCategories = useMemo(
     () =>
@@ -150,7 +156,21 @@ export function ResetBusinessDataSection() {
         <p>Create a backup first.</p>
       </div>
 
-      {productionMode ? (
+      {vercelProduction || (productionMode && !vercelPreview) ? (
+        <p className="mb-4 rounded-xl border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
+          Business data reset is disabled in production mode.
+        </p>
+      ) : null}
+
+      {vercelPreview ? (
+        <p className="mb-4 rounded-xl border border-sky-500/20 bg-sky-500/10 px-4 py-3 text-sm text-sky-200">
+          Global business data reset stays locked on Preview. Use{" "}
+          <strong>Shop Reset</strong> with an authorized test database
+          fingerprint instead.
+        </p>
+      ) : null}
+
+      {productionMode && !vercelPreview && !vercelProduction ? (
         <p className="mb-4 rounded-xl border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
           Production mode is active. Reset requires{" "}
           <code className="text-amber-100">ALLOW_DESTRUCTIVE_OPS=true</code> on
