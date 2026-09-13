@@ -1,6 +1,7 @@
 # Close Request Workflow — Certification Report
 
 **Branch:** `cursor/close-shop-ux-fix-b6e7`  
+**Commit:** `f6d175b`  
 **Date:** 2026-09-13  
 **PR:** #39 (OPEN — not merged)  
 **Schema changed:** No  
