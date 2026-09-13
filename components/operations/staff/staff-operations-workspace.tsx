@@ -106,7 +106,10 @@ export function StaffOperationsWorkspace({
     dayClosed,
   } = useStaffCloseDay(businessDateProp ?? form.date);
 
-  useStaffOperationsRefresh({ closeRequestPending });
+  useStaffOperationsRefresh({
+    closeRequestPending,
+    watchForClose: closeRequestPending || Boolean(activeBusinessDayStatus),
+  });
 
   const accessorySalesCount = useMemo(
     () =>

@@ -81,10 +81,12 @@ function CloseDayErrorBanner({ message }: { message: string }) {
 function ClosingRequestSentBanner() {
   return (
     <div className="rounded-2xl border border-indigo-500/20 bg-indigo-500/[0.08] px-4 py-4">
-      <p className="text-sm font-semibold text-indigo-200">Closing Request Sent</p>
+      <p className="text-sm font-semibold uppercase tracking-[0.12em] text-indigo-200">
+        Closing Request Sent
+      </p>
       <p className="mt-1.5 text-sm leading-relaxed text-indigo-300/90">
-        Your request is awaiting review. Your operations are saved and the business
-        day has not yet been finally closed.
+        Your operations have been submitted for review. The business day will remain
+        open until approved.
       </p>
     </div>
   );
@@ -140,9 +142,9 @@ export function StaffEndOfDayCard({
           <p className={uiTypography.sectionLabel}>End of Day</p>
           <h2 className={uiTypography.sectionTitle}>
             {closeRequestPending
-              ? "Your closing request has been submitted."
+              ? "Closing request sent — pending review."
               : dayClosed
-                ? "This business day is closed."
+                ? "Business day closed."
                 : "Review today's activity before submitting for closing."}
           </h2>
         </header>
@@ -160,7 +162,7 @@ export function StaffEndOfDayCard({
               value={form.notes}
               onChange={(event) => updateField("notes", event.target.value)}
               className="min-h-[180px]"
-              disabled={closeRequestPending || dayClosed}
+              disabled={dayClosed}
             />
           </div>
 
@@ -211,10 +213,11 @@ export function StaffEndOfDayCard({
           </div>
         ) : dayClosed ? (
           <div className="mt-6 rounded-2xl border border-emerald-500/20 bg-emerald-500/[0.08] px-4 py-4">
-            <p className="text-sm font-semibold text-emerald-200">Business Day Closed</p>
+            <p className="text-sm font-semibold uppercase tracking-[0.12em] text-emerald-200">
+              Business Day Closed
+            </p>
             <p className="mt-1.5 text-sm leading-relaxed text-emerald-300/90">
-              This business day has been approved and closed. Today&apos;s records are
-              locked.
+              Today&apos;s records are now locked.
             </p>
           </div>
         ) : (

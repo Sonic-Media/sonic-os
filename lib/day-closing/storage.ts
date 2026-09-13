@@ -151,10 +151,14 @@ export function canRecordTodaysActivity(
   date: string,
   records: DayClosingRecord[] = uiDayClosingsCache
 ): boolean {
+  if (isBranchDayClosed(branch, date, records)) {
+    return false;
+  }
+
+  const activeRecord = resolveActiveOpenDayRecord(branch, records);
   return (
-    isBranchDayOpened(branch, date, records) &&
-    !isBranchDayClosed(branch, date, records) &&
-    !isCloseRequestPending(branch, date, records)
+    !!activeRecord &&
+    (activeRecord.status === "open" || activeRecord.status === "close_requested")
   );
 }
 

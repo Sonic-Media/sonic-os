@@ -1,6 +1,7 @@
 "use client";
 
 import { Button } from "@/components/shared/ui/button";
+import { formatEntryDisplayDate } from "@/lib/dates";
 import { formatCurrency } from "@/lib/format";
 import { uiSurface } from "@/lib/ui/design-tokens";
 import { cn } from "@/lib/utils";
@@ -77,7 +78,10 @@ export function CloseDayConfirmDialog({
 
         <div className="mt-5 rounded-2xl border border-white/[0.06] bg-black/25 p-4">
           <SummaryRow label="Branch" value={branchName} />
-          <SummaryRow label="Business date" value={businessDate} />
+          <SummaryRow
+            label="Business date"
+            value={formatEntryDisplayDate(businessDate)}
+          />
           <div className="my-2 h-px bg-white/[0.06]" />
           <SummaryRow label="Total sales" value={formatCurrency(totalSales)} />
           <SummaryRow label="Expenses" value={formatCurrency(totalExpenses)} />

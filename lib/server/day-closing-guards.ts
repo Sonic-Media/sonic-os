@@ -79,17 +79,11 @@ export async function assertBranchDayOpenForWrite(
 
   await assertBranchDayNotClosedForWrite(branch, date);
 
-  if (state === "close_requested") {
-    throw new ApiError(
-      "This business day has a pending closing request. Records cannot be changed.",
-      {
-        status: 409,
-        code: "close_request_pending",
-      }
-    );
-  }
-
-  if (date === getTodayISO() && state !== "open") {
+  if (
+    date === getTodayISO() &&
+    state !== "open" &&
+    state !== "close_requested"
+  ) {
     throw new ApiError("Start today's shift before recording today's activity.", {
       status: 409,
       code: "shop_not_opened",

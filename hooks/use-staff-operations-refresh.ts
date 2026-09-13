@@ -11,17 +11,19 @@ const STAFF_OPERATIONS_REFRESH_MS = 12_000;
 
 export function useStaffOperationsRefresh(options?: {
   closeRequestPending?: boolean;
+  watchForClose?: boolean;
 }): void {
   const { session, isAuthenticated, isLoaded: authLoaded } = useAuth();
   const { activeBranch } = useActiveBranch();
-  const { refreshClosings, isBranchDayClosed, getActiveOpenRecord } =
-    useDayClosing();
+  const { refreshClosings, getActiveOpenRecord } = useDayClosing();
   const { refreshEntries } = useEntriesContext();
   const refreshInFlight = useRef(false);
 
+  const activeRecord = getActiveOpenRecord(activeBranch);
   const shouldPoll =
     options?.closeRequestPending ||
-    getActiveOpenRecord(activeBranch)?.status === "close_requested";
+    options?.watchForClose ||
+    activeRecord?.status === "close_requested";
 
   const refreshAll = useCallback(async () => {
     if (refreshInFlight.current) {
@@ -77,6 +79,5 @@ export function useStaffOperationsRefresh(options?: {
     refreshAll,
     session,
     shouldPoll,
-    isBranchDayClosed,
   ]);
 }
