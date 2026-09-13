@@ -20,9 +20,10 @@ import { mapCloseDayError } from "@/lib/ux/close-day-messages";
 import { toStaffFacingError } from "@/lib/ux/staff-messages";
 import type { Branch } from "@/types";
 import type { DayClosingRecord } from "@/types/day-closing";
+import { resolveBranchEntityForMetrics } from "@/lib/branch/resolve-branch-entity";
 
 export function useManagementApproveClose(branch: Branch, businessDate: string) {
-  const { activeBranches } = useBranches();
+  const { getBranchByCode, getBranchName } = useBranches();
   const { sales } = useSales();
   const { purchases } = usePurchasing();
   const { expenses } = useExpensesModule();
@@ -37,10 +38,12 @@ export function useManagementApproveClose(branch: Branch, businessDate: string) 
   const [error, setError] = useState<string | null>(null);
   const approvingRef = useRef(false);
 
-  const branchEntity = activeBranches.find((item) => item.code === branch);
+  const branchEntity = useMemo(
+    () => resolveBranchEntityForMetrics(branch, getBranchByCode, getBranchName),
+    [branch, getBranchByCode, getBranchName]
+  );
 
   const metrics = useMemo(() => {
-    if (!branchEntity) return null;
     return computeDayClosingMetrics(
       branchEntity,
       sales,
@@ -64,13 +67,6 @@ export function useManagementApproveClose(branch: Branch, businessDate: string) 
 
       if (!session) {
         const message = mapCloseDayError("", "forbidden");
-        setError(message);
-        return { success: false, message };
-      }
-
-      if (!metrics) {
-        const message =
-          "We couldn't approve and close the business day. Check your connection and try again.";
         setError(message);
         return { success: false, message };
       }

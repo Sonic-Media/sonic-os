@@ -439,6 +439,12 @@ export function DayClosingProvider({ children }: { children: React.ReactNode }) 
 
         return createValidationResult({}, saved);
       } catch (error) {
+        console.error("[submitCloseRequest] failed:", {
+          branch: input.branch,
+          date: businessDate,
+          message: getDataSourceErrorMessage(error),
+          code: error instanceof Error && "code" in error ? (error as { code?: string }).code : undefined,
+        });
         return createValidationResult({
           form: toCloseDayFacingError(error),
         });

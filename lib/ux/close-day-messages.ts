@@ -133,7 +133,7 @@ export function mapCloseDayError(message: string, code?: string): string {
     TECHNICAL_PATTERNS.some((pattern) => normalized.includes(pattern)) ||
     !message.trim()
   ) {
-    return "We couldn't close the business day. Check your connection and try again.";
+    return "We couldn't complete this closing action. Check your connection and try again.";
   }
 
   return message.trim();

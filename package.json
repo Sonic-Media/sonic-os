@@ -73,6 +73,7 @@
     "verify:close-time-flexibility": "tsx scripts/verify-close-time-flexibility.ts",
     "verify:close-request-workflow": "tsx scripts/verify-close-request-workflow.ts",
     "verify:closing-request-approval-flow": "tsx scripts/verify-closing-request-approval-flow.ts",
+    "verify:close-request-staff-catalog": "tsx scripts/verify-close-request-staff-catalog.ts",
     "verify:preview-close-day-e2e": "tsx scripts/verify-preview-close-day-e2e.ts"
   },
   "dependencies": {

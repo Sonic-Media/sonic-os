@@ -581,6 +581,15 @@ export async function submitCloseRequest(input: unknown): Promise<DayClosingReco
   const parsed = closeDaySchema.parse(input);
   const session = await requireSession();
   assertCanSubmitCloseRequest(session);
+
+  if (process.env.NODE_ENV !== "production") {
+    console.info("[submitCloseRequest] start", {
+      userId: session.userId,
+      role: session.role,
+      branch: parsed.branch,
+      date: parsed.date,
+    });
+  }
   const summary = parsed.summary as unknown as DayClosingSummary;
   const branch = parsed.branch as Branch;
 

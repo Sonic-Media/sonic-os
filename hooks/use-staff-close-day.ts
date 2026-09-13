@@ -20,10 +20,11 @@ import { getTodayISO } from "@/lib/dates";
 import { mapCloseDayError } from "@/lib/ux/close-day-messages";
 import { toStaffFacingError } from "@/lib/ux/staff-messages";
 import { useStaff } from "@/context/staff-context";
+import { resolveBranchEntityForMetrics } from "@/lib/branch/resolve-branch-entity";
 
 export function useStaffCloseDay(date?: string) {
   const { activeBranch } = useActiveBranch();
-  const { activeBranches } = useBranches();
+  const { getBranchByCode, getBranchName } = useBranches();
   const { sales } = useSales();
   const { purchases } = usePurchasing();
   const { expenses } = useExpensesModule();
@@ -50,11 +51,14 @@ export function useStaffCloseDay(date?: string) {
   const [error, setError] = useState<string | null>(null);
   const closingRef = useRef(false);
 
-  const branchEntity = activeBranches.find((item) => item.code === activeBranch);
+  const branchEntity = useMemo(
+    () =>
+      resolveBranchEntityForMetrics(activeBranch, getBranchByCode, getBranchName),
+    [activeBranch, getBranchByCode, getBranchName]
+  );
   const shopOpen = Boolean(activeRecord?.status === "open");
 
   const metrics = useMemo(() => {
-    if (!branchEntity) return null;
     return computeDayClosingMetrics(
       branchEntity,
       sales,
@@ -97,13 +101,6 @@ export function useStaffCloseDay(date?: string) {
 
       if (!shopOpen) {
         const message = mapCloseDayError("", "shop_not_opened");
-        setError(message);
-        return { success: false as const, message };
-      }
-
-      if (!metrics) {
-        const message =
-          "We couldn't submit the closing request. Check your connection and try again.";
         setError(message);
         return { success: false as const, message };
       }
