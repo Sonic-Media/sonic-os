@@ -1,5 +1,5 @@
 import { jsonOk } from "@/lib/api/response";
-import { handleRouteError, withDatabase } from "@/lib/server/route-handler";
+import { handleRouteError, withSessionDatabase } from "@/lib/server/route-handler";
 import {
   previewBranchShopReset,
   runBranchShopReset,
@@ -25,10 +25,13 @@ function logShopResetRouteError(method: string, error: unknown): void {
 export async function GET(request: Request) {
   try {
     const scope = new URL(request.url).searchParams.get("scope") ?? "main";
-    const preview = await withDatabase(() => previewBranchShopReset(scope), {
-      request,
-      ownerOnly: true,
-    });
+    const preview = await withSessionDatabase(
+      (session) => previewBranchShopReset(scope, session),
+      {
+        request,
+        ownerOnly: true,
+      }
+    );
     return jsonOk(preview);
   } catch (error) {
     logShopResetRouteError("GET", error);
@@ -41,13 +44,16 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const report = await withDatabase(
-      async () => {
+    const report = await withSessionDatabase(
+      async (session) => {
         const body = await request.json();
-        return runBranchShopReset({
-          scope: body?.scope ?? "main",
-          confirmation: body?.confirmation ?? "",
-        });
+        return runBranchShopReset(
+          {
+            scope: body?.scope ?? "main",
+            confirmation: body?.confirmation ?? "",
+          },
+          session
+        );
       },
       { request, ownerOnly: true }
     );

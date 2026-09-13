@@ -111,7 +111,7 @@ export async function withDatabase<T>(
   }
 
   if (options?.requireAuth !== false) {
-    const session = await requireSession();
+    const session = await requireSession(options?.request);
     enforceAccessControl(session, pathname, options);
   }
 
@@ -140,7 +140,7 @@ export async function withSessionDatabase<T>(
     });
   }
 
-  const session = await requireSession();
+  const session = await requireSession(options?.request);
   enforceAccessControl(session, pathname, options);
 
   return handler(session);

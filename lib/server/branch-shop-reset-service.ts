@@ -11,7 +11,6 @@ import {
 import { requireOwner } from "@/lib/server/security/authorization";
 import { recordSecurityAuditInTransaction } from "@/lib/server/security/audit";
 import { getBranchIdByCode, getBranchCodeById } from "@/lib/server/branch-lookup";
-import { requireSession } from "@/lib/server/session";
 import {
   DEFAULT_BRANCH_NAME,
   SALAAMA_BRANCH_NAME,
@@ -329,9 +328,9 @@ async function deleteBranchScopedData(
 }
 
 export async function previewBranchShopReset(
-  scopeInput: string
+  scopeInput: string,
+  session: AuthSession
 ): Promise<ShopResetPreview> {
-  const session = await requireSession();
   requireOwner(session);
 
   const scope = resolveShopResetScope(scopeInput);
@@ -374,11 +373,13 @@ export async function previewBranchShopReset(
   };
 }
 
-export async function runBranchShopReset(input: {
-  scope: string;
-  confirmation: string;
-}): Promise<ShopResetReport> {
-  const session = await requireSession();
+export async function runBranchShopReset(
+  input: {
+    scope: string;
+    confirmation: string;
+  },
+  session: AuthSession
+): Promise<ShopResetReport> {
   requireOwner(session);
 
   assertSafeTransactionalResetTarget();
