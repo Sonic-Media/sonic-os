@@ -2,11 +2,13 @@ import { jsonCreated, jsonOk } from "@/lib/api/response";
 import { resolveOperationsListFilter } from "@/lib/server/branch-scope";
 import { handleRouteError, withDatabase, withSessionDatabase } from "@/lib/server/route-handler";
 import {
+  approveAndCloseDay,
   closeDay,
   listDayClosings,
   openDay,
   openWithShift,
   reopenDay,
+  submitCloseRequest,
 } from "@/lib/server/services/day-closings-service";
 
 export async function GET(request: Request) {
@@ -48,6 +50,22 @@ export async function POST(request: Request) {
         module: "operations",
       });
       return jsonCreated(result);
+    }
+
+    if (action === "submit-close-request") {
+      const record = await withDatabase(() => submitCloseRequest(body), {
+        request,
+        module: "operations",
+      });
+      return jsonCreated(record);
+    }
+
+    if (action === "approve-close") {
+      const record = await withDatabase(() => approveAndCloseDay(body), {
+        request,
+        module: "operations",
+      });
+      return jsonCreated(record);
     }
 
     const record = await withDatabase(() => closeDay(body), {

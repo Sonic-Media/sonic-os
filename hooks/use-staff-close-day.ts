@@ -32,15 +32,26 @@ export function useStaffCloseDay(date?: string) {
   const { staff } = useStaff();
   const { session } = useAuth();
   const { settings } = useSettings();
-  const { closeDay, getActiveOpenRecord } = useDayClosing();
-  const businessDate =
-    getActiveOpenRecord(activeBranch)?.date ?? date ?? getTodayISO();
+  const {
+    submitCloseRequest,
+    getActiveOpenRecord,
+    isCloseRequestPending,
+    isBranchDayClosed,
+  } = useDayClosing();
+
+  const activeRecord = getActiveOpenRecord(activeBranch);
+  const businessDate = activeRecord?.date ?? date ?? getTodayISO();
+  const closeRequestPending =
+    activeRecord?.status === "close_requested" ||
+    isCloseRequestPending(activeBranch, businessDate);
+  const dayClosed = isBranchDayClosed(activeBranch, businessDate);
+
   const [isClosing, setIsClosing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const closingRef = useRef(false);
 
   const branchEntity = activeBranches.find((item) => item.code === activeBranch);
-  const shopOpen = Boolean(getActiveOpenRecord(activeBranch));
+  const shopOpen = Boolean(activeRecord?.status === "open");
 
   const metrics = useMemo(() => {
     if (!branchEntity) return null;
@@ -69,6 +80,21 @@ export function useStaffCloseDay(date?: string) {
         return { success: false as const, message };
       }
 
+      if (closeRequestPending) {
+        const message = mapCloseDayError(
+          "A closing request has already been submitted for this business day.",
+          "close_request_already_pending"
+        );
+        setError(message);
+        return { success: false as const, message };
+      }
+
+      if (dayClosed) {
+        const message = mapCloseDayError("", "day_already_closed");
+        setError(message);
+        return { success: false as const, message };
+      }
+
       if (!shopOpen) {
         const message = mapCloseDayError("", "shop_not_opened");
         setError(message);
@@ -77,7 +103,7 @@ export function useStaffCloseDay(date?: string) {
 
       if (!metrics) {
         const message =
-          "We couldn't close the business day. Check your connection and try again.";
+          "We couldn't submit the closing request. Check your connection and try again.";
         setError(message);
         return { success: false as const, message };
       }
@@ -95,7 +121,7 @@ export function useStaffCloseDay(date?: string) {
 
       const expectedCash = computeExpectedCash(metrics.cashBeforeClosing, payoutRows);
 
-      const result = await closeDay({
+      const result = await submitCloseRequest({
         branch: activeBranch,
         date: businessDate,
         metrics,
@@ -122,7 +148,8 @@ export function useStaffCloseDay(date?: string) {
     [
       activeBranch,
       businessDate,
-      closeDay,
+      closeRequestPending,
+      dayClosed,
       isClosing,
       metrics,
       payments,
@@ -130,6 +157,7 @@ export function useStaffCloseDay(date?: string) {
       settings.ownerName,
       shopOpen,
       staff,
+      submitCloseRequest,
     ]
   );
 
@@ -140,5 +168,7 @@ export function useStaffCloseDay(date?: string) {
     clearError,
     shopOpen,
     businessDate,
+    closeRequestPending,
+    dayClosed,
   };
 }

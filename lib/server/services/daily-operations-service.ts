@@ -11,6 +11,7 @@ import { toJsonField } from "@/lib/server/json-fields";
 import { filterPersistableExpenses } from "@/lib/expenses";
 import { mapDailyOperationToEntry } from "@/lib/server/mappers/entities";
 import {
+  assertBranchDayNotClosedForWrite,
   assertBranchDayOpenForWrite,
   assertOwnerCannotEditTodayOperations,
 } from "@/lib/server/day-closing-guards";
@@ -92,10 +93,18 @@ export async function listDailyOperationsInPeriod(
   return operations.map(mapDailyOperationToEntry);
 }
 
-export async function upsertDailyOperation(entry: Entry): Promise<Entry> {
+export async function upsertDailyOperation(
+  entry: Entry,
+  options?: { allowCloseRequested?: boolean }
+): Promise<Entry> {
   const session = await requireSession();
   assertOwnerCannotEditTodayOperations(session, entry.date);
-  await assertBranchDayOpenForWrite(entry.branch, entry.date);
+
+  if (options?.allowCloseRequested) {
+    await assertBranchDayNotClosedForWrite(entry.branch, entry.date);
+  } else {
+    await assertBranchDayOpenForWrite(entry.branch, entry.date);
+  }
 
   const branchId = await getBranchIdForSession(session, entry.branch);
   const data = entryToDailyOperationData(entry, branchId);

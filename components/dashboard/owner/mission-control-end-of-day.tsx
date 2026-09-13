@@ -59,7 +59,12 @@ export function MissionControlEndOfDay() {
   const expensesValue =
     branchState.operatingExpenses > 0 ? "Recorded" : "Pending";
   const wageValue = branchState.staffWages > 0 ? "Recorded" : "Pending";
-  const dayClosedValue = branchState.status === "closed" ? "Closed" : "Open";
+  const dayClosedValue =
+    branchState.status === "closed"
+      ? "Closed"
+      : branchState.status === "close_requested"
+        ? "Closing request pending"
+        : "Open";
 
   return (
     <OwnerCard accent="green">
@@ -109,10 +114,15 @@ export function MissionControlEndOfDay() {
 
         <div className="flex shrink-0 flex-col gap-3 lg:pt-8">
           <Button href={operationsHref} variant="secondary" className="whitespace-nowrap">
-            {branchState.status === "closed" ? "View Closed Day" : "Go to Close Day"}
+            {branchState.status === "closed"
+              ? "View Closed Day"
+              : branchState.status === "close_requested"
+                ? "Review & Close"
+                : "Go to Close Day"}
           </Button>
           <p className="max-w-[220px] text-xs text-zinc-600">
-            Close Day runs in Today&apos;s Operations — existing workflow unchanged.
+            Staff submit closing requests; management approves and closes in
+            Today&apos;s Operations.
           </p>
         </div>
       </div>

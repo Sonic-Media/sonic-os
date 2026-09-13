@@ -22,7 +22,13 @@ import {
   resolveCashStatus,
 } from "@/lib/day-closing/calculations";
 import { canReopenDay } from "@/lib/day-closing/permissions";
-import { closeDayApi, fetchDayClosings, openWithShiftApi, reopenDayApi } from "@/lib/api/day-closings";
+import {
+  approveCloseDayApi,
+  fetchDayClosings,
+  openWithShiftApi,
+  reopenDayApi,
+  submitCloseRequestApi,
+} from "@/lib/api/day-closings";
 import {
   getDataSourceErrorMessage,
   loadFromApi,
@@ -30,10 +36,13 @@ import {
 } from "@/lib/data-source/context-api";
 import {
   getActiveOpenDayRecord,
+  getCloseRequestedRecord as findCloseRequestedRecord,
+  getCloseRequestedRecords as listCloseRequestedRecords,
   getClosedDayRecord as findClosedDayRecord,
   getOpenDayRecord as findOpenDayRecord,
   isBranchDayClosed as checkBranchDayClosed,
   isBranchDayOpened as checkBranchDayOpened,
+  isCloseRequestPending as checkCloseRequestPending,
   needsShopOpening as checkNeedsShopOpening,
   setDayClosingsCache,
 } from "@/lib/day-closing/storage";
@@ -80,6 +89,12 @@ interface DayClosingContextValue {
   getClosedRecord: (branch: Branch, date?: string) => DayClosingRecord | undefined;
   getOpenRecord: (branch: Branch, date?: string) => DayClosingRecord | undefined;
   getActiveOpenRecord: (branch: Branch) => DayClosingRecord | undefined;
+  getCloseRequestedRecord: (
+    branch: Branch,
+    date?: string
+  ) => DayClosingRecord | undefined;
+  getCloseRequestedRecords: () => DayClosingRecord[];
+  isCloseRequestPending: (branch: Branch, date?: string) => boolean;
   getBranchStatusInfo: (
     branch: BranchEntity,
     date?: string
@@ -88,6 +103,9 @@ interface DayClosingContextValue {
     branch: Branch,
     date?: string
   ) => Promise<DayClosingValidationResult>;
+  submitCloseRequest: (input: CloseDayInput) => Promise<DayClosingValidationResult>;
+  approveAndClose: (input: CloseDayInput) => Promise<DayClosingValidationResult>;
+  /** @deprecated Use submitCloseRequest (staff) or approveAndClose (management). */
   closeDay: (input: CloseDayInput) => Promise<DayClosingValidationResult>;
   reopenDay: (
     branch: Branch,
@@ -207,20 +225,55 @@ export function DayClosingProvider({ children }: { children: React.ReactNode }) 
     []
   );
 
+  const getCloseRequestedRecordFn = useCallback(
+    (branch: Branch, date = getTodayISO()) =>
+      findCloseRequestedRecord(branch, date, closingsRef.current),
+    []
+  );
+
+  const getCloseRequestedRecordsFn = useCallback(
+    () => listCloseRequestedRecords(closingsRef.current),
+    []
+  );
+
+  const isCloseRequestPendingFn = useCallback(
+    (branch: Branch, date = getTodayISO()) =>
+      checkCloseRequestPending(branch, date, closingsRef.current),
+    []
+  );
+
   const getBranchStatusInfo = useCallback(
     (branch: BranchEntity, date = getTodayISO()): DayClosingStatusInfo => {
       const closed = findClosedDayRecord(branch.code, date, closingsRef.current);
+      const closeRequested = findCloseRequestedRecord(
+        branch.code,
+        date,
+        closingsRef.current
+      );
       const open = findOpenDayRecord(branch.code, date, closingsRef.current);
+      const activeOpen = getActiveOpenDayRecord(branch.code, closingsRef.current);
       const isOpen = checkBranchDayOpened(branch.code, date, closingsRef.current);
-      const status = closed ? "closed" : isOpen ? "open" : "waiting";
+      const status = closed
+        ? "closed"
+        : closeRequested
+          ? "close_requested"
+          : isOpen
+            ? "open"
+            : activeOpen?.status === "close_requested"
+              ? "close_requested"
+              : "waiting";
 
       return {
         branch: branch.code,
         branchName: branch.name,
-        date,
+        date: activeOpen?.date ?? date,
         status,
-        openedByName: open?.openedByName,
-        openedAt: open?.openedAt ?? open?.reopenedAt,
+        openedByName: open?.openedByName ?? closeRequested?.openedByName,
+        openedAt:
+          open?.openedAt ??
+          open?.reopenedAt ??
+          closeRequested?.openedAt ??
+          closeRequested?.reopenedAt,
         closedByName: closed?.closedByName,
         closedAt: closed?.closedAt,
       };
@@ -292,12 +345,114 @@ export function DayClosingProvider({ children }: { children: React.ReactNode }) 
     [refreshClosingsFromApi, refreshEntries, session, settings.ownerName, staff]
   );
 
-  const closeDay = useCallback(
+  const submitCloseRequest = useCallback(
     async (input: CloseDayInput): Promise<DayClosingValidationResult> => {
       const errors: Record<string, string | undefined> = {};
 
       if (!session) {
-        errors.form = "You must be signed in to close the day.";
+        errors.form = "You must be signed in to submit a closing request.";
+      }
+
+      try {
+        await refreshClosingsFromApi();
+      } catch (error) {
+        return createValidationResult({
+          form: toCloseDayFacingError(error),
+        });
+      }
+
+      const activeOpenRecord = getActiveOpenDayRecord(
+        input.branch,
+        closingsRef.current
+      );
+
+      if (!activeOpenRecord || activeOpenRecord.status !== "open") {
+        if (
+          activeOpenRecord?.status === "close_requested" ||
+          checkCloseRequestPending(
+            input.branch,
+            activeOpenRecord?.date ?? input.date,
+            closingsRef.current
+          )
+        ) {
+          errors.form =
+            "A closing request has already been submitted for this business day.";
+        } else {
+          errors.form = "Start today's shift before submitting for closing.";
+        }
+      }
+
+      const businessDate = activeOpenRecord?.date ?? input.date;
+
+      if (checkBranchDayClosed(input.branch, businessDate, closingsRef.current)) {
+        errors.form = "Today's shift has already been completed.";
+      }
+
+      const difference = computeCashDifference(
+        input.expectedCash,
+        input.actualCashCounted
+      );
+      const cashStatus = resolveCashStatus(difference);
+
+      if (cashStatus !== "balanced" && !input.reconciliationNotes?.trim()) {
+        errors.reconciliationNotes =
+          "Add a note whenever cash is short or over.";
+      }
+
+      if (Object.values(errors).some(Boolean)) {
+        return createValidationResult(errors);
+      }
+
+      const summary = computeDayClosingSummary(
+        input.metrics,
+        input.staffPayouts,
+        input.actualCashCounted
+      );
+
+      try {
+        const saved = await runOnApi(() =>
+          submitCloseRequestApi({
+            date: businessDate,
+            branch: input.branch,
+            metrics: input.metrics,
+            staffPayouts: input.staffPayouts,
+            expectedCash: input.expectedCash,
+            actualCashCounted: input.actualCashCounted,
+            cashDifference: difference,
+            cashStatus,
+            reconciliationNotes: input.reconciliationNotes,
+            closingNotes: input.closingNotes,
+            summary,
+            closedBy: session?.userId,
+            closedByName: session?.displayName,
+          })
+        );
+
+        try {
+          await refreshClosingsFromApi();
+        } catch (refreshError) {
+          console.error(
+            "Close request persisted but closings refresh failed:",
+            getDataSourceErrorMessage(refreshError)
+          );
+        }
+
+        return createValidationResult({}, saved);
+      } catch (error) {
+        return createValidationResult({
+          form: toCloseDayFacingError(error),
+        });
+      }
+    },
+    [refreshClosingsFromApi, session]
+  );
+
+  const approveAndClose = useCallback(
+    async (input: CloseDayInput): Promise<DayClosingValidationResult> => {
+      const errors: Record<string, string | undefined> = {};
+
+      if (!session) {
+        errors.form = "You must be signed in to approve and close the day.";
       }
 
       try {
@@ -314,7 +469,7 @@ export function DayClosingProvider({ children }: { children: React.ReactNode }) 
       );
 
       if (!activeOpenRecord) {
-        errors.form = "Start today's shift before closing the day.";
+        errors.form = "No open business day found to approve and close.";
       }
 
       const businessDate = activeOpenRecord?.date ?? input.date;
@@ -369,7 +524,7 @@ export function DayClosingProvider({ children }: { children: React.ReactNode }) 
 
       try {
         const saved = await runOnApi(() =>
-          closeDayApi({
+          approveCloseDayApi({
             date: businessDate,
             branch: input.branch,
             metrics: input.metrics,
@@ -432,8 +587,10 @@ export function DayClosingProvider({ children }: { children: React.ReactNode }) 
         });
       }
     },
-    [recordStaffPaymentAsync, refreshClosingsFromApi, session, refreshEntries, settings.ownerName]
+    [recordStaffPaymentAsync, refreshClosingsFromApi, session, refreshEntries]
   );
+
+  const closeDay = approveAndClose;
 
   const reopenDay = useCallback(
     async (
@@ -498,8 +655,13 @@ export function DayClosingProvider({ children }: { children: React.ReactNode }) 
       getClosedRecord,
       getOpenRecord,
       getActiveOpenRecord,
+      getCloseRequestedRecord: getCloseRequestedRecordFn,
+      getCloseRequestedRecords: getCloseRequestedRecordsFn,
+      isCloseRequestPending: isCloseRequestPendingFn,
       getBranchStatusInfo,
       openDay,
+      submitCloseRequest,
+      approveAndClose,
       closeDay,
       reopenDay,
     }),
@@ -513,8 +675,13 @@ export function DayClosingProvider({ children }: { children: React.ReactNode }) 
       getClosedRecord,
       getOpenRecord,
       getActiveOpenRecord,
+      getCloseRequestedRecordFn,
+      getCloseRequestedRecordsFn,
+      isCloseRequestPendingFn,
       getBranchStatusInfo,
       openDay,
+      submitCloseRequest,
+      approveAndClose,
       closeDay,
       reopenDay,
     ]

@@ -2,9 +2,10 @@ import { branchCodesReferToSameInventory } from "@/lib/branch/codes";
 import type { Branch } from "@/types";
 import type { DayClosingRecord } from "@/types/day-closing";
 
-function isOpenDayClosing(record: DayClosingRecord): boolean {
+function isActiveBusinessDayRecord(record: DayClosingRecord): boolean {
   return (
-    record.status === "open" && !!(record.openedAt || record.reopenedAt)
+    (record.status === "open" || record.status === "close_requested") &&
+    !!(record.openedAt || record.reopenedAt)
   );
 }
 
@@ -19,7 +20,7 @@ export function getActiveOpenDayRecord(
   return records
     .filter(
       (record) =>
-        matchesBranch(record.branch, branch) && isOpenDayClosing(record)
+        matchesBranch(record.branch, branch) && isActiveBusinessDayRecord(record)
     )
     .sort((left, right) => left.date.localeCompare(right.date))[0];
 }

@@ -14,6 +14,7 @@ import { useToast } from "@/context/toast-context";
 import { useEntryForm } from "@/hooks/use-entry-form";
 import { useLinkedStaff } from "@/hooks/use-linked-staff";
 import { useStaffCloseDay } from "@/hooks/use-staff-close-day";
+import { useStaffOperationsRefresh } from "@/hooks/use-staff-operations-refresh";
 import { useStaffPaymentsModule } from "@/context/staff-payments-context";
 import {
   computeStaffPayoutTotalForStaffBranchDate,
@@ -93,7 +94,11 @@ export function StaffOperationsWorkspace({
     clearError: clearCloseError,
     shopOpen,
     businessDate,
+    closeRequestPending,
+    dayClosed,
   } = useStaffCloseDay(form.date);
+
+  useStaffOperationsRefresh({ closeRequestPending });
 
   const accessorySalesCount = useMemo(
     () =>
@@ -187,7 +192,7 @@ export function StaffOperationsWorkspace({
     const result = await closeStaffDay(form.notes.trim());
     if (result.success) {
       setCloseFlowError(null);
-      toastSuccess("Business day closed.");
+      toastSuccess("Closing request sent.");
       return true;
     }
 
@@ -275,6 +280,8 @@ export function StaffOperationsWorkspace({
         }
         wageRecorded={wageRecorded}
         shopOpen={shopOpen}
+        closeRequestPending={closeRequestPending}
+        dayClosed={dayClosed}
         isClosing={isClosing || isSaving}
         closeError={closeFlowError}
         updateField={updateField}

@@ -3,6 +3,7 @@
 import { BusinessIntelligenceCard } from "@/components/dashboard/owner/business-intelligence-card";
 import { BusinessPulseKpis } from "@/components/dashboard/owner/business-pulse-kpis";
 import { MissionControlBranchStrip } from "@/components/dashboard/owner/mission-control-branch-strip";
+import { MissionControlCloseRequests } from "@/components/dashboard/owner/mission-control-close-requests";
 import { MissionControlClosedSummary } from "@/components/dashboard/owner/mission-control-closed-summary";
 import { MissionControlEndOfDay } from "@/components/dashboard/owner/mission-control-end-of-day";
 import { MissionControlHero } from "@/components/dashboard/owner/mission-control-hero";
@@ -28,6 +29,8 @@ export function OwnerDashboardLayout({ displayName }: OwnerDashboardLayoutProps)
       <MissionControlHero displayName={displayName} />
 
       <MissionControlBranchStrip />
+
+      <MissionControlCloseRequests />
 
       {isClosed ? <MissionControlClosedSummary /> : null}
 

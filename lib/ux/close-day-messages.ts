@@ -53,11 +53,35 @@ export function mapCloseDayError(message: string, code?: string): string {
   }
 
   if (
+    normalizedCode === "close_request_already_pending" ||
+    normalized.includes("closing request has already been submitted")
+  ) {
+    return "A closing request has already been submitted for this business day.";
+  }
+
+  if (
+    normalizedCode === "close_request_not_pending" ||
+    normalized.includes("no pending closing request")
+  ) {
+    return "No pending closing request exists for this business day.";
+  }
+
+  if (
+    normalizedCode === "close_request_pending" ||
+    normalized.includes("pending closing request")
+  ) {
+    return "This business day has a pending closing request. Records cannot be changed.";
+  }
+
+  if (
     normalizedCode === "forbidden" ||
     normalized.includes("do not have permission to close") ||
-    normalized.includes("must be signed in to close")
+    normalized.includes("do not have permission to submit") ||
+    normalized.includes("do not have permission to approve") ||
+    normalized.includes("must be signed in to close") ||
+    normalized.includes("must be signed in to submit")
   ) {
-    return "You don't have permission to close this business day.";
+    return "You don't have permission to perform this closing action.";
   }
 
   if (

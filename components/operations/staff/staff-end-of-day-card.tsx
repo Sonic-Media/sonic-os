@@ -19,6 +19,8 @@ interface StaffEndOfDayCardProps {
   cashToHandIn: number;
   wageRecorded: boolean;
   shopOpen: boolean;
+  closeRequestPending?: boolean;
+  dayClosed?: boolean;
   isClosing: boolean;
   closeError?: string | null;
   updateField: <K extends keyof EntryFormData>(
@@ -76,6 +78,18 @@ function CloseDayErrorBanner({ message }: { message: string }) {
   );
 }
 
+function ClosingRequestSentBanner() {
+  return (
+    <div className="rounded-2xl border border-indigo-500/20 bg-indigo-500/[0.08] px-4 py-4">
+      <p className="text-sm font-semibold text-indigo-200">Closing Request Sent</p>
+      <p className="mt-1.5 text-sm leading-relaxed text-indigo-300/90">
+        Your request is awaiting review. Your operations are saved and the business
+        day has not yet been finally closed.
+      </p>
+    </div>
+  );
+}
+
 export function StaffEndOfDayCard({
   form,
   branchName,
@@ -87,6 +101,8 @@ export function StaffEndOfDayCard({
   cashToHandIn,
   wageRecorded,
   shopOpen,
+  closeRequestPending = false,
+  dayClosed = false,
   isClosing,
   closeError,
   updateField,
@@ -97,10 +113,10 @@ export function StaffEndOfDayCard({
   const totalSales = movieRevenue + accessorySales;
   const salesRecorded = totalSales > 0;
   const expensesRecorded = totalExpenses > 0;
-  const readyToClose = shopOpen;
+  const readyToClose = shopOpen && !closeRequestPending && !dayClosed;
 
   function handleOpenConfirm() {
-    if (isClosing) return;
+    if (isClosing || closeRequestPending || dayClosed) return;
     setConfirmOpen(true);
   }
 
@@ -123,7 +139,11 @@ export function StaffEndOfDayCard({
         <header className="space-y-1">
           <p className={uiTypography.sectionLabel}>End of Day</p>
           <h2 className={uiTypography.sectionTitle}>
-            Review today&apos;s activity before closing the business day.
+            {closeRequestPending
+              ? "Your closing request has been submitted."
+              : dayClosed
+                ? "This business day is closed."
+                : "Review today's activity before submitting for closing."}
           </h2>
         </header>
 
@@ -140,6 +160,7 @@ export function StaffEndOfDayCard({
               value={form.notes}
               onChange={(event) => updateField("notes", event.target.value)}
               className="min-h-[180px]"
+              disabled={closeRequestPending || dayClosed}
             />
           </div>
 
@@ -164,8 +185,16 @@ export function StaffEndOfDayCard({
             />
             <ChecklistItem
               label="Ready to Close"
-              status={readyToClose ? "Ready" : "Action required"}
-              complete={readyToClose}
+              status={
+                closeRequestPending
+                  ? "Request sent"
+                  : dayClosed
+                    ? "Closed"
+                    : readyToClose
+                      ? "Ready"
+                      : "Action required"
+              }
+              complete={closeRequestPending || dayClosed || readyToClose}
             />
           </div>
         </div>
@@ -176,25 +205,40 @@ export function StaffEndOfDayCard({
           </div>
         ) : null}
 
-        <div className="mt-6 space-y-3">
-          <Button
-            type="button"
-            size="lg"
-            loading={isClosing}
-            loadingLabel="Closing business day..."
-            disabled={isClosing}
-            onClick={handleOpenConfirm}
-            className="w-full"
-          >
-            <span className="inline-flex items-center gap-2">
-              <span aria-hidden>🔒</span>
-              Close Day
-            </span>
-          </Button>
-          <p className="text-center text-xs leading-relaxed text-zinc-500">
-            Once you close the day, today&apos;s records will be locked.
-          </p>
-        </div>
+        {closeRequestPending ? (
+          <div className="mt-6">
+            <ClosingRequestSentBanner />
+          </div>
+        ) : dayClosed ? (
+          <div className="mt-6 rounded-2xl border border-emerald-500/20 bg-emerald-500/[0.08] px-4 py-4">
+            <p className="text-sm font-semibold text-emerald-200">Business Day Closed</p>
+            <p className="mt-1.5 text-sm leading-relaxed text-emerald-300/90">
+              This business day has been approved and closed. Today&apos;s records are
+              locked.
+            </p>
+          </div>
+        ) : (
+          <div className="mt-6 space-y-3">
+            <Button
+              type="button"
+              size="lg"
+              loading={isClosing}
+              loadingLabel="Submitting closing request..."
+              disabled={isClosing || !shopOpen}
+              onClick={handleOpenConfirm}
+              className="w-full"
+            >
+              <span className="inline-flex items-center gap-2">
+                <span aria-hidden>📋</span>
+                Submit for Closing
+              </span>
+            </Button>
+            <p className="text-center text-xs leading-relaxed text-zinc-500">
+              Your operations are saved. Submitting sends a closing request for review
+              — the business day is not locked until approved.
+            </p>
+          </div>
+        )}
       </section>
 
       {confirmOpen ? (
@@ -206,6 +250,7 @@ export function StaffEndOfDayCard({
           dailyWage={staffPayouts}
           cashToHandIn={cashToHandIn}
           isSubmitting={isClosing}
+          mode="submit"
           onConfirm={() => void handleConfirmClose()}
           onCancel={() => {
             if (!isClosing) setConfirmOpen(false);

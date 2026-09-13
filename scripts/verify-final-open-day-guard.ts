@@ -8,6 +8,7 @@ import path from "node:path";
 import { prisma } from "@/lib/db";
 import { getBranchDayState } from "@/lib/server/services/day-closings-service";
 import type { Branch } from "@/types";
+import { submitAndApproveClose } from "./verify-close-request-helpers";
 import {
   cleanupCertificationCashier,
   createCertificationCashier,
@@ -277,15 +278,13 @@ async function main() {
       `count=${tuesdayCountBeforeClose}`
     );
 
-    await kansangaClient.json("/api/day-closings", {
-      method: "POST",
-      body: JSON.stringify({
-        action: "close",
-        branch: mainBranch,
-        date: mondayDate,
-        ...EMPTY_CLOSE_PAYLOAD,
-      }),
-    });
+    await submitAndApproveClose(
+      kansangaClient,
+      owner,
+      mainBranch,
+      mondayDate,
+      EMPTY_CLOSE_PAYLOAD
+    );
 
     const secondOpen = await kansangaClient.json<{ date: string; status: string }>(
       "/api/day-closings",

@@ -17,9 +17,11 @@ import { requireSession } from "@/lib/server/session";
 import { isRoleGreetingLabel } from "@/lib/ux/user-display";
 import { buildStaffActionRecord } from "@/lib/staff/session";
 import { upsertDailyOperation } from "@/lib/server/services/daily-operations-service";
+import { withCloseRequest } from "@/lib/day-closing/close-request";
 import {
-  assertCanCloseDay,
+  assertCanApproveAndClose,
   assertCanOpenShop,
+  assertCanSubmitCloseRequest,
   assertStaffOperationalRole,
 } from "@/lib/server/day-closing-guards";
 import {
@@ -486,7 +488,7 @@ async function findActiveOpenBusinessDays(branchId: string) {
   return prisma.dayClosing.findMany({
     where: {
       branchId,
-      status: "open",
+      status: { in: ["open", "close_requested"] },
       OR: [{ openedAt: { not: null } }, { reopenedAt: { not: null } }],
     },
     orderBy: [{ date: "asc" }, { openedAt: "asc" }],
@@ -523,6 +525,33 @@ async function assertCanOpenRequestedBusinessDay(
   assertNoPreviousOpenBusinessDay(openRecords, requestedDate);
 }
 
+async function assertBusinessDayNotAlreadyClosed(
+  session: AuthSession,
+  branch: Branch,
+  hintDate?: string
+): Promise<void> {
+  if (!hintDate) {
+    return;
+  }
+
+  const branchId = await getBranchIdForSession(session, branch);
+  const existing = await prisma.dayClosing.findUnique({
+    where: {
+      branchId_date: {
+        branchId,
+        date: hintDate,
+      },
+    },
+  });
+
+  if (existing?.status === "closed") {
+    throw new ApiError("This branch day is already closed.", {
+      status: 409,
+      code: "day_already_closed",
+    });
+  }
+}
+
 async function resolveOpenBusinessDateForClose(
   session: AuthSession,
   branch: Branch,
@@ -548,12 +577,14 @@ async function resolveOpenBusinessDateForClose(
   return { branchId, businessDate: openRecords[0]!.date };
 }
 
-export async function closeDay(input: unknown): Promise<DayClosingRecord> {
+export async function submitCloseRequest(input: unknown): Promise<DayClosingRecord> {
   const parsed = closeDaySchema.parse(input);
   const session = await requireSession();
-  assertCanCloseDay(session);
+  assertCanSubmitCloseRequest(session);
   const summary = parsed.summary as unknown as DayClosingSummary;
   const branch = parsed.branch as Branch;
+
+  await assertBusinessDayNotAlreadyClosed(session, branch, parsed.date);
 
   const { branchId, businessDate } = await resolveOpenBusinessDateForClose(
     session,
@@ -577,6 +608,13 @@ export async function closeDay(input: unknown): Promise<DayClosingRecord> {
     });
   }
 
+  if (existing?.status === "close_requested") {
+    throw new ApiError("A closing request has already been submitted for this business day.", {
+      status: 409,
+      code: "close_request_already_pending",
+    });
+  }
+
   if (!existing?.openedAt && !existing?.reopenedAt) {
     throw new ApiError("Open the shop before closing the day.", {
       status: 400,
@@ -584,10 +622,91 @@ export async function closeDay(input: unknown): Promise<DayClosingRecord> {
     });
   }
 
-  const staffOnShift = await getStaffOnShiftAtBranch(
-    parsed.branch as Branch,
-    businessDate
+  const staffOnShift = await getStaffOnShiftAtBranch(branch, businessDate);
+  if (staffOnShift.length > 0) {
+    const names = staffOnShift.map((member) => member.staffName).join(", ");
+    throw new ApiError(
+      `Cannot submit closing while staff are still on shift: ${names}`,
+      {
+        status: 409,
+        code: "staff_on_shift",
+        details: { staffOnShift },
+      }
+    );
+  }
+
+  const now = new Date();
+  const actor = await prisma.user.findUnique({
+    where: { id: session.userId },
+    include: { staff: true },
+  });
+  const submittedByName = await resolveActorDisplayName(
+    session,
+    actor?.staff?.name ?? parsed.closedByName ?? null
   );
+
+  const record = await prisma.dayClosing.update({
+    where: { id: existing!.id },
+    data: {
+      status: "close_requested",
+      metrics: parsed.metrics as unknown as Prisma.InputJsonValue,
+      staffPayouts: parsed.staffPayouts as unknown as Prisma.InputJsonValue,
+      expectedCash: parsed.expectedCash,
+      actualCashCounted: parsed.actualCashCounted,
+      cashDifference: parsed.cashDifference,
+      cashStatus: parsed.cashStatus,
+      reconciliationNotes: parsed.reconciliationNotes?.trim() || null,
+      summary: withCloseRequest(summary, {
+        submittedBy: session.userId,
+        submittedByName,
+        submittedAt: now.toISOString(),
+      }) as unknown as Prisma.InputJsonValue,
+      closingNotes: parsed.closingNotes?.trim() || null,
+    },
+  });
+
+  return mapDayClosingRecord(record);
+}
+
+export async function approveAndCloseDay(input: unknown): Promise<DayClosingRecord> {
+  const parsed = closeDaySchema.parse(input);
+  const session = await requireSession();
+  assertCanApproveAndClose(session);
+  const summary = parsed.summary as unknown as DayClosingSummary;
+  const branch = parsed.branch as Branch;
+
+  await assertBusinessDayNotAlreadyClosed(session, branch, parsed.date);
+
+  const { branchId, businessDate } = await resolveOpenBusinessDateForClose(
+    session,
+    branch,
+    parsed.date
+  );
+
+  const existing = await prisma.dayClosing.findUnique({
+    where: {
+      branchId_date: {
+        branchId,
+        date: businessDate,
+      },
+    },
+  });
+
+  if (existing?.status !== "close_requested") {
+    throw new ApiError("No pending closing request exists for this business day.", {
+      status: 409,
+      code: "close_request_not_pending",
+    });
+  }
+
+  if (!existing.openedAt && !existing.reopenedAt) {
+    throw new ApiError("Open the shop before closing the day.", {
+      status: 400,
+      code: "shop_not_opened",
+    });
+  }
+
+  const staffOnShift = await getStaffOnShiftAtBranch(branch, businessDate);
   if (staffOnShift.length > 0) {
     const names = staffOnShift.map((member) => member.staffName).join(", ");
     throw new ApiError(
@@ -630,14 +749,9 @@ export async function closeDay(input: unknown): Promise<DayClosingRecord> {
     createdBy: createdBy || undefined,
   });
 
-  const record = await prisma.dayClosing.upsert({
-    where: {
-      branchId_date: {
-        branchId,
-        date: businessDate,
-      },
-    },
-    update: {
+  const record = await prisma.dayClosing.update({
+    where: { id: existing.id },
+    data: {
       status: "closed",
       metrics: parsed.metrics as unknown as Prisma.InputJsonValue,
       staffPayouts: parsed.staffPayouts as unknown as Prisma.InputJsonValue,
@@ -647,34 +761,22 @@ export async function closeDay(input: unknown): Promise<DayClosingRecord> {
       cashStatus: parsed.cashStatus,
       reconciliationNotes: parsed.reconciliationNotes?.trim() || null,
       summary: parsed.summary as unknown as Prisma.InputJsonValue,
-      closedBy: parsed.closedBy ?? null,
-      closedByName: parsed.closedByName ?? null,
+      closedBy: parsed.closedBy ?? session.userId,
+      closedByName: parsed.closedByName ?? session.displayName,
       closedAt: now,
       closingNotes: parsed.closingNotes?.trim() || null,
       reopenedBy: null,
       reopenedByName: null,
       reopenedAt: null,
     },
-    create: {
-      date: businessDate,
-      branchId,
-      status: "closed",
-      metrics: parsed.metrics as unknown as Prisma.InputJsonValue,
-      staffPayouts: parsed.staffPayouts as unknown as Prisma.InputJsonValue,
-      expectedCash: parsed.expectedCash,
-      actualCashCounted: parsed.actualCashCounted,
-      cashDifference: parsed.cashDifference,
-      cashStatus: parsed.cashStatus,
-      reconciliationNotes: parsed.reconciliationNotes?.trim() || null,
-      summary: parsed.summary as unknown as Prisma.InputJsonValue,
-      closedBy: parsed.closedBy ?? null,
-      closedByName: parsed.closedByName ?? null,
-      closedAt: now,
-      closingNotes: parsed.closingNotes?.trim() || null,
-    },
   });
 
   return mapDayClosingRecord(record);
+}
+
+/** @deprecated Staff must use submitCloseRequest; management uses approveAndCloseDay. */
+export async function closeDay(input: unknown): Promise<DayClosingRecord> {
+  return approveAndCloseDay(input);
 }
 
 export async function reopenDay(input: unknown): Promise<DayClosingRecord> {
@@ -744,7 +846,7 @@ export async function getClosedDayRecord(
   return mapDayClosingRecord(record);
 }
 
-export type BranchDayState = "closed" | "open" | "waiting";
+export type BranchDayState = "closed" | "open" | "close_requested" | "waiting";
 
 async function findDayClosingRow(branch: Branch, date: string) {
   const branchId = await getBranchIdByCode(branch);
@@ -770,6 +872,10 @@ export async function getBranchDayState(
 
   if (record.status === "closed") {
     return "closed";
+  }
+
+  if (record.status === "close_requested") {
+    return "close_requested";
   }
 
   if (record.openedAt || record.reopenedAt) {

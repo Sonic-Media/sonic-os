@@ -5,6 +5,8 @@ import { formatCurrency } from "@/lib/format";
 import { uiSurface } from "@/lib/ui/design-tokens";
 import { cn } from "@/lib/utils";
 
+export type CloseDayConfirmMode = "submit" | "approve";
+
 interface CloseDayConfirmDialogProps {
   branchName: string;
   businessDate: string;
@@ -13,6 +15,7 @@ interface CloseDayConfirmDialogProps {
   dailyWage: number;
   cashToHandIn: number;
   isSubmitting: boolean;
+  mode?: CloseDayConfirmMode;
   onConfirm: () => void;
   onCancel: () => void;
 }
@@ -34,9 +37,12 @@ export function CloseDayConfirmDialog({
   dailyWage,
   cashToHandIn,
   isSubmitting,
+  mode = "submit",
   onConfirm,
   onCancel,
 }: CloseDayConfirmDialogProps) {
+  const isApprove = mode === "approve";
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center px-4 py-6">
       <button
@@ -59,10 +65,14 @@ export function CloseDayConfirmDialog({
           id="close-day-confirm-title"
           className="text-xl font-semibold tracking-tight text-white"
         >
-          Close today&apos;s business day?
+          {isApprove
+            ? "Approve and close this business day?"
+            : "Submit this business day for closing?"}
         </h3>
         <p className="mt-2 text-sm leading-relaxed text-zinc-400">
-          This will lock today&apos;s records for {branchName}.
+          {isApprove
+            ? `This will finalize and lock today's records for ${branchName}.`
+            : `Your operations are saved. This sends a closing request for ${branchName} to be reviewed.`}
         </p>
 
         <div className="mt-5 rounded-2xl border border-white/[0.06] bg-black/25 p-4">
@@ -90,11 +100,13 @@ export function CloseDayConfirmDialog({
             type="button"
             onClick={onConfirm}
             loading={isSubmitting}
-            loadingLabel="Closing business day..."
+            loadingLabel={
+              isApprove ? "Approving and closing..." : "Submitting request..."
+            }
             disabled={isSubmitting}
             className="sm:min-w-[140px]"
           >
-            Close Day
+            {isApprove ? "Approve & Close" : "Submit for Closing"}
           </Button>
         </div>
       </div>
