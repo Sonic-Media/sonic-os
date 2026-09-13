@@ -8,6 +8,7 @@ import { StaffExpensesCard } from "@/components/operations/staff/staff-expenses-
 import { StaffRecentTransactionsCard } from "@/components/operations/staff/staff-recent-transactions-card";
 import { StaffRevenueCard } from "@/components/operations/staff/staff-revenue-card";
 import { StaffTodayActivityCard } from "@/components/operations/staff/staff-today-activity-card";
+import { StaffActiveBusinessDayBanner } from "@/components/operations/staff/staff-active-business-day-banner";
 import { StaffWelcomeCard } from "@/components/operations/staff/staff-welcome-card";
 import { StaffCashSummaryCard } from "@/components/operations/staff/staff-cash-summary-card";
 import { useToast } from "@/context/toast-context";
@@ -28,15 +29,19 @@ import { filterByBranchField } from "@/lib/active-branch/filters";
 import { parseAmount } from "@/lib/amounts";
 import { isPayrollEntryExpense } from "@/lib/expenses";
 import { mapCloseDayError } from "@/lib/ux/close-day-messages";
+import { getTodayISO } from "@/lib/dates";
 import { uiSpacing } from "@/lib/ui/design-tokens";
 import { cn } from "@/lib/utils";
 import type { Branch, Entry } from "@/types";
+import type { DayClosingStatus } from "@/types/day-closing";
 
 type StaffWorkflowSection = "expenses" | "daily-wage" | "end-of-day";
 
 interface StaffOperationsWorkspaceProps {
   branch: Branch;
   entry?: Entry;
+  businessDate?: string;
+  activeBusinessDayStatus?: DayClosingStatus;
 }
 
 function resolveInitialSection({
@@ -54,7 +59,10 @@ function resolveInitialSection({
 export function StaffOperationsWorkspace({
   branch,
   entry,
+  businessDate: businessDateProp,
+  activeBusinessDayStatus,
 }: StaffOperationsWorkspaceProps) {
+  const calendarDate = getTodayISO();
   const { sales } = useSales();
   const { activeBranch } = useActiveBranch();
   const { getBranchName } = useBranches();
@@ -82,7 +90,7 @@ export function StaffOperationsWorkspace({
   } = useEntryForm({
     entry,
     initialBranch: branch,
-    initialDate: entry?.date,
+    initialDate: entry?.date ?? businessDateProp,
     lockDate: true,
     mode: "today",
     scopedStaffId: linkedStaff?.id,
@@ -96,7 +104,7 @@ export function StaffOperationsWorkspace({
     businessDate,
     closeRequestPending,
     dayClosed,
-  } = useStaffCloseDay(form.date);
+  } = useStaffCloseDay(businessDateProp ?? form.date);
 
   useStaffOperationsRefresh({ closeRequestPending });
 
@@ -208,9 +216,23 @@ export function StaffOperationsWorkspace({
     toastSuccess,
   ]);
 
+  const resolvedBusinessDate = businessDateProp ?? businessDate;
+
   return (
     <div className={cn("mx-auto max-w-3xl", uiSpacing.page, uiSpacing.section)}>
-      <StaffWelcomeCard />
+      {activeBusinessDayStatus ? (
+        <StaffActiveBusinessDayBanner
+          businessDate={resolvedBusinessDate}
+          calendarDate={calendarDate}
+          status={
+            activeBusinessDayStatus === "close_requested"
+              ? "close_requested"
+              : "open"
+          }
+        />
+      ) : null}
+
+      <StaffWelcomeCard businessDate={resolvedBusinessDate} />
 
       <StaffRevenueCard
         movieRevenue={movieRevenue}

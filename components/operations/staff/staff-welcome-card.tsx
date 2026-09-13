@@ -21,13 +21,19 @@ import {
   StaffStatusBadge,
 } from "@/components/operations/staff/primitives";
 
-export function StaffWelcomeCard() {
+export function StaffWelcomeCard({ businessDate }: { businessDate?: string } = {}) {
   const today = getTodayISO();
+  const resolvedDate = businessDate ?? today;
   const { session } = useAuth();
   const { activeBranch } = useActiveBranch();
   const { getBranchName } = useSettings();
   const { staff } = useStaff();
-  const { getOpenRecord, isBranchDayOpened, isBranchDayClosed } = useDayClosing();
+  const {
+    getActiveOpenRecord,
+    getOpenRecord,
+    isBranchDayClosed,
+    isCloseRequestPending,
+  } = useDayClosing();
   const { currentAttendance } = useStaffAttendance(today);
   const [now, setNow] = useState(() => new Date());
   const [isClockingOut, setIsClockingOut] = useState(false);
@@ -43,9 +49,12 @@ export function StaffWelcomeCard() {
   );
   const firstName = staffName.split(" ")[0] ?? staffName;
   const onShift = currentAttendance?.presence === "on-shift";
-  const shopOpen = isBranchDayOpened(activeBranch, today);
-  const shopClosed = isBranchDayClosed(activeBranch, today);
-  const openRecord = getOpenRecord(activeBranch, today);
+  const activeOpenRecord = getActiveOpenRecord(activeBranch);
+  const closeRequestPending = isCloseRequestPending(activeBranch, resolvedDate);
+  const shopOpen = activeOpenRecord?.status === "open";
+  const shopClosed = isBranchDayClosed(activeBranch, resolvedDate);
+  const openRecord =
+    getOpenRecord(activeBranch, resolvedDate) ?? activeOpenRecord;
   const openedAt = openRecord?.openedAt ?? openRecord?.reopenedAt;
 
   const sessionLabel = useMemo(() => {
@@ -53,8 +62,20 @@ export function StaffWelcomeCard() {
     return formatRelativeTime(openedAt);
   }, [openedAt, now]);
 
-  const shopStatusLabel = shopClosed ? "Closed" : shopOpen ? "Open" : "Not Open";
-  const shopStatusTone = shopClosed ? "neutral" : shopOpen ? "success" : "warning";
+  const shopStatusLabel = shopClosed
+    ? "Closed"
+    : closeRequestPending
+      ? "Closing Request Sent"
+      : shopOpen
+        ? "Open"
+        : "Not Open";
+  const shopStatusTone = shopClosed
+    ? "neutral"
+    : closeRequestPending
+      ? "warning"
+      : shopOpen
+        ? "success"
+        : "warning";
 
   async function handleClockOut() {
     setIsClockingOut(true);

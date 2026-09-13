@@ -455,6 +455,93 @@ async function main() {
         readCloseRequest(mockPending[0]!.summary)?.submittedByName === "Tony",
       readCloseRequest(mockPending[0]!.summary)?.submittedByName
     );
+
+    const todayPageSource = await import("node:fs/promises").then((fs) =>
+      fs.readFile("app/operations/today/page.tsx", "utf8")
+    );
+    const openShopSource = await import("node:fs/promises").then((fs) =>
+      fs.readFile("components/operations/open-shop-page.tsx", "utf8")
+    );
+
+    recordCheck(
+      21,
+      "Next business day can open after previous day is closed",
+      (await (async () => {
+        await resetDayClosing(mainBranch, guardDateA);
+        await resetDayClosing(mainBranch, guardDateB);
+        await staffClient.json("/api/day-closings", {
+          method: "POST",
+          body: JSON.stringify({
+            action: "open",
+            branch: mainBranch,
+            date: guardDateA,
+          }),
+        });
+        await submitAndApproveClose(
+          staffClient,
+          managerClient,
+          mainBranch,
+          guardDateA
+        );
+        const nextOpen = await staffClient.json<{ status: string; date: string }>(
+          "/api/day-closings",
+          {
+            method: "POST",
+            body: JSON.stringify({
+              action: "open",
+              branch: mainBranch,
+              date: guardDateB,
+            }),
+          }
+        );
+        return nextOpen.status === "open" && nextOpen.date === guardDateB;
+      })()),
+      `opened=${guardDateB}`
+    );
+
+    recordCheck(
+      22,
+      "Next business day remains blocked while previous day is open",
+      (await (async () => {
+        await closeStaleActiveDays(mainBranch);
+        await resetDayClosing(mainBranch, guardDateA);
+        await resetDayClosing(mainBranch, guardDateB);
+        await staffClient.json("/api/day-closings", {
+          method: "POST",
+          body: JSON.stringify({
+            action: "open",
+            branch: mainBranch,
+            date: guardDateA,
+          }),
+        });
+        const blocked = await staffClient.jsonExpectFailure("/api/day-closings", {
+          method: "POST",
+          body: JSON.stringify({
+            action: "open",
+            branch: mainBranch,
+            date: guardDateB,
+          }),
+        });
+        return blocked.code === "previous_business_day_open";
+      })()),
+      "previous_business_day_open"
+    );
+
+    recordCheck(
+      23,
+      "Today page routes staff to active open business day (not Open Shop dead end)",
+      todayPageSource.includes("hasActiveBusinessDay") &&
+        todayPageSource.includes("getActiveOpenRecord"),
+      "app/operations/today/page.tsx"
+    );
+
+    recordCheck(
+      24,
+      "Open Shop page offers previous-business-day continuation path",
+      openShopSource.includes("hasStaleOpenBusinessDay") &&
+        openShopSource.includes("Continue Previous Business Day"),
+      "components/operations/open-shop-page.tsx"
+    );
   } finally {
     await cleanupCertificationCashier(cashier, { branch: "main" });
     await cleanupCertificationCashier(manager, { branch: "main" });

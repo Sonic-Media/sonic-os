@@ -57,7 +57,7 @@ export function toStaffFacingError(
     normalized.includes("previous business day still open") ||
     normalized.includes("previous_business_day_open")
   ) {
-    return message.trim();
+    return `${message.trim()}\n\nFinish that business day's operations and submit it for closing before opening a new day.`;
   }
 
   if (

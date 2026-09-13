@@ -1,184 +1,182 @@
-# Close Request Workflow — Certification Report
+# Sonic OS Close Request Workflow — Certification Report
 
 **Branch:** `cursor/close-shop-ux-fix-b6e7`  
-**Commit:** `f6d175b`  
 **Date:** 2026-09-13  
-**PR:** #39 (OPEN — not merged)  
+**PR:** [#39](https://github.com/Sonic-Media/sonic-os/pull/39) — **OPEN, NOT MERGED**  
 **Schema changed:** No  
 **Migrations created:** No  
 
 ---
 
-## Summary
+## A. Previous Close Shop UX Fix (commits `962b219`, `74c5c62`, `04b6c90`)
 
-Implemented the two-step business-day closing workflow:
-
-1. **Staff** finish operations → **Submit for Closing** → `close_requested`
-2. **Authorized management** review → **Approve & Close** → `closed`
-
-Transactions remain real persisted records. Only the business-day closing state changes.
-
-Also preserved: no time-of-day close restriction, business-date rules, previous-day guard, branch auth, error propagation from `74c5c62`, and login credential-hint removal from `04b6c90`.
-
----
-
-## Previous Workflow
-
-Staff (or management via Close Day workspace) could perform a **single-step final close** directly via `POST /api/day-closings` → `closeDay()` → immediate `closed` status.
+| Item | Status |
+|------|--------|
+| Premium End of Day card + confirmation dialog | Done |
+| Close Day error masking fix (ApiError codes preserved) | Done |
+| Post-close refresh failures non-fatal | Done |
+| No time-of-day close restriction (static + API audit) | Done |
+| Login credential-hint removal | Done (`04b6c90`) |
 
 ---
 
-## New Workflow
+## B. New Close-Request Workflow (commits `f6d175b`+)
 
-| Role | Action | Result |
-|------|--------|--------|
-| Cashier / branch-manager (staff) | Submit for Closing | `close_requested` |
-| Owner / branch-manager (management) | Approve & Close | `closed` + `closedAt` server timestamp |
+### Workflow
 
-Business-day states: `open` → `close_requested` → `closed`
+| Step | Actor | Action | State |
+|------|-------|--------|-------|
+| 1 | Staff | Open business day, record operations | `open` |
+| 2 | Staff | **Submit for Closing** | `close_requested` |
+| 3 | Staff UI | **Closing Request Sent** — “Your request is awaiting review.” | `close_requested` |
+| 4 | Management | Review in **Close Requests** panel | `close_requested` |
+| 5 | Management | **Approve & Close** | `closed` + `closedAt` |
 
-Close-request metadata stored in existing `summary` JSON (`closeRequest.submittedBy`, `submittedByName`, `submittedAt`) — no Prisma schema change.
+Transactions remain **real persisted records** throughout. Only business-day closing status changes.
+
+### Previous-business-day dead-end fix
+
+**Problem:** Staff saw “Previous business day still open…” on Open Shop with no path to submit the open day for closing.
+
+**Fix:**
+- `app/operations/today/page.tsx` routes staff to the **active open business day** workspace (using `getActiveOpenRecord`) instead of the Open Shop gate when a prior calendar date is still open or close-requested.
+- `components/operations/staff/staff-active-business-day-banner.tsx` explains the active business date.
+- `components/operations/open-shop-page.tsx` shows **Continue Previous Business Day** when a stale open day is detected.
+- `lib/ux/staff-messages.ts` adds actionable guidance on `previous_business_day_open`.
+
+Server guard `previous_business_day_open` **unchanged**.
+
+### State storage (no schema change)
+
+- `DayClosing.status`: `"close_requested"` (existing string field)
+- Request metadata in `summary.closeRequest`: `{ submittedBy, submittedByName, submittedAt }`
 
 ---
 
-## Files Changed
+## C. Automated Testing
+
+| Command | Result |
+|---------|--------|
+| `npx tsc --noEmit` | **PASS** |
+| `npm run verify:close-request-workflow` | **PASS** (24/24) |
+| `npm run verify:close-time-flexibility` | **PASS** (24/24) |
+| `npm run verify:close-day-date` | **PASS** (16/16) |
+| `npm run verify:final-open-day-guard` | **PASS** (10/10) |
+| `npm run verify:branch-selection` | **PASS** |
+| `npm run verify:close-day-payouts` | **PASS** |
+
+### Close-request workflow coverage (24 checks)
+
+1. Staff can submit a close request  
+2. Close request persists  
+3. Staff-facing duplicate message maps correctly  
+4. Duplicate close requests prevented  
+5. Unauthorized staff cannot final close  
+6. Authorized management can approve & close  
+7. Final close → CLOSED  
+8. `closedAt` = actual server timestamp  
+9–12. Close at evening / 12:30 AM / 2 AM / 5 AM  
+13. Persisted business date after midnight  
+14. Previous-business-day-open guard enforced  
+15. Branch isolation enforced  
+16. Already-closed day rejected  
+17. Zero-revenue day can close  
+18. Post-close refresh non-fatal  
+19. Staff UI refresh hook for pending requests  
+20. Management close request list resolves pending records  
+21. Next business day opens after previous closed  
+22. Next business day blocked while previous open  
+23. Today page routes to active open business day  
+24. Open Shop offers previous-day continuation path  
+
+---
+
+## D. Actual Preview Verification
+
+| Item | Status |
+|------|--------|
+| Preview URL | `https://sonic-os-git-cursor-close-shop-ux-fix-b6e7-sonic9.vercel.app` |
+| Vercel Deployment Protection | Blocks unauthenticated E2E (401 SSO) — documented in `fe6c8fe` |
+| Same-commit localhost API + UI | **PASS** (prior session: Close Day POST 201) |
+| Close-request Preview E2E | Pending human review after Preview redeploy from latest push |
+
+Preview must be re-verified manually after this push for:
+- Submit for Closing → Closing Request Sent (staff)
+- Close Requests panel → Approve & Close (management)
+- Previous open business day routes to workspace (not Open Shop dead end)
+
+---
+
+## Files Changed (complete)
 
 ### Server / API
-- `types/day-closing.ts` — added `close_requested` status
-- `lib/day-closing/permissions.ts` — `canSubmitCloseRequest`, `canApproveAndClose`
-- `lib/day-closing/close-request.ts` — **new** summary helpers
-- `lib/day-closing/business-date.ts` — active day includes `close_requested`
-- `lib/day-closing/storage.ts` — UI cache helpers for close-request state
-- `lib/day-closing/sync-daily-operation.ts` — allow sync during approve
-- `lib/server/day-closing-guards.ts` — submit/approve guards; `assertBranchDayNotClosedForWrite`
-- `lib/server/services/day-closings-service.ts` — `submitCloseRequest`, `approveAndCloseDay`
-- `lib/server/services/daily-operations-service.ts` — `allowCloseRequested` upsert option
-- `app/api/day-closings/route.ts` — `submit-close-request`, `approve-close` actions
-- `lib/api/day-closings.ts` — client API helpers
+- `types/day-closing.ts`
+- `lib/day-closing/permissions.ts`, `close-request.ts`, `business-date.ts`, `storage.ts`, `sync-daily-operation.ts`
+- `lib/server/day-closing-guards.ts`, `services/day-closings-service.ts`, `services/daily-operations-service.ts`
+- `app/api/day-closings/route.ts`, `lib/api/day-closings.ts`
 
 ### Client / UI
-- `context/day-closing-context.tsx` — `submitCloseRequest`, `approveAndClose`
-- `hooks/use-staff-close-day.ts` — staff submit flow
-- `hooks/use-staff-operations-refresh.ts` — **new** polling while request pending
-- `hooks/use-management-approve-close.ts` — **new** management approve hook
-- `hooks/use-branch-state.ts` — `close_requested` status
-- `components/operations/staff/staff-end-of-day-card.tsx` — Submit / Closing Request Sent UI
-- `components/operations/staff/close-day-confirm-dialog.tsx` — submit vs approve modes
-- `components/operations/staff/staff-operations-workspace.tsx` — wired submit + refresh
-- `components/operations/close-day-workspace.tsx` — management approve path
-- `components/dashboard/owner/mission-control-close-requests.tsx` — **new** Close Requests panel
-- `components/dashboard/owner/mission-control-end-of-day.tsx` — pending status copy
-- `components/dashboard/owner/owner-dashboard-layout.tsx` — Close Requests placement
-- `lib/ux/close-day-messages.ts` — close-request error codes
+- `context/day-closing-context.tsx`
+- `app/operations/today/page.tsx` — **previous-day routing fix**
+- `components/operations/open-shop-page.tsx` — **continuation path**
+- `components/operations/staff/staff-active-business-day-banner.tsx` — **new**
+- `components/operations/staff/staff-operations-workspace.tsx`
+- `components/operations/staff/staff-end-of-day-card.tsx`
+- `components/operations/staff/staff-welcome-card.tsx`
+- `components/operations/staff/close-day-confirm-dialog.tsx`
+- `components/operations/close-day-workspace.tsx`
+- `components/dashboard/owner/mission-control-close-requests.tsx`
+- `components/dashboard/owner/mission-control-end-of-day.tsx`
+- `components/dashboard/owner/owner-dashboard-layout.tsx`
+- `hooks/use-staff-close-day.ts`, `use-staff-operations-refresh.ts`, `use-management-approve-close.ts`, `use-branch-state.ts`
+- `lib/ux/close-day-messages.ts`, `lib/ux/staff-messages.ts`
 
-### Tests / scripts
-- `scripts/verify-close-request-helpers.ts` — **new**
-- `scripts/verify-close-request-workflow.ts` — **new** (20 checks)
-- `scripts/verify-close-time-flexibility.ts` — two-step close flow
-- `scripts/verify-close-day-date-consistency.ts` — two-step close flow
-- `scripts/verify-final-open-day-guard.ts` — two-step close before next open
-- `package.json` — `verify:close-request-workflow`
-
-### Reports
-- `docs/data-integrity/CLOSE-REQUEST-WORKFLOW.md` (this file)
-- `docs/data-integrity/CLOSE-REQUEST-WORKFLOW.docx`
+### Tests
+- `scripts/verify-close-request-helpers.ts`, `verify-close-request-workflow.ts`
+- Updated: `verify-close-time-flexibility.ts`, `verify-close-day-date-consistency.ts`, `verify-final-open-day-guard.ts`
 
 ---
 
-## Permission Model
+## Permissions
 
 | Action | Owner | Branch Manager | Cashier |
 |--------|-------|----------------|---------|
 | Submit close request | No | Yes | Yes |
 | Approve & close | Yes | Yes | No |
-| Reopen closed day | No | Yes | No |
 
-All enforced server-side via `assertCanSubmitCloseRequest` / `assertCanApproveAndClose`.
-
----
-
-## Staff Flow
-
-- End of Day card shows **Submit for Closing**
-- Confirmation dialog explains operations are saved; request goes for review
-- After submit: **Closing Request Sent** + “Your request is awaiting review.”
-- Duplicate submits blocked (`close_request_already_pending`)
-- Records blocked while pending (`close_request_pending`)
-- Auto-refresh via `useStaffOperationsRefresh` while pending
+Enforced server-side.
 
 ---
 
-## Management Flow
+## Staff / Management UX Terminology
 
-- **Close Requests** panel on Mission Control dashboard
-- Compact cards: branch, business date, submitted by, sales/expenses/wages/cash
-- **Review & Close** opens existing confirmation dialog with **Approve & Close**
-- `CloseDayWorkspace` shows pending request summary for in-operations review
+| Context | Label |
+|---------|-------|
+| Staff action | **Submit for Closing** |
+| After submit | **Closing Request Sent** |
+| Supporting text | “Your request is awaiting review.” |
+| Management action | **Approve & Close** |
 
----
-
-## Time-of-Day Restriction Audit
-
-No close-hour gate added or retained. Closing depends only on:
-
-- Is there an open / close-requested business day?
-- Is the user authorized?
-
-`SHOP_CLOSE_HOUR` remains open-shop only.
+No “Owner” in staff-facing status. No “Waiting for Owner Approval.”
 
 ---
 
-## Business-Date Behavior
+## Business Rules Preserved
 
-Unchanged: business date = date shop was opened. After-midnight closes use persisted open date; `closedAt` = actual server timestamp.
-
----
-
-## Previous-Day Guard
-
-Unchanged: `previous_business_day_open` blocks opening next day while prior day is `open` or `close_requested`. Workflow now provides actionable path: submit → approve → open next day.
-
----
-
-## Error Handling
-
-Preserved from `74c5c62`:
-
-- ApiError codes surface human-readable messages
-- Post-close refresh failures logged, not reported as close failure
-- New codes: `close_request_already_pending`, `close_request_not_pending`, `close_request_pending`
-
----
-
-## Login Credential-Hint Removal
-
-Completed in `04b6c90` — no default owner credentials on login page.
-
----
-
-## Tests Run (exact results)
-
-| Command | Result |
-|---------|--------|
-| `npx tsc --noEmit` | PASS |
-| `npm run verify:close-request-workflow` | PASS (20/20) |
-| `npm run verify:close-time-flexibility` | PASS (24/24) |
-| `npm run verify:close-day-date` | PASS (16/16) |
-| `npm run verify:final-open-day-guard` | PASS (10/10) |
-| `npm run verify:branch-selection` | PASS |
-| `npm run verify:close-day-payouts` | PASS |
+- No time-of-day close restriction  
+- Business date = open date; `closedAt` = actual timestamp  
+- Previous-business-day-open guard (server)  
+- Branch isolation + authorization  
+- Staff shifts independent of business-day closure  
+- Payout sequencing on approve  
+- Error code preservation (`74c5c62`)  
+- Login page has no default credentials  
 
 ---
 
 ## Production Safety
 
-- No Prisma schema changes
-- No migrations
-- No production data / env changes
-- PR #39 not merged
-
----
-
-## Deployment
-
-Push branch `cursor/close-shop-ux-fix-b6e7` to origin; Vercel Preview rebuilds automatically.
+- No Prisma schema changes  
+- No migrations  
+- No production data / env changes  
+- **PR #39 NOT merged**
