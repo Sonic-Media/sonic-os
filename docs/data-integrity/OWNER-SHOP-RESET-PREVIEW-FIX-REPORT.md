@@ -137,7 +137,7 @@ The agent **cannot** read Preview `DATABASE_URL` or invent the fingerprint. You 
 
 ## Preview Deployment
 
-- **New Preview commit:** *(filled after push)*
+- **New Preview commit:** `2c6e03d`
 - **Preview reset confirmed working:** **NO** — requires Preview env vars + manual retest after deploy
 
 ---
