@@ -1,7 +1,7 @@
 # Sonic OS — Closing Request Approval Flow
 
 **Branch:** `cursor/close-shop-ux-fix-b6e7`  
-**Commit:** `788aeac`  
+**Commit:** `6f44b76` (feature: `788aeac`)  
 **Date:** 2026-09-13  
 **PR:** [#39](https://github.com/Sonic-Media/sonic-os/pull/39) — **OPEN, NOT MERGED**  
 **Schema changed:** No  
@@ -170,7 +170,7 @@ Today's Operations remains read-only for owners.
 | Item | Status |
 |------|--------|
 | Branch pushed | `cursor/close-shop-ux-fix-b6e7` |
-| Vercel Preview rebuild | Expected on push |
+| Vercel Preview rebuild | **PASS** (CI green on push) |
 | Manual Preview E2E | **NOT RUN** (Deployment Protection blocks automated browser E2E) |
 | Localhost full lifecycle | **PASS** |
 
