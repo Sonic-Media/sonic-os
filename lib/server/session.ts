@@ -1,5 +1,6 @@
 import { cache } from "react";
-import { headers, cookies } from "next/headers";
+import { cookies } from "next/headers";
+import type { NextRequest } from "next/server";
 import { ApiError } from "@/lib/api/errors";
 import { prisma } from "@/lib/db";
 import { isValidSignedSessionToken } from "@/lib/server/security/session-token";
@@ -50,16 +51,76 @@ async function readSessionFromDatabase(
   };
 }
 
-export const getSessionFromRequest = cache(async (): Promise<AuthSession | null> => {
+export function readSessionTokenFromHttpRequest(
+  request?: Request
+): string | null {
+  if (!request) {
+    return null;
+  }
+
+  const nextRequest = request as NextRequest;
+  const fromCookieApi = nextRequest.cookies?.get?.(SESSION_COOKIE_NAME)?.value;
+  if (fromCookieApi) {
+    return fromCookieApi;
+  }
+
+  const cookieHeader = request.headers.get("cookie");
+  if (!cookieHeader) {
+    return null;
+  }
+
+  for (const segment of cookieHeader.split(";")) {
+    const trimmed = segment.trim();
+    if (!trimmed) {
+      continue;
+    }
+
+    const separatorIndex = trimmed.indexOf("=");
+    if (separatorIndex <= 0) {
+      continue;
+    }
+
+    const name = trimmed.slice(0, separatorIndex).trim();
+    if (name !== SESSION_COOKIE_NAME) {
+      continue;
+    }
+
+    const value = trimmed.slice(separatorIndex + 1).trim();
+    return value ? decodeURIComponent(value) : null;
+  }
+
+  return null;
+}
+
+async function readSessionToken(request?: Request): Promise<string | null> {
+  const fromHttpRequest = readSessionTokenFromHttpRequest(request);
+  if (fromHttpRequest) {
+    return fromHttpRequest;
+  }
+
   const cookieStore = await cookies();
-  const token = cookieStore.get(SESSION_COOKIE_NAME)?.value;
-  if (!token) return null;
+  return cookieStore.get(SESSION_COOKIE_NAME)?.value ?? null;
+}
 
-  return readSessionFromDatabase(token);
-});
+const getCachedSessionByToken = cache(
+  async (token: string): Promise<AuthSession | null> => {
+    return readSessionFromDatabase(token);
+  }
+);
 
-export async function requireSession(): Promise<AuthSession> {
-  const session = await getSessionFromRequest();
+export async function getSessionFromRequest(
+  request?: Request
+): Promise<AuthSession | null> {
+  const token = await readSessionToken(request);
+  if (!token) {
+    return null;
+  }
+
+  return getCachedSessionByToken(token);
+}
+
+export async function requireSession(request?: Request): Promise<AuthSession> {
+  const session = await getSessionFromRequest(request);
   if (!session) {
     throw new ApiError("Authentication required.", {
       status: 401,
@@ -77,7 +138,8 @@ export async function requireSession(): Promise<AuthSession> {
   return session;
 }
 
-export async function getSessionTokenFromRequest(): Promise<string | null> {
-  const cookieStore = await cookies();
-  return cookieStore.get(SESSION_COOKIE_NAME)?.value ?? null;
+export async function getSessionTokenFromRequest(
+  request?: Request
+): Promise<string | null> {
+  return readSessionToken(request);
 }

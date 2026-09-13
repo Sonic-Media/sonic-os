@@ -13,6 +13,10 @@ import {
 } from "./verify-bootstrap";
 import { submitCloseRequestApi, EMPTY_CLOSE_PAYLOAD } from "./verify-close-request-helpers";
 import {
+  readSessionTokenFromHttpRequest,
+  SESSION_COOKIE_NAME,
+} from "@/lib/server/session";
+import {
   loginWithCredentials,
   VERIFY_OWNER_CREDENTIALS,
 } from "./verify-session";
@@ -104,6 +108,8 @@ async function main() {
 
   const serviceSource = readRepoFile("lib/server/branch-shop-reset-service.ts");
   const routeSource = readRepoFile("app/api/admin/shop-reset/route.ts");
+  const sessionSource = readRepoFile("lib/server/session.ts");
+  const routeHandlerSource = readRepoFile("lib/server/route-handler.ts");
   const uiSource = readRepoFile("components/settings/shop-reset-section.tsx");
   const apiSource = readRepoFile("lib/api/shop-reset.ts");
   const guardSource = readRepoFile("lib/server/database-target-guard.ts");
@@ -221,6 +227,45 @@ async function main() {
     "database-target-guard.ts"
   );
 
+  recordCheck(
+    "AUTH-static-request-cookie-parser",
+    "Session resolver reads sonic-os-session-token from Request Cookie header",
+    sessionSource.includes("readSessionTokenFromHttpRequest") &&
+      sessionSource.includes('request.headers.get("cookie")'),
+    "lib/server/session.ts"
+  );
+
+  recordCheck(
+    "AUTH-static-route-session-handoff",
+    "Shop reset route resolves session once and passes it to the service",
+    routeSource.includes("withSessionDatabase") &&
+      routeSource.includes("previewBranchShopReset(scope, session)") &&
+      routeSource.includes("runBranchShopReset(") &&
+      routeSource.includes("session") &&
+      !serviceSource.includes("requireSession("),
+    "shop-reset route + service"
+  );
+
+  recordCheck(
+    "AUTH-static-route-handler-request",
+    "withDatabase passes Request into requireSession for cookie resolution",
+    routeHandlerSource.includes("requireSession(options?.request)"),
+    "lib/server/route-handler.ts"
+  );
+
+  const mockRequest = new Request("http://localhost/api/admin/shop-reset", {
+    method: "POST",
+    headers: {
+      Cookie: `${SESSION_COOKIE_NAME}=preview-token-value; other=value`,
+    },
+  });
+  recordCheck(
+    "AUTH-unit-request-cookie",
+    "Request Cookie header parser extracts session token",
+    readSessionTokenFromHttpRequest(mockRequest) === "preview-token-value",
+    `token=${readSessionTokenFromHttpRequest(mockRequest) ?? "null"}`
+  );
+
   let cashier: CertificationCashier | null = null;
   let manager: CertificationCashier | null = null;
   const ownerClient = new JsonClient();
@@ -228,6 +273,21 @@ async function main() {
   const managerClient = new JsonClient();
 
   try {
+    const unauthClient = new JsonClient();
+    const unauthPost = await unauthClient.jsonExpectFailure("/api/admin/shop-reset", {
+      method: "POST",
+      body: JSON.stringify({
+        scope: "main",
+        confirmation: SHOP_RESET_CONFIRM_KANSANGA,
+      }),
+    });
+    recordCheck(
+      "A-live-unauthenticated-post",
+      "Unauthenticated shop reset POST is rejected",
+      unauthPost.status === 401 && unauthPost.code === "unauthorized",
+      `status=${unauthPost.status}, code=${unauthPost.code}`
+    );
+
     await loginWithCredentials(ownerClient, VERIFY_OWNER_CREDENTIALS);
 
     const preview = await ownerClient.json<ShopResetPreviewPayload>(
@@ -303,6 +363,13 @@ async function main() {
       "G-live",
       "Exact confirmation phrase required",
       badConfirmation.status === 400,
+      `status=${badConfirmation.status}, code=${badConfirmation.code}`
+    );
+
+    recordCheck(
+      "B-live-owner-post-not-unauthorized",
+      "Authenticated owner POST reaches confirmation or target guard (not 401)",
+      badConfirmation.status !== 401,
       `status=${badConfirmation.status}, code=${badConfirmation.code}`
     );
 
