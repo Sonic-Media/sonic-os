@@ -33,7 +33,8 @@ export interface ShopResetPreviewResponse {
     productCategories: number;
     settings: number;
   };
-  blockers: string[];
+  warnings: string[];
+  openBusinessDayCount: number;
   canReset: boolean;
 }
 

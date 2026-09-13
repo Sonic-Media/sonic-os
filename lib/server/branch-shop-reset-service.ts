@@ -53,7 +53,8 @@ export interface ShopResetPreview {
     productCategories: number;
     settings: number;
   };
-  blockers: string[];
+  warnings: string[];
+  openBusinessDayCount: number;
   canReset: boolean;
 }
 
@@ -228,20 +229,13 @@ async function countPreservedMasterData(): Promise<ShopResetPreview["preserved"]
   return { users, staff, roles, branches, products, productCategories, settings };
 }
 
-async function assertNoOpenBusinessDays(branchIds: string[]): Promise<void> {
-  const openCount = await prisma.dayClosing.count({
+async function countOpenBusinessDays(branchIds: string[]): Promise<number> {
+  return prisma.dayClosing.count({
     where: {
       branchId: { in: branchIds },
       status: { in: ["open", "close_requested"] },
     },
   });
-
-  if (openCount > 0) {
-    throw new ApiError(
-      "Close all open business days and resolve pending closing requests before resetting this shop.",
-      { status: 409, code: "shop_reset_open_business_day" }
-    );
-  }
 }
 
 async function deleteBranchScopedData(
@@ -340,17 +334,14 @@ export async function previewBranchShopReset(
   const branchIds = targets.map((target) => target.id);
   const branchCodes = targets.map((target) => target.code);
 
-  const blockers: string[] = [];
-  const openCount = await prisma.dayClosing.count({
-    where: {
-      branchId: { in: branchIds },
-      status: { in: ["open", "close_requested"] },
-    },
-  });
+  const openBusinessDayCount = await countOpenBusinessDays(branchIds);
+  const warnings: string[] = [
+    "This reset will clear open, pending, and completed operational records for the selected shop.",
+  ];
 
-  if (openCount > 0) {
-    blockers.push(
-      `${openCount} open business day(s) or pending closing request(s) must be closed first.`
+  if (openBusinessDayCount > 0) {
+    warnings.push(
+      "Resetting this shop will also clear its open and pending business days. Make sure the shop is not actively being used."
     );
   }
 
@@ -370,8 +361,9 @@ export async function previewBranchShopReset(
     branchLabels,
     counts,
     preserved,
-    blockers,
-    canReset: blockers.length === 0,
+    warnings,
+    openBusinessDayCount,
+    canReset: true,
   };
 }
 
@@ -398,8 +390,6 @@ export async function runBranchShopReset(input: {
   const targets = await resolveBranchTargets(scope);
   const branchIds = targets.map((target) => target.id);
   const branchCodes = targets.map((target) => target.code);
-
-  await assertNoOpenBusinessDays(branchIds);
 
   const backup = await createDatabaseBackup();
   const backupPath = backup.archivePath ?? backup.sqlPath;
@@ -469,17 +459,28 @@ async function validateShopResetVerification(
     });
   }
 
-  const openDayCount = await prisma.dayClosing.count({
+  const remainingDayClosings = await prisma.dayClosing.count({
+    where: { branchId: { in: branchIds } },
+  });
+
+  if (remainingDayClosings > 0) {
+    throw new ApiError(
+      "Shop reset verification failed — day closing records remain for the selected shop.",
+      { status: 500, code: "shop_reset_day_closing_remaining" }
+    );
+  }
+
+  const nonZeroStockProducts = await prisma.product.count({
     where: {
       branchId: { in: branchIds },
-      status: { in: ["open", "close_requested"] },
+      currentStock: { not: 0 },
     },
   });
 
-  if (openDayCount > 0) {
+  if (nonZeroStockProducts > 0) {
     throw new ApiError(
-      "Shop reset verification failed — open business days or pending closing requests remain.",
-      { status: 500, code: "shop_reset_open_day_remaining" }
+      "Shop reset verification failed — product stock was not zeroed for the selected shop.",
+      { status: 500, code: "shop_reset_stock_remaining" }
     );
   }
 

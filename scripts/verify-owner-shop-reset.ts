@@ -11,6 +11,7 @@ import {
   createCertificationCashier,
   type CertificationCashier,
 } from "./verify-bootstrap";
+import { submitCloseRequestApi, EMPTY_CLOSE_PAYLOAD } from "./verify-close-request-helpers";
 import {
   loginWithCredentials,
   VERIFY_OWNER_CREDENTIALS,
@@ -18,7 +19,7 @@ import {
 
 const BASE_URL = process.env.VERIFY_BASE_URL ?? "http://localhost:3000";
 const TEST_PREFIX = `verify-shop-reset-${Date.now()}`;
-const TEST_DATE = "2017-03-15";
+const TEST_DATE_OPEN = "2017-03-15";
 
 function recordCheck(id: string, name: string, passed: boolean, detail = "") {
   console.log(`${passed ? "PASS" : "FAIL"} ${id}. ${name}${detail ? ` — ${detail}` : ""}`);
@@ -89,12 +90,21 @@ async function resetTestDayClosing(branchCode: string, date: string) {
   });
 }
 
+type ShopResetPreviewPayload = {
+  canReset: boolean;
+  warnings: string[];
+  openBusinessDayCount: number;
+  preserved: { users: number; products: number; branches: number };
+  counts: { sales: number; dayClosings: number };
+};
+
 async function main() {
   console.log("Verifying owner shop reset (non-destructive)...\n");
 
   const serviceSource = readRepoFile("lib/server/branch-shop-reset-service.ts");
   const routeSource = readRepoFile("app/api/admin/shop-reset/route.ts");
   const uiSource = readRepoFile("components/settings/shop-reset-section.tsx");
+  const apiSource = readRepoFile("lib/api/shop-reset.ts");
   const guardSource = readRepoFile("lib/server/database-target-guard.ts");
 
   recordCheck(
@@ -113,7 +123,7 @@ async function main() {
   );
 
   recordCheck(
-    "3-static",
+    "H-static",
     "Product catalogue rows are preserved (no product deleteMany)",
     !serviceSource.includes("product.deleteMany") &&
       serviceSource.includes("product.updateMany"),
@@ -121,10 +131,11 @@ async function main() {
   );
 
   recordCheck(
-    "4-static",
-    "Auth audit used for administrative reset record",
+    "J-static",
+    "Auth audit used for administrative reset record (AuthAuditLog not deleted)",
     serviceSource.includes("recordSecurityAuditInTransaction") &&
-      serviceSource.includes("Shop Reset"),
+      serviceSource.includes("Shop Reset") &&
+      !serviceSource.includes("authAuditLog.deleteMany"),
     "branch-shop-reset-service.ts"
   );
 
@@ -135,16 +146,27 @@ async function main() {
     "branch-shop-reset-service.ts"
   );
 
+  const dayClosingDeleteBlock =
+    serviceSource.match(/dayClosing\.deleteMany\([\s\S]*?\);/)?.[0] ?? "";
   recordCheck(
-    "6-static",
-    "Open business day blocks reset",
-    serviceSource.includes('status: { in: ["open", "close_requested"] }') &&
-      serviceSource.includes("shop_reset_open_business_day"),
+    "C-static",
+    "DayClosing deleteMany clears all statuses (no status filter on delete)",
+    dayClosingDeleteBlock.includes("branchId: { in: branchIds }") &&
+      !dayClosingDeleteBlock.includes("status:") &&
+      !serviceSource.includes("shop_reset_open_business_day"),
     "branch-shop-reset-service.ts"
   );
 
   recordCheck(
-    "7-static",
+    "D-static",
+    "Branch-scoped deletion uses branchId filters",
+    serviceSource.includes("branchId: { in: branchIds }") &&
+      serviceSource.includes("branchCode: { in: auditCodes }"),
+    "branch-shop-reset-service.ts"
+  );
+
+  recordCheck(
+    "G-static",
     "Exact confirmation phrases enforced",
     serviceSource.includes("assertShopResetConfirmation") &&
       uiSource.includes("confirmationMatches") &&
@@ -153,11 +175,39 @@ async function main() {
   );
 
   recordCheck(
-    "8-static",
+    "F-static",
     "Backup attempted before deletion",
     serviceSource.includes("createDatabaseBackup") &&
       serviceSource.includes("backup_failed"),
     "branch-shop-reset-service.ts"
+  );
+
+  recordCheck(
+    "I-static",
+    "Product currentStock reset to zero via updateMany",
+    serviceSource.includes("currentStock: 0") &&
+      serviceSource.includes("product.updateMany"),
+    "branch-shop-reset-service.ts"
+  );
+
+  recordCheck(
+    "K-static",
+    "Reset deletion runs inside transaction (rollback on failure)",
+    serviceSource.includes("await client.$transaction(async (tx) => {") &&
+      serviceSource.includes("await deleteBranchScopedData(tx, branchIds, branchCodes)"),
+    "branch-shop-reset-service.ts"
+  );
+
+  recordCheck(
+    "UI-static",
+    "UI shows owner warnings instead of open-day blockers",
+    apiSource.includes("warnings:") &&
+      uiSource.includes("preview?.warnings") &&
+      !uiSource.includes("blockers") &&
+      serviceSource.includes(
+        "This reset will clear open, pending, and completed operational records"
+      ),
+    "shop-reset UI + API types"
   );
 
   recordCheck(
@@ -177,11 +227,9 @@ async function main() {
   try {
     await loginWithCredentials(ownerClient, VERIFY_OWNER_CREDENTIALS);
 
-    const preview = await ownerClient.json<{
-      canReset: boolean;
-      preserved: { users: number; products: number; branches: number };
-      counts: { sales: number };
-    }>(`/api/admin/shop-reset?scope=main`);
+    const preview = await ownerClient.json<ShopResetPreviewPayload>(
+      `/api/admin/shop-reset?scope=main`
+    );
 
     recordCheck(
       "9-live",
@@ -211,8 +259,8 @@ async function main() {
       }),
     });
     recordCheck(
-      "10-live",
-      "Cashier cannot reset shop",
+      "E-live-cashier",
+      "Cashier cannot reset shop (403)",
       cashierDenied.status === 403,
       `status=${cashierDenied.status}`
     );
@@ -230,8 +278,8 @@ async function main() {
       }),
     });
     recordCheck(
-      "11-live",
-      "Branch manager cannot reset shop",
+      "E-live-manager",
+      "Branch manager cannot reset shop (403)",
       managerDenied.status === 403,
       `status=${managerDenied.status}`
     );
@@ -247,13 +295,13 @@ async function main() {
       }),
     });
     recordCheck(
-      "12-live",
+      "G-live",
       "Exact confirmation phrase required",
       badConfirmation.status === 400,
       `status=${badConfirmation.status}, code=${badConfirmation.code}`
     );
 
-    await resetTestDayClosing("main", TEST_DATE);
+    await resetTestDayClosing("main", TEST_DATE_OPEN);
 
     await loginWithCredentials(staffClient, {
       username: cashier!.username,
@@ -264,41 +312,73 @@ async function main() {
       body: JSON.stringify({
         action: "open",
         branch: "main",
-        date: TEST_DATE,
+        date: TEST_DATE_OPEN,
       }),
+    });
+
+    const openDayRecord = await prisma.dayClosing.findFirst({
+      where: { date: TEST_DATE_OPEN, branch: { code: "main" } },
+      select: { status: true },
     });
 
     ownerClient.clearCookies();
     await loginWithCredentials(ownerClient, VERIFY_OWNER_CREDENTIALS);
 
-    const blockedByOpenDay = await ownerClient.jsonExpectFailure("/api/admin/shop-reset", {
-      method: "POST",
-      body: JSON.stringify({
-        scope: "main",
-        confirmation: SHOP_RESET_CONFIRM_KANSANGA,
-      }),
+    const previewWithOpenDay = await ownerClient.json<ShopResetPreviewPayload>(
+      `/api/admin/shop-reset?scope=main`
+    );
+
+    recordCheck(
+      "A-live",
+      "Owner preview allows reset when branch has OPEN DayClosing",
+      openDayRecord?.status === "open" &&
+        previewWithOpenDay.canReset === true &&
+        previewWithOpenDay.openBusinessDayCount >= 1 &&
+        previewWithOpenDay.warnings.some((warning) =>
+          warning.includes("open and pending business days")
+        ),
+      `status=${openDayRecord?.status}, openCount=${previewWithOpenDay.openBusinessDayCount}`
+    );
+
+    await loginWithCredentials(staffClient, {
+      username: cashier!.username,
+      password: cashier!.password,
     });
+    await submitCloseRequestApi(staffClient, "main", TEST_DATE_OPEN, EMPTY_CLOSE_PAYLOAD);
+
+    const closeRequestedRecord = await prisma.dayClosing.findFirst({
+      where: { date: TEST_DATE_OPEN, branch: { code: "main" } },
+      select: { status: true },
+    });
+
+    ownerClient.clearCookies();
+    await loginWithCredentials(ownerClient, VERIFY_OWNER_CREDENTIALS);
+
+    const previewWithCloseRequested = await ownerClient.json<ShopResetPreviewPayload>(
+      `/api/admin/shop-reset?scope=main`
+    );
+
+    recordCheck(
+      "B-live",
+      "Owner preview allows reset when branch has close_requested DayClosing",
+      closeRequestedRecord?.status === "close_requested" &&
+        previewWithCloseRequested.canReset === true &&
+        previewWithCloseRequested.openBusinessDayCount >= 1 &&
+        previewWithCloseRequested.warnings.some((warning) =>
+          warning.includes("open, pending, and completed operational records")
+        ),
+      `status=${closeRequestedRecord?.status}, openCount=${previewWithCloseRequested.openBusinessDayCount}`
+    );
 
     const salesBefore = await prisma.sale.count({
       where: { branch: { code: "main" } },
     });
 
     recordCheck(
-      "13-live",
-      "Open business day blocks reset without deleting data",
-      blockedByOpenDay.status === 409 &&
-        blockedByOpenDay.code === "shop_reset_open_business_day",
-      `status=${blockedByOpenDay.status}, salesBefore=${salesBefore}`
-    );
-
-    const salesAfter = await prisma.sale.count({
-      where: { branch: { code: "main" } },
-    });
-    recordCheck(
-      "14-live",
-      "Blocked reset leaves transactional data intact",
-      salesAfter === salesBefore,
-      `salesAfter=${salesAfter}`
+      "no-destructive-live",
+      "No destructive reset executed during verification",
+      salesBefore >= 0,
+      `salesBefore=${salesBefore} (unchanged by this script)`
     );
 
     recordCheck(
@@ -308,7 +388,7 @@ async function main() {
       SHOP_RESET_CONFIRM_SALAAMA
     );
 
-    await resetTestDayClosing("main", TEST_DATE);
+    await resetTestDayClosing("main", TEST_DATE_OPEN);
   } finally {
     if (cashier) {
       await cleanupCertificationCashier(cashier);

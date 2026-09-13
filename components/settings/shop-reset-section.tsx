@@ -101,7 +101,6 @@ export function ShopResetSection() {
   const confirmationMatches = confirmation.trim() === confirmationPhrase;
   const canSubmit =
     confirmationMatches &&
-    preview?.canReset &&
     phase !== "backing_up" &&
     phase !== "resetting" &&
     phase !== "verifying";
@@ -131,7 +130,7 @@ export function ShopResetSection() {
   }, [scope]);
 
   async function handleReset() {
-    if (!confirmationMatches || !preview?.canReset) {
+    if (!confirmationMatches) {
       return;
     }
 
@@ -254,10 +253,10 @@ export function ShopResetSection() {
           </div>
         </div>
 
-        {preview?.blockers.length ? (
+        {preview?.warnings.length ? (
           <div className="rounded-2xl border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
-            {preview.blockers.map((blocker) => (
-              <p key={blocker}>{blocker}</p>
+            {preview.warnings.map((warning) => (
+              <p key={warning}>{warning}</p>
             ))}
           </div>
         ) : null}
@@ -307,23 +306,37 @@ export function ShopResetSection() {
         {report && phase === "complete" ? (
           <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/[0.08] p-4">
             <p className="text-sm font-semibold uppercase tracking-[0.12em] text-emerald-200">
-              Verification
+              Verification — Operational Data Cleared
             </p>
             <div className="mt-3 space-y-2">
               <SummaryRow label="Sales" value={report.verification.sales} highlight="success" />
               <SummaryRow label="Expenses" value={report.verification.expenses} highlight="success" />
               <SummaryRow label="Purchases" value={report.verification.purchases} highlight="success" />
               <SummaryRow label="Staff Payments" value={report.verification.staffPayments} highlight="success" />
-              <SummaryRow label="Day Closings" value={report.verification.dayClosings} highlight="success" />
+              <SummaryRow label="Daily Operations" value={report.verification.dailyOperations} highlight="success" />
+              <SummaryRow label="Day Closings (all statuses)" value={report.verification.dayClosings} highlight="success" />
               <SummaryRow label="Stock Movements" value={report.verification.stockMovements} highlight="success" />
+              <SummaryRow label="Customers / Suppliers" value={report.verification.customers + report.verification.suppliers} highlight="success" />
               <SummaryRow
-                label="Current Stock (products reset)"
+                label="Products with current stock = 0"
                 value={report.verification.productStockReset}
                 highlight="success"
               />
             </div>
+            <p className="mt-4 text-sm font-semibold uppercase tracking-[0.12em] text-emerald-200">
+              Preserved Master Data
+            </p>
+            <div className="mt-3 space-y-2">
+              <SummaryRow label="Users" value={report.preserved.users} />
+              <SummaryRow label="Staff" value={report.preserved.staff} />
+              <SummaryRow label="Roles" value={report.preserved.roles} />
+              <SummaryRow label="Branches" value={report.preserved.branches} />
+              <SummaryRow label="Product Catalogue" value={report.preserved.products} />
+              <SummaryRow label="Categories" value={report.preserved.productCategories} />
+              <SummaryRow label="Settings" value={report.preserved.settings} />
+            </div>
             <p className="mt-4 text-xs text-zinc-500">
-              Backup saved before reset.
+              Backup saved before reset. Authentication audit history preserved.
             </p>
             <div className="mt-4">
               <Button href="/operations/today" variant="secondary">
