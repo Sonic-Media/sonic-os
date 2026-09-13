@@ -114,7 +114,7 @@ Regression coverage includes:
 
 ## Preview Deployment
 
-- **New Preview commit:** *(filled after push)*
+- **New Preview commit:** `247ddcc`
 - **Manual Preview retest required:** **YES**
 - **Preview reset confirmed working:** **NO** — awaiting deploy + env vars + manual test
 
