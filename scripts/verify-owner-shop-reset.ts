@@ -94,6 +94,7 @@ type ShopResetPreviewPayload = {
   canReset: boolean;
   warnings: string[];
   openBusinessDayCount: number;
+  resetTarget: { authorized: boolean; fingerprint: string };
   preserved: { users: number; products: number; branches: number };
   counts: { sales: number; dayClosings: number };
 };
@@ -142,8 +143,9 @@ async function main() {
   recordCheck(
     "5-static",
     "Database target guard enforced before reset",
-    serviceSource.includes("assertSafeTransactionalResetTarget"),
-    "branch-shop-reset-service.ts"
+    serviceSource.includes("assertSafeTransactionalResetTarget") &&
+      guardSource.includes("reset_target_forbidden"),
+    "branch-shop-reset-service.ts + database-target-guard.ts"
   );
 
   const dayClosingDeleteBlock =
@@ -234,8 +236,10 @@ async function main() {
     recordCheck(
       "9-live",
       "Owner can load shop reset preview",
-      typeof preview.counts.sales === "number" && preview.preserved.users > 0,
-      `users=${preview.preserved.users}`
+      typeof preview.counts.sales === "number" &&
+        preview.preserved.users > 0 &&
+        typeof preview.resetTarget.fingerprint === "string",
+      `users=${preview.preserved.users}, fingerprint=${preview.resetTarget.fingerprint}`
     );
 
     cashier = await createCertificationCashier(ownerClient, `${TEST_PREFIX}-cashier`, "main");

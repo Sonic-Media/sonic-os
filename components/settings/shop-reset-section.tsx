@@ -99,8 +99,10 @@ export function ShopResetSection() {
   }, [scope, selectedLabel]);
 
   const confirmationMatches = confirmation.trim() === confirmationPhrase;
+  const resetTargetAuthorized = preview?.resetTarget.authorized ?? false;
   const canSubmit =
     confirmationMatches &&
+    resetTargetAuthorized &&
     phase !== "backing_up" &&
     phase !== "resetting" &&
     phase !== "verifying";
@@ -130,7 +132,7 @@ export function ShopResetSection() {
   }, [scope]);
 
   async function handleReset() {
-    if (!confirmationMatches) {
+    if (!confirmationMatches || !resetTargetAuthorized) {
       return;
     }
 
@@ -258,6 +260,28 @@ export function ShopResetSection() {
             {preview.warnings.map((warning) => (
               <p key={warning}>{warning}</p>
             ))}
+          </div>
+        ) : null}
+
+        {preview?.resetTarget && !preview.resetTarget.authorized ? (
+          <div className="rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+            <p className="font-medium">Reset target not authorized for this deployment.</p>
+            {preview.resetTarget.message ? (
+              <p className="mt-2">{preview.resetTarget.message}</p>
+            ) : null}
+            <p className="mt-2 text-xs text-red-200/80">
+              Database fingerprint:{" "}
+              <span className="font-mono">{preview.resetTarget.fingerprint}</span>
+              {" · "}
+              Host category: {preview.resetTarget.hostCategory}
+            </p>
+            {preview.resetTarget.requiredEnvVars?.length ? (
+              <ul className="mt-2 list-disc space-y-1 pl-5 text-xs text-red-200/80">
+                {preview.resetTarget.requiredEnvVars.map((item) => (
+                  <li key={item}>{item}</li>
+                ))}
+              </ul>
+            ) : null}
           </div>
         ) : null}
 

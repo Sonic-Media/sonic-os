@@ -36,6 +36,16 @@ export interface ShopResetPreviewResponse {
   warnings: string[];
   openBusinessDayCount: number;
   canReset: boolean;
+  resetTarget: {
+    authorized: boolean;
+    fingerprint: string;
+    hostCategory: "local" | "neon" | "remote";
+    database: string;
+    isProductionMode: boolean;
+    code?: string;
+    message?: string;
+    requiredEnvVars?: string[];
+  };
 }
 
 export interface ShopResetReportResponse {

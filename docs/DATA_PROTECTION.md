@@ -78,7 +78,7 @@ npm run db:safe-reset -- --yes --confirmation "RESET TRANSACTIONAL DATA"
 
 **Cleared:** sales, expenses, purchases, stock movements, staff payments, daily operations, day closings, operational audit log entries, sessions, etc.
 
-**Refuses to run against:** production mode (without `ALLOW_DESTRUCTIVE_OPS`), Neon hosts (without `ALLOW_NEON_TRANSACTIONAL_RESET`), and non-local hosts (without `ALLOW_NONLOCAL_TRANSACTIONAL_RESET`).
+**Refuses to run against:** production mode (without `ALLOW_DESTRUCTIVE_OPS`), blocked database names, and any non-local target unless **all** of the following match on Preview only: `ALLOW_NONLOCAL_TRANSACTIONAL_RESET=true`, `ALLOW_NEON_TRANSACTIONAL_RESET=true` (Neon only), and `SONIC_RESET_ALLOWED_DATABASE_FINGERPRINT` equal to the deployment fingerprint shown in the Shop Reset preview panel.
 
 Requires:
 

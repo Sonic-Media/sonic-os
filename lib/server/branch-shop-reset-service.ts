@@ -3,7 +3,11 @@ import { createDatabaseBackup } from "@/lib/backup/backup";
 import { getEquivalentBranchCodes } from "@/lib/branch/codes";
 import { prisma } from "@/lib/db";
 import { getAdminPrismaClient, disconnectAdminPrismaClient } from "@/lib/db/admin-prisma";
-import { assertSafeTransactionalResetTarget } from "@/lib/server/database-target-guard";
+import {
+  assertSafeTransactionalResetTarget,
+  describeResetTargetAuthorization,
+  type ResetTargetAuthorization,
+} from "@/lib/server/database-target-guard";
 import { requireOwner } from "@/lib/server/security/authorization";
 import { recordSecurityAuditInTransaction } from "@/lib/server/security/audit";
 import { getBranchIdByCode, getBranchCodeById } from "@/lib/server/branch-lookup";
@@ -56,6 +60,7 @@ export interface ShopResetPreview {
   warnings: string[];
   openBusinessDayCount: number;
   canReset: boolean;
+  resetTarget: ResetTargetAuthorization;
 }
 
 export interface ShopResetReport {
@@ -347,6 +352,7 @@ export async function previewBranchShopReset(
 
   const counts = await countBranchScopedData(branchIds, branchCodes);
   const preserved = await countPreservedMasterData();
+  const resetTarget = describeResetTargetAuthorization();
 
   const branchLabels =
     scope === "both"
@@ -363,7 +369,8 @@ export async function previewBranchShopReset(
     preserved,
     warnings,
     openBusinessDayCount,
-    canReset: true,
+    canReset: resetTarget.authorized,
+    resetTarget,
   };
 }
 
