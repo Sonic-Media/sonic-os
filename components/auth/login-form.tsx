@@ -6,12 +6,12 @@ import { Button } from "@/components/shared/ui/button";
 import { Card } from "@/components/shared/ui/card";
 import { Input } from "@/components/shared/ui/input";
 import { PageContainer } from "@/components/shared/layout/page-container";
-import { DEFAULT_OWNER_PASSWORD, useAuth } from "@/context/auth-context";
+import { useAuth } from "@/context/auth-context";
 
 export function LoginForm() {
   const router = useRouter();
   const { login } = useAuth();
-  const [username, setUsername] = useState("owner");
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [errors, setErrors] = useState<Record<string, string | undefined>>({});
 
@@ -84,11 +84,6 @@ export function LoginForm() {
               Sign In
             </Button>
           </form>
-
-          <p className="text-xs text-zinc-500">
-            Default owner login: username <span className="text-zinc-400">owner</span>, password{" "}
-            <span className="text-zinc-400">{DEFAULT_OWNER_PASSWORD}</span>
-          </p>
         </Card>
       </div>
     </PageContainer>

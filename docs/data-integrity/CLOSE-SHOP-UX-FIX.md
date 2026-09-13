@@ -87,6 +87,22 @@ No changes to:
 | `npm run verify:branch-selection` | **PASS** (all checks) |
 | `npm run verify:close-day-payouts` | **PASS** |
 
+## Login page credential hint removal
+
+Removed development-only copy from the user-facing sign-in page:
+
+- Deleted footer text: "Default owner login: username owner, password owner"
+- Removed prefilled username default (`owner` → empty field)
+- Searched all `components/` and `app/` UI: no other visible default usernames, passwords, or test-credential hints found
+
+Authentication logic, users, passwords, schema, and env vars unchanged. Premium login layout preserved.
+
+| Check | Result |
+|-------|--------|
+| `npx tsc --noEmit` | **PASS** |
+| `/login` HTML — no credential hints | **PASS** |
+| Browser UI — Sign in, Username, Password, Sign In only | **PASS** |
+
 ## Environment / fixture notes
 
 - Tests run against the workspace PostgreSQL instance with certification fixtures.
