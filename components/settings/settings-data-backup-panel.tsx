@@ -1,6 +1,7 @@
 "use client";
 
 import { DataProtectionSection } from "@/components/settings/data-protection-section";
+import { ShopResetSection } from "@/components/settings/shop-reset-section";
 import { SettingsPanelShell } from "@/components/settings/settings-panel-shell";
 import { Button } from "@/components/shared/ui/button";
 import { useAuth } from "@/context/auth-context";
@@ -29,6 +30,7 @@ export function SettingsDataBackupPanel() {
         bare
       >
         <DataProtectionSection />
+        <ShopResetSection />
       </SettingsPanelShell>
 
       <SettingsPanelShell
