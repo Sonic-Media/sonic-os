@@ -40,6 +40,7 @@
     "db:production-reset": "tsx scripts/production-reset.ts",
     "db:production-init": "tsx scripts/production-initialization.ts",
     "db:safe-reset": "tsx scripts/safe-transactional-reset.ts",
+    "verify:safe-transactional-reset": "tsx scripts/verify-safe-transactional-reset-state.ts",
     "db:postgres:start": "sh scripts/start-postgres.sh",
     "docker:build": "docker compose build app",
     "docker:up:dev": "docker compose --profile development up",

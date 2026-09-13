@@ -74,9 +74,17 @@ In production mode also pass:
 npm run db:safe-reset -- --yes --confirmation "RESET TRANSACTIONAL DATA"
 ```
 
-**Preserved:** owner/users, staff profiles, branches, roles/permissions, categories, system settings.
+**Preserved:** owner/users, staff profiles, branches, roles/permissions, product catalog (definitions and prices), categories, system settings, auth audit history.
 
-**Cleared:** sales, expenses, stock, products, daily operations, day closings, sessions, etc.
+**Cleared:** sales, expenses, purchases, stock movements, staff payments, daily operations, day closings, operational audit log entries, sessions, etc.
+
+**Refuses to run against:** production mode (without `ALLOW_DESTRUCTIVE_OPS`), Neon hosts (without `ALLOW_NEON_TRANSACTIONAL_RESET`), and non-local hosts (without `ALLOW_NONLOCAL_TRANSACTIONAL_RESET`).
+
+Requires:
+
+```bash
+npm run db:safe-reset -- --yes --confirmation "RESET SONIC"
+```
 
 A PostgreSQL backup is created automatically before the reset (use `--skip-backup` to override).
 
