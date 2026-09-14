@@ -29,6 +29,12 @@ import { sortExpenseTemplates } from "@/lib/expense-template-storage";
 import { recordActivity } from "@/lib/activity-log";
 import type { Expense, ExpenseBreakdownKey, ExpenseTemplate } from "@/types";
 
+export type ExpenseTemplateMutationResult = {
+  success: boolean;
+  error?: string;
+  template?: ExpenseTemplate;
+};
+
 interface ExpenseTemplatesContextValue {
   templates: ExpenseTemplate[];
   activeTemplates: ExpenseTemplate[];
@@ -41,15 +47,15 @@ interface ExpenseTemplatesContextValue {
     name: string;
     category: ExpenseBreakdownKey;
     defaultAmount?: number;
-  }) => ExpenseTemplate;
+  }) => Promise<ExpenseTemplateMutationResult>;
   updateTemplate: (
     id: string,
     patch: Partial<
       Pick<ExpenseTemplate, "name" | "category" | "defaultAmount" | "active">
     >
-  ) => void;
-  deactivateTemplate: (id: string) => void;
-  deleteTemplate: (id: string) => void;
+  ) => Promise<ExpenseTemplateMutationResult>;
+  deactivateTemplate: (id: string) => Promise<ExpenseTemplateMutationResult>;
+  deleteTemplate: (id: string) => Promise<ExpenseTemplateMutationResult>;
 }
 
 const ExpenseTemplatesContext =
@@ -134,82 +140,86 @@ export function ExpenseTemplatesProvider({
   );
 
   const addTemplate = useCallback(
-    (input: {
+    async (input: {
       name: string;
       category: ExpenseBreakdownKey;
       defaultAmount?: number;
-    }) => {
-      const optimistic: ExpenseTemplate = {
-        id: crypto.randomUUID(),
-        name: input.name.trim(),
-        category: input.category,
-        defaultAmount: input.defaultAmount,
-        active: true,
-      };
-
-      void (async () => {
-        try {
-          const created = await runOnApi(() => createExpenseTemplateApi(input));
-          await refreshTemplatesFromApi();
-          recordActivity({
-            type: "template-updated",
-            title: "Expense template updated",
-            description: `${created.name} template was added.`,
-          });
-        } catch (error) {
-          console.error(getDataSourceErrorMessage(error));
-        }
-      })();
-
-      return optimistic;
+    }): Promise<ExpenseTemplateMutationResult> => {
+      try {
+        const created = await runOnApi(() => createExpenseTemplateApi(input));
+        await refreshTemplatesFromApi();
+        recordActivity({
+          type: "template-updated",
+          title: "Expense template updated",
+          description: `${created.name} template was added.`,
+        });
+        return { success: true, template: created };
+      } catch (error) {
+        return {
+          success: false,
+          error: getDataSourceErrorMessage(error),
+        };
+      }
     },
     [refreshTemplatesFromApi]
   );
 
   const updateTemplate = useCallback(
-    (
+    async (
       id: string,
       patch: Partial<
         Pick<ExpenseTemplate, "name" | "category" | "defaultAmount" | "active">
       >
-    ) => {
-      void (async () => {
-        try {
-          await runOnApi(() => updateExpenseTemplateApi(id, patch));
-          await refreshTemplatesFromApi();
-          const updated = templatesRef.current.find((template) => template.id === id);
-          if (updated) {
-            recordActivity({
-              type: "template-updated",
-              title: "Expense template updated",
-              description: `${updated.name} template was updated.`,
-            });
-          }
-        } catch (error) {
-          console.error(getDataSourceErrorMessage(error));
+    ): Promise<ExpenseTemplateMutationResult> => {
+      const existing = templatesRef.current.find((template) => template.id === id);
+      if (!existing) {
+        return { success: false, error: "Template not found." };
+      }
+
+      try {
+        await runOnApi(() => updateExpenseTemplateApi(id, patch));
+        await refreshTemplatesFromApi();
+        const updated = templatesRef.current.find((template) => template.id === id);
+        if (updated) {
+          recordActivity({
+            type: "template-updated",
+            title: "Expense template updated",
+            description: `${updated.name} template was updated.`,
+          });
         }
-      })();
+        return { success: true, template: updated };
+      } catch (error) {
+        return {
+          success: false,
+          error: getDataSourceErrorMessage(error),
+        };
+      }
     },
     [refreshTemplatesFromApi]
   );
 
   const deactivateTemplate = useCallback(
-    (id: string) => {
-      updateTemplate(id, { active: false });
-    },
+    (id: string) => updateTemplate(id, { active: false }),
     [updateTemplate]
   );
 
   const deleteTemplate = useCallback(
-    (id: string) => {
-      void (async () => {
-        try {
-          await runOnApi(() => deleteExpenseTemplateApi(id));
-          await refreshTemplatesFromApi();
-        } catch (error) {
-          console.error(getDataSourceErrorMessage(error));
-        }
-      })();
+    async (id: string): Promise<ExpenseTemplateMutationResult> => {
+      const existing = templatesRef.current.find((template) => template.id === id);
+      if (!existing) {
+        return { success: false, error: "Template not found." };
+      }
+
+      try {
+        await runOnApi(() => deleteExpenseTemplateApi(id));
+        await refreshTemplatesFromApi();
+        return { success: true };
+      } catch (error) {
+        return {
+          success: false,
+          error: getDataSourceErrorMessage(error),
+        };
+      }
     },
     [refreshTemplatesFromApi]
   );

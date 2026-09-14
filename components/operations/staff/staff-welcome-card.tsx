@@ -8,12 +8,12 @@ import { useDayClosing } from "@/context/day-closing-context";
 import { useSettings } from "@/context/settings-context";
 import { useStaff } from "@/context/staff-context";
 import { useStaffAttendance } from "@/hooks/use-staff-attendance";
+import { clockOutApi, fetchStaffAttendance } from "@/lib/api/staff-attendance";
+import { runOnApi } from "@/lib/data-source/context-api";
 import { getTodayISO } from "@/lib/dates";
 import { formatRelativeTime, getGreeting } from "@/lib/format";
-import {
-  formatClockTime,
-  recordStaffClockOut,
-} from "@/lib/staff/attendance";
+import { mergeStaffAuditRecords } from "@/lib/staff/audit";
+import { formatClockTime } from "@/lib/staff/attendance";
 import { resolveStaffDisplayName } from "@/lib/ux/user-display";
 import {
   StaffCard,
@@ -21,14 +21,48 @@ import {
   StaffStatusBadge,
 } from "@/components/operations/staff/primitives";
 
-export function StaffWelcomeCard() {
+function mapAttendanceRecord(record: {
+  id: string;
+  timestamp: string;
+  userId: string;
+  userName: string;
+  role: string;
+  branch: string;
+  action: string;
+  module: string;
+}) {
+  return {
+    id: record.id,
+    timestamp: record.timestamp,
+    staffId: record.userId,
+    staffName: record.userName,
+    role: record.role as never,
+    branch: record.branch as never,
+    action: record.action,
+    module: record.module as never,
+  };
+}
+
+export function StaffWelcomeCard({
+  businessDate,
+  onClockOutComplete,
+}: {
+  businessDate?: string;
+  onClockOutComplete?: () => void | Promise<void>;
+} = {}) {
   const today = getTodayISO();
+  const resolvedDate = businessDate ?? today;
   const { session } = useAuth();
   const { activeBranch } = useActiveBranch();
   const { getBranchName } = useSettings();
   const { staff } = useStaff();
-  const { getOpenRecord, isBranchDayOpened, isBranchDayClosed } = useDayClosing();
-  const { currentAttendance } = useStaffAttendance(today);
+  const {
+    getActiveOpenRecord,
+    getOpenRecord,
+    isBranchDayClosed,
+    isCloseRequestPending,
+  } = useDayClosing();
+  const { currentAttendance } = useStaffAttendance(resolvedDate);
   const [now, setNow] = useState(() => new Date());
   const [isClockingOut, setIsClockingOut] = useState(false);
 
@@ -43,9 +77,12 @@ export function StaffWelcomeCard() {
   );
   const firstName = staffName.split(" ")[0] ?? staffName;
   const onShift = currentAttendance?.presence === "on-shift";
-  const shopOpen = isBranchDayOpened(activeBranch, today);
-  const shopClosed = isBranchDayClosed(activeBranch, today);
-  const openRecord = getOpenRecord(activeBranch, today);
+  const activeOpenRecord = getActiveOpenRecord(activeBranch);
+  const closeRequestPending = isCloseRequestPending(activeBranch, resolvedDate);
+  const shopOpen = activeOpenRecord?.status === "open";
+  const shopClosed = isBranchDayClosed(activeBranch, resolvedDate);
+  const openRecord =
+    getOpenRecord(activeBranch, resolvedDate) ?? activeOpenRecord;
   const openedAt = openRecord?.openedAt ?? openRecord?.reopenedAt;
 
   const sessionLabel = useMemo(() => {
@@ -53,13 +90,38 @@ export function StaffWelcomeCard() {
     return formatRelativeTime(openedAt);
   }, [openedAt, now]);
 
-  const shopStatusLabel = shopClosed ? "Closed" : shopOpen ? "Open" : "Not Open";
-  const shopStatusTone = shopClosed ? "neutral" : shopOpen ? "success" : "warning";
+  const shopStatusLabel = shopClosed
+    ? "Closed"
+    : closeRequestPending
+      ? "Closing Request Sent"
+      : shopOpen
+        ? "Open"
+        : "Not Open";
+  const shopStatusTone = shopClosed
+    ? "neutral"
+    : closeRequestPending
+      ? "warning"
+      : shopOpen
+        ? "success"
+        : "warning";
 
   async function handleClockOut() {
     setIsClockingOut(true);
-    recordStaffClockOut(activeBranch);
-    setIsClockingOut(false);
+    try {
+      const record = await runOnApi(() =>
+        clockOutApi({ branch: activeBranch, date: resolvedDate })
+      );
+      mergeStaffAuditRecords([mapAttendanceRecord(record)]);
+
+      const authoritativeRecords = await runOnApi(() =>
+        fetchStaffAttendance(resolvedDate)
+      );
+      mergeStaffAuditRecords(authoritativeRecords.map(mapAttendanceRecord));
+
+      await onClockOutComplete?.();
+    } finally {
+      setIsClockingOut(false);
+    }
   }
 
   return (

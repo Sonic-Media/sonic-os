@@ -47,8 +47,13 @@ export function BranchSwitcher({ className }: { className?: string }) {
 
   if (!canSwitch) {
     return (
-      <div className={cn("rounded-xl border border-zinc-800/80 bg-zinc-950/60 px-3 py-2.5", className)}>
-        <p className="text-[10px] font-medium uppercase tracking-wide text-zinc-500">
+      <div
+        className={cn(
+          "rounded-xl border border-white/[0.06] bg-white/[0.03] px-3 py-2",
+          className
+        )}
+      >
+        <p className="text-[10px] font-medium uppercase tracking-[0.16em] text-zinc-500">
           Branch
         </p>
         <p className="truncate text-sm font-medium text-white">{currentName}</p>
@@ -61,19 +66,17 @@ export function BranchSwitcher({ className }: { className?: string }) {
       <button
         type="button"
         onClick={() => setIsOpen((open) => !open)}
-        className="flex w-full items-center justify-between gap-3 rounded-xl border border-zinc-800/80 bg-zinc-950/60 px-3 py-2.5 text-left transition-colors hover:border-zinc-600"
+        className="flex w-full items-center justify-between gap-2 rounded-xl border border-white/[0.06] bg-white/[0.03] px-3 py-2 text-left transition-colors hover:border-indigo-500/30 hover:bg-white/[0.05]"
       >
         <div className="min-w-0">
-          <p className="text-[10px] font-medium uppercase tracking-wide text-zinc-500">
+          <p className="text-[10px] font-medium uppercase tracking-[0.16em] text-zinc-500">
             Branch
           </p>
-          <p className="truncate text-sm font-medium text-white">
-            {currentName}
-          </p>
+          <p className="truncate text-sm font-medium text-white">{currentName}</p>
         </div>
         <svg
           className={cn(
-            "h-4 w-4 shrink-0 text-zinc-500 transition-transform",
+            "h-3.5 w-3.5 shrink-0 text-zinc-500 transition-transform",
             isOpen && "rotate-180"
           )}
           fill="none"
@@ -86,8 +89,8 @@ export function BranchSwitcher({ className }: { className?: string }) {
       </button>
 
       {isOpen ? (
-        <div className="absolute left-0 right-0 z-50 mt-2 overflow-hidden rounded-xl border border-zinc-800/80 bg-zinc-950 shadow-xl">
-          <div className="px-3 py-2 text-[10px] font-medium uppercase tracking-wide text-zinc-500">
+        <div className="absolute left-0 right-0 z-50 mt-1.5 overflow-hidden rounded-xl border border-white/[0.08] bg-[rgba(8,10,18,0.98)] shadow-xl shadow-black/50 backdrop-blur-xl">
+          <div className="px-3 py-2 text-[10px] font-medium uppercase tracking-[0.16em] text-zinc-500">
             Switch branch
           </div>
           {activeBranches.map((branch) => {
@@ -104,8 +107,8 @@ export function BranchSwitcher({ className }: { className?: string }) {
                 className={cn(
                   "flex w-full items-center justify-between px-3 py-2.5 text-left text-sm transition-colors",
                   isActive
-                    ? "bg-white/10 text-white"
-                    : "text-zinc-300 hover:bg-zinc-900/80 hover:text-white"
+                    ? "bg-indigo-500/10 text-white"
+                    : "text-zinc-300 hover:bg-white/[0.05] hover:text-white"
                 )}
               >
                 <span>{branch.name}</span>

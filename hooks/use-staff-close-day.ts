@@ -17,12 +17,14 @@ import {
   computeExpectedCash,
 } from "@/lib/day-closing/calculations";
 import { getTodayISO } from "@/lib/dates";
+import { mapCloseDayError } from "@/lib/ux/close-day-messages";
 import { toStaffFacingError } from "@/lib/ux/staff-messages";
 import { useStaff } from "@/context/staff-context";
+import { resolveBranchEntityForMetrics } from "@/lib/branch/resolve-branch-entity";
 
-export function useStaffCloseDay(date = getTodayISO()) {
+export function useStaffCloseDay(date?: string) {
   const { activeBranch } = useActiveBranch();
-  const { activeBranches } = useBranches();
+  const { getBranchByCode, getBranchName } = useBranches();
   const { sales } = useSales();
   const { purchases } = usePurchasing();
   const { expenses } = useExpensesModule();
@@ -31,15 +33,32 @@ export function useStaffCloseDay(date = getTodayISO()) {
   const { staff } = useStaff();
   const { session } = useAuth();
   const { settings } = useSettings();
-  const { closeDay } = useDayClosing();
+  const {
+    submitCloseRequest,
+    getActiveOpenRecord,
+    isCloseRequestPending,
+    isBranchDayClosed,
+  } = useDayClosing();
+
+  const activeRecord = getActiveOpenRecord(activeBranch);
+  const businessDate = activeRecord?.date ?? date ?? getTodayISO();
+  const closeRequestPending =
+    activeRecord?.status === "close_requested" ||
+    isCloseRequestPending(activeBranch, businessDate);
+  const dayClosed = isBranchDayClosed(activeBranch, businessDate);
+
   const [isClosing, setIsClosing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const closingRef = useRef(false);
 
-  const branchEntity = activeBranches.find((item) => item.code === activeBranch);
+  const branchEntity = useMemo(
+    () =>
+      resolveBranchEntityForMetrics(activeBranch, getBranchByCode, getBranchName),
+    [activeBranch, getBranchByCode, getBranchName]
+  );
+  const shopOpen = Boolean(activeRecord?.status === "open");
 
   const metrics = useMemo(() => {
-    if (!branchEntity) return null;
     return computeDayClosingMetrics(
       branchEntity,
       sales,
@@ -47,9 +66,11 @@ export function useStaffCloseDay(date = getTodayISO()) {
       expenses,
       entries,
       payments,
-      date
+      businessDate
     );
-  }, [branchEntity, sales, purchases, expenses, entries, payments, date]);
+  }, [branchEntity, sales, purchases, expenses, entries, payments, businessDate]);
+
+  const clearError = useCallback(() => setError(null), []);
 
   const closeStaffDay = useCallback(
     async (closingNotes: string) => {
@@ -57,9 +78,31 @@ export function useStaffCloseDay(date = getTodayISO()) {
         return { success: false as const };
       }
 
-      if (!metrics || !session) {
-        setError("Unable to close the day right now.");
-        return { success: false as const };
+      if (!session) {
+        const message = mapCloseDayError("", "forbidden");
+        setError(message);
+        return { success: false as const, message };
+      }
+
+      if (closeRequestPending) {
+        const message = mapCloseDayError(
+          "A closing request has already been submitted for this business day.",
+          "close_request_already_pending"
+        );
+        setError(message);
+        return { success: false as const, message };
+      }
+
+      if (dayClosed) {
+        const message = mapCloseDayError("", "day_already_closed");
+        setError(message);
+        return { success: false as const, message };
+      }
+
+      if (!shopOpen) {
+        const message = mapCloseDayError("", "shop_not_opened");
+        setError(message);
+        return { success: false as const, message };
       }
 
       closingRef.current = true;
@@ -70,14 +113,14 @@ export function useStaffCloseDay(date = getTodayISO()) {
         staff,
         activeBranch,
         payments,
-        date
+        businessDate
       ).map((payout) => ({ ...payout, selected: false }));
 
       const expectedCash = computeExpectedCash(metrics.cashBeforeClosing, payoutRows);
 
-      const result = await closeDay({
+      const result = await submitCloseRequest({
         branch: activeBranch,
-        date,
+        date: businessDate,
         metrics,
         staffPayouts: payoutRows,
         expectedCash,
@@ -101,14 +144,17 @@ export function useStaffCloseDay(date = getTodayISO()) {
     },
     [
       activeBranch,
-      closeDay,
-      date,
+      businessDate,
+      closeRequestPending,
+      dayClosed,
       isClosing,
       metrics,
       payments,
       session,
       settings.ownerName,
+      shopOpen,
       staff,
+      submitCloseRequest,
     ]
   );
 
@@ -116,5 +162,10 @@ export function useStaffCloseDay(date = getTodayISO()) {
     closeStaffDay,
     isClosing,
     error,
+    clearError,
+    shopOpen,
+    businessDate,
+    closeRequestPending,
+    dayClosed,
   };
 }

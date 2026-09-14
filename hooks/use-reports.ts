@@ -1,36 +1,114 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { aggregateEntries } from "@/lib/aggregations";
-import { useActiveBranch } from "@/context/active-branch-context";
-import { useEntriesContext } from "@/context/entries-context";
-import { useSettings } from "@/context/settings-context";
-import { filterEntriesByPeriod } from "@/lib/entry-helpers";
-import { getPeriodLabel } from "@/lib/format";
-import { filterByBranchField } from "@/lib/active-branch/filters";
-import type { ReportPeriod } from "@/types";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { fetchReportSummary } from "@/lib/api/reports";
+import { useBranch } from "@/context/branch-context";
+import { useAuth } from "@/context/auth-context";
+import {
+  getDataSourceErrorMessage,
+  loadFromApi,
+} from "@/lib/data-source/context-api";
+import { getReportsSubtitle } from "@/lib/format";
+import { getTodayISO } from "@/lib/dates";
+import type { ReportPeriod, ReportSummary } from "@/types";
+
+export type ReportsBranchScope = "all" | string;
+
+function createEmptyReportSummary(): ReportSummary {
+  return {
+    totalSales: 0,
+    totalExpenses: 0,
+    totalSavings: 0,
+    byBranch: {},
+    chartData: [],
+    insights: {
+      averageDailySales: 0,
+      averageDailySavings: 0,
+      bestPerformingBranchSavings: 0,
+      expenseBreakdown: [],
+    },
+  };
+}
 
 export function useReports() {
-  const { entries, isLoaded } = useEntriesContext();
-  const { activeBranch, isLoaded: branchLoaded } = useActiveBranch();
-  const { branches, isLoaded: settingsLoaded } = useSettings();
+  const { isAuthenticated, isLoaded: authLoaded, session } = useAuth();
+  const { activeBranch, isLoaded: branchLoaded, canSwitchBranch } = useBranch();
   const [period, setPeriod] = useState<ReportPeriod>("daily");
+  const [referenceDate, setReferenceDate] = useState(getTodayISO);
+  const [branchScope, setBranchScope] = useState<ReportsBranchScope>("all");
+  const [summary, setSummary] = useState<ReportSummary>(createEmptyReportSummary);
+  const [isLoaded, setIsLoaded] = useState(false);
+  const requestId = useRef(0);
 
-  const data = useMemo(() => {
-    const branchIds = branches.map((branch) => branch.id);
-    const branchEntries = filterByBranchField(entries, activeBranch);
-    const filtered = filterEntriesByPeriod(branchEntries, period);
-    const summary = aggregateEntries(filtered, { branchIds });
-    return {
-      summary,
-      periodLabel: getPeriodLabel(period),
-    };
-  }, [entries, activeBranch, branches, period]);
+  useEffect(() => {
+    if (!canSwitchBranch && session?.branch) {
+      setBranchScope(session.branch);
+    } else if (canSwitchBranch) {
+      setBranchScope("all");
+    }
+  }, [canSwitchBranch, session?.branch]);
+
+  const effectiveBranchScope = canSwitchBranch ? branchScope : activeBranch;
+
+  const refresh = useCallback(async () => {
+    if (!isAuthenticated) {
+      setSummary(createEmptyReportSummary());
+      setIsLoaded(true);
+      return;
+    }
+
+    const currentRequest = ++requestId.current;
+
+    try {
+      const remote = await loadFromApi(() =>
+        fetchReportSummary({
+          period,
+          branchScope: effectiveBranchScope,
+          referenceDate: period === "daily" ? referenceDate : undefined,
+        })
+      );
+      if (currentRequest !== requestId.current) return;
+
+      setSummary(remote);
+    } catch (error) {
+      if (currentRequest !== requestId.current) return;
+
+      setSummary(createEmptyReportSummary());
+      console.error(getDataSourceErrorMessage(error));
+    } finally {
+      if (currentRequest === requestId.current) {
+        setIsLoaded(true);
+      }
+    }
+  }, [effectiveBranchScope, isAuthenticated, period, referenceDate]);
+
+  useEffect(() => {
+    if (!authLoaded || !branchLoaded) return;
+
+    queueMicrotask(() => {
+      void refresh();
+    });
+  }, [authLoaded, branchLoaded, refresh]);
+
+  const periodLabel = useMemo(
+    () =>
+      getReportsSubtitle(
+        period,
+        period === "daily" ? referenceDate : undefined
+      ),
+    [period, referenceDate]
+  );
 
   return {
-    isLoaded: isLoaded && branchLoaded && settingsLoaded,
+    isLoaded: isLoaded && authLoaded && branchLoaded,
     period,
     setPeriod,
-    ...data,
+    referenceDate,
+    setReferenceDate,
+    branchScope: effectiveBranchScope,
+    setBranchScope,
+    canSelectBranch: canSwitchBranch,
+    summary,
+    periodLabel,
   };
 }

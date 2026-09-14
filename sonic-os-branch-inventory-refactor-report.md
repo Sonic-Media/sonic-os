@@ -1,5 +1,7 @@
 # Sonic OS — Branch-Based Inventory Refactor Report
 
+> **Status: HISTORICAL** — Point-in-time refactor certification (2026). Canonical branch context is `context/branch-context.tsx` (`active-branch-context.tsx` is deprecated). Certification counts may drift as scripts evolve.
+
 **Generated:** 2026-08-22 23:57 UTC+3  
 **Project:** `/Users/kvisualz/Desktop/sonic-os`  
 **Branch:** `feature/v2.1-stock-management`  

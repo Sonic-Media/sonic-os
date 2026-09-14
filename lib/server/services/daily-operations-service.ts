@@ -1,16 +1,23 @@
 import { randomUUID } from "crypto";
 import { ApiError } from "@/lib/api/errors";
 import type { BranchIdFilter } from "@/lib/server/branch-scope";
+import { isOwnerRole } from "@/lib/auth/validation";
+import { resolveBranchListFilter } from "@/lib/server/branch-scope";
 import { prisma } from "@/lib/db";
-import { getBranchIdByCode } from "@/lib/server/branch-lookup";
+import type { Prisma } from "@/lib/generated/prisma/client";
+import { getBranchIdForSession } from "@/lib/server/branch-lookup";
+import { assertRecordInSessionBranchScope } from "@/lib/server/branch-record-guard";
 import { toJsonField } from "@/lib/server/json-fields";
+import { filterPersistableExpenses } from "@/lib/expenses";
 import { mapDailyOperationToEntry } from "@/lib/server/mappers/entities";
 import {
+  assertBranchDayNotClosedForWrite,
   assertBranchDayOpenForWrite,
   assertOwnerCannotEditTodayOperations,
 } from "@/lib/server/day-closing-guards";
 import { requireSession } from "@/lib/server/session";
 import { getPeriodDateBounds } from "@/lib/dates";
+import type { AuthSession } from "@/types/auth";
 import type { Entry, Expense, ReportPeriod } from "@/types";
 
 const dailyOperationInclude = {
@@ -86,14 +93,28 @@ export async function listDailyOperationsInPeriod(
   return operations.map(mapDailyOperationToEntry);
 }
 
-export async function upsertDailyOperation(entry: Entry): Promise<Entry> {
+export async function upsertDailyOperation(
+  entry: Entry,
+  options?: {
+    allowCloseRequested?: boolean;
+    /** Allows owner to persist the closed-day daily operation during approve-close. */
+    allowOwnerManagementClose?: boolean;
+  }
+): Promise<Entry> {
   const session = await requireSession();
-  assertOwnerCannotEditTodayOperations(session, entry.date);
-  await assertBranchDayOpenForWrite(entry.branch, entry.date);
+  if (!options?.allowOwnerManagementClose) {
+    assertOwnerCannotEditTodayOperations(session, entry.date);
+  }
 
-  const branchId = await getBranchIdByCode(entry.branch);
+  if (options?.allowCloseRequested) {
+    await assertBranchDayNotClosedForWrite(entry.branch, entry.date);
+  } else {
+    await assertBranchDayOpenForWrite(entry.branch, entry.date);
+  }
+
+  const branchId = await getBranchIdForSession(session, entry.branch);
   const data = entryToDailyOperationData(entry, branchId);
-  const expenseRows = entry.expenses.map((expense) => ({
+  const expenseRows = filterPersistableExpenses(entry.expenses).map((expense) => ({
     id: expenseIdForDb(expense),
     name: expense.name,
     amount: expense.amount,
@@ -106,6 +127,14 @@ export async function upsertDailyOperation(entry: Entry): Promise<Entry> {
     });
 
     if (existing) {
+      await assertRecordInSessionBranchScope(session, existing.branchId);
+      if (existing.branchId !== branchId) {
+        throw new ApiError("Cannot move a daily operation to another branch.", {
+          status: 400,
+          code: "branch_mismatch",
+        });
+      }
+
       await tx.dailyOperationExpense.deleteMany({
         where: { dailyOperationId: entry.id },
       });
@@ -132,6 +161,7 @@ export async function upsertDailyOperation(entry: Entry): Promise<Entry> {
     });
 
     if (existingByDate) {
+      await assertRecordInSessionBranchScope(session, existingByDate.branchId);
       persistedId = existingByDate.id;
       await tx.dailyOperationExpense.deleteMany({
         where: { dailyOperationId: existingByDate.id },
@@ -168,6 +198,7 @@ export async function upsertDailyOperation(entry: Entry): Promise<Entry> {
 }
 
 export async function deleteDailyOperation(id: string): Promise<void> {
+  const session = await requireSession();
   const existing = await prisma.dailyOperation.findUnique({ where: { id } });
   if (!existing) {
     throw new ApiError("Daily operation not found.", {
@@ -176,6 +207,7 @@ export async function deleteDailyOperation(id: string): Promise<void> {
     });
   }
 
+  await assertRecordInSessionBranchScope(session, existing.branchId);
   await prisma.dailyOperation.delete({ where: { id } });
 }
 
@@ -184,10 +216,14 @@ export async function importDailyOperations(
 ): Promise<Entry[]> {
   if (entries.length === 0) return [];
 
+  const session = await requireSession();
   const branchIds = new Map<string, string>();
   for (const entry of entries) {
     if (!branchIds.has(entry.branch)) {
-      branchIds.set(entry.branch, await getBranchIdByCode(entry.branch));
+      branchIds.set(
+        entry.branch,
+        await getBranchIdForSession(session, entry.branch)
+      );
     }
   }
 
@@ -217,11 +253,13 @@ export async function importDailyOperations(
       }
 
       const data = entryToDailyOperationData(entry, branchId);
-      const expenseRows = entry.expenses.map((expense) => ({
-        id: expenseIdForDb(expense),
-        name: expense.name,
-        amount: expense.amount,
-      }));
+      const expenseRows = filterPersistableExpenses(entry.expenses).map(
+        (expense) => ({
+          id: expenseIdForDb(expense),
+          name: expense.name,
+          amount: expense.amount,
+        })
+      );
 
       await tx.dailyOperation.create({
         data: {
@@ -249,13 +287,42 @@ export async function importDailyOperations(
 }
 
 export async function removeDailyOperationsByIds(
-  ids: string[]
+  ids: string[],
+  session: AuthSession
 ): Promise<number> {
   if (ids.length === 0) return 0;
 
-  const result = await prisma.dailyOperation.deleteMany({
-    where: { id: { in: ids } },
+  const uniqueIds = [...new Set(ids)];
+
+  const operations = await prisma.dailyOperation.findMany({
+    where: { id: { in: uniqueIds } },
   });
+
+  if (operations.length !== uniqueIds.length) {
+    throw new ApiError("One or more daily operations were not found.", {
+      status: 404,
+      code: "not_found",
+    });
+  }
+
+  for (const operation of operations) {
+    await assertRecordInSessionBranchScope(session, operation.branchId);
+  }
+
+  const where: Prisma.DailyOperationWhereInput = { id: { in: uniqueIds } };
+  if (!isOwnerRole(session.role)) {
+    const filter = await resolveBranchListFilter(session);
+    where.branchId = filter.branchId;
+  }
+
+  const result = await prisma.dailyOperation.deleteMany({ where });
+
+  if (result.count !== uniqueIds.length) {
+    throw new ApiError("Failed to delete all requested daily operations.", {
+      status: 500,
+      code: "delete_failed",
+    });
+  }
 
   return result.count;
 }
@@ -273,7 +340,8 @@ export async function listDailyOperationsByBranchDate(
   branchCode: string,
   date: string
 ): Promise<Entry[]> {
-  const branchId = await getBranchIdByCode(branchCode);
+  const session = await requireSession();
+  const branchId = await getBranchIdForSession(session, branchCode);
 
   const operations = await prisma.dailyOperation.findMany({
     where: { branchId, date },

@@ -1,4 +1,7 @@
+import { getEquivalentBranchCodes } from "@/lib/branch/codes";
 import { ApiError } from "@/lib/api/errors";
+import { clearBranchLookupCache } from "@/lib/server/branch-lookup";
+import { reconcileDuplicateSalaamaBranches } from "@/lib/server/branch-reconcile";
 import { prisma } from "@/lib/db";
 import { mapBranchToEntity } from "@/lib/server/mappers/branch";
 import {
@@ -25,7 +28,9 @@ export async function createBranch(input: unknown): Promise<BranchEntity> {
   const parsed = branchInputSchema.parse(input);
   const code = parsed.code.toLowerCase();
 
-  const existing = await prisma.branch.findUnique({ where: { code } });
+  const existing = await prisma.branch.findFirst({
+    where: { code: { in: getEquivalentBranchCodes(code) }, active: true },
+  });
   if (existing) {
     throw new ApiError("A branch with this code already exists.", {
       status: 409,
@@ -44,6 +49,7 @@ export async function createBranch(input: unknown): Promise<BranchEntity> {
     },
   });
 
+  clearBranchLookupCache();
   return mapBranchToEntity(branch);
 }
 
@@ -59,10 +65,13 @@ export async function updateBranch(
     throw new ApiError("Branch not found.", { status: 404, code: "not_found" });
   }
 
+  await reconcileDuplicateSalaamaBranches();
+
   const duplicate = await prisma.branch.findFirst({
     where: {
-      code,
+      code: { in: getEquivalentBranchCodes(code) },
       NOT: { id },
+      active: true,
     },
   });
 
@@ -84,6 +93,7 @@ export async function updateBranch(
     },
   });
 
+  clearBranchLookupCache();
   return mapBranchToEntity(branch);
 }
 

@@ -127,6 +127,7 @@ const OWNER_ONLY_PREFIXES = [
   "/api/users",
   "/api/roles",
   "/api/daily-operations/import",
+  "/api/daily-operations/bulk-delete",
   "/api/audit-log",
 ];
 

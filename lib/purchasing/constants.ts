@@ -3,7 +3,7 @@ export const PURCHASING_NAV_ITEMS: {
   label: string;
   exact?: boolean;
 }[] = [
-  { href: "/purchasing", label: "Dashboard", exact: true },
+  { href: "/purchasing", label: "Overview", exact: true },
   { href: "/purchasing/history", label: "History" },
   { href: "/purchasing/suppliers", label: "Suppliers" },
 ];

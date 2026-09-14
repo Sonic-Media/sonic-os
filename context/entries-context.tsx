@@ -17,6 +17,13 @@ import {
   upsertDailyOperationApi,
 } from "@/lib/api/daily-operations";
 import { useAuth } from "@/context/auth-context";
+import { useBranch } from "@/context/branch-context";
+import {
+  beginBranchScopedFetch,
+  resetBranchScopedFetchRefs,
+  shouldSkipBranchScopedFetch,
+} from "@/lib/context/branch-scoped-load";
+import type { Branch } from "@/types";
 import {
   getDataSourceErrorMessage,
   loadFromApi,
@@ -24,6 +31,12 @@ import {
 } from "@/lib/data-source/context-api";
 import { upsertEntryInList } from "@/lib/storage";
 import type { Entry } from "@/types";
+
+export type RemoveEntriesByIdsResult = {
+  success: boolean;
+  removedCount: number;
+  error?: string;
+};
 
 interface EntriesContextValue {
   entries: Entry[];
@@ -33,18 +46,21 @@ interface EntriesContextValue {
   upsertEntry: (entry: Entry) => Promise<Entry>;
   deleteEntry: (id: string) => void;
   importEntries: (entries: Entry[]) => Promise<Entry[]>;
-  removeEntriesByIds: (ids: string[]) => number;
+  removeEntriesByIds: (ids: string[]) => Promise<RemoveEntriesByIdsResult>;
 }
 
 const EntriesContext = createContext<EntriesContextValue | null>(null);
 
 export function EntriesProvider({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoaded: authLoaded } = useAuth();
+  const { activeBranch } = useBranch();
   const [entries, setEntries] = useState<Entry[]>([]);
   const [isLoaded, setIsLoaded] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const hasLoaded = useRef(false);
+  const lastFetchedBranch = useRef<Branch | null>(null);
   const entriesRef = useRef<Entry[]>([]);
+  const removeEntriesInFlight = useRef(false);
 
   useEffect(() => {
     entriesRef.current = entries;
@@ -60,39 +76,45 @@ export function EntriesProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!authLoaded) return;
 
-    if (hasLoaded.current && !isAuthenticated) {
-      entriesRef.current = [];
-      setEntries([]);
-      setLoadError(null);
-      hasLoaded.current = false;
-      setIsLoaded(true);
-      return;
-    }
-
     if (!isAuthenticated) {
       entriesRef.current = [];
       setEntries([]);
       setLoadError(null);
-      hasLoaded.current = false;
+      resetBranchScopedFetchRefs(hasLoaded, lastFetchedBranch);
       setIsLoaded(true);
       return;
     }
 
-    if (hasLoaded.current) return;
-    hasLoaded.current = true;
+    if (shouldSkipBranchScopedFetch(hasLoaded, lastFetchedBranch, activeBranch)) {
+      return;
+    }
+
+    const branchChanged = beginBranchScopedFetch(
+      hasLoaded,
+      lastFetchedBranch,
+      activeBranch
+    );
+    if (branchChanged) {
+      entriesRef.current = [];
+      setEntries([]);
+      setLoadError(null);
+      setIsLoaded(false);
+    }
 
     queueMicrotask(() => {
       void (async () => {
         try {
           await loadFromApi(() => refreshEntriesFromApi());
         } catch (error) {
+          entriesRef.current = [];
+          setEntries([]);
           setLoadError(getDataSourceErrorMessage(error));
         } finally {
           setIsLoaded(true);
         }
       })();
     });
-  }, [authLoaded, isAuthenticated, refreshEntriesFromApi]);
+  }, [authLoaded, isAuthenticated, activeBranch, refreshEntriesFromApi]);
 
   const upsertEntry = useCallback(async (entry: Entry): Promise<Entry> => {
     return runOnApi(async () => {
@@ -134,30 +156,53 @@ export function EntriesProvider({ children }: { children: React.ReactNode }) {
     return saved;
   }, []);
 
-  const removeEntriesByIds = useCallback((ids: string[]): number => {
-    if (ids.length === 0) return 0;
-
-    const idSet = new Set(ids);
-    const previous = entriesRef.current;
-    const next = previous.filter((entry) => !idSet.has(entry.id));
-    const removedCount = previous.length - next.length;
-
-    if (removedCount === 0) return 0;
-
-    void (async () => {
-      try {
-        await runOnApi(async () => {
-          await bulkDeleteDailyOperationsApi(ids);
-          entriesRef.current = next;
-          setEntries(next);
-        });
-      } catch (error) {
-        console.error(getDataSourceErrorMessage(error));
+  const removeEntriesByIds = useCallback(
+    async (ids: string[]): Promise<RemoveEntriesByIdsResult> => {
+      if (ids.length === 0) {
+        return { success: true, removedCount: 0 };
       }
-    })();
 
-    return removedCount;
-  }, []);
+      if (removeEntriesInFlight.current) {
+        return {
+          success: false,
+          removedCount: 0,
+          error: "An undo is already in progress.",
+        };
+      }
+
+      const uniqueIds = [...new Set(ids)];
+
+      removeEntriesInFlight.current = true;
+
+      try {
+        const deletedCount = await runOnApi(async () => {
+          const response = await bulkDeleteDailyOperationsApi(uniqueIds);
+          if (response.deleted !== uniqueIds.length) {
+            throw new Error(
+              `Expected to delete ${uniqueIds.length} records but deleted ${response.deleted}.`
+            );
+          }
+          return response.deleted;
+        });
+
+        const idSet = new Set(uniqueIds);
+        const next = entriesRef.current.filter((entry) => !idSet.has(entry.id));
+        entriesRef.current = next;
+        setEntries(next);
+
+        return { success: true, removedCount: deletedCount };
+      } catch (error) {
+        return {
+          success: false,
+          removedCount: 0,
+          error: getDataSourceErrorMessage(error),
+        };
+      } finally {
+        removeEntriesInFlight.current = false;
+      }
+    },
+    []
+  );
 
   const value = useMemo(
     () => ({

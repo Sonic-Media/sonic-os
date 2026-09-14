@@ -120,6 +120,12 @@ Shared utilities:
 
 Client-side filtering (sales, purchases, expenses, audit) already uses `useMemo` in hooks — no change required.
 
+### Reports architecture note (current)
+
+- **`/reports` UI** aggregates entries from `EntriesContext` (loaded via `GET /api/daily-operations` → PostgreSQL) using `aggregateEntries()` in `hooks/use-reports.ts`.
+- **`GET /api/reports/summary`** performs server-side period filtering and aggregation for API/certification consumers (`app/api/reports/summary/route.ts`).
+- Business data originates from PostgreSQL in both paths; the UI does not read authoritative totals from localStorage.
+
 Server-side report filtering now aligned with client period logic via shared `getPeriodDateBounds()`.
 
 ---

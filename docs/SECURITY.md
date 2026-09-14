@@ -297,8 +297,8 @@ Manual security checks:
 | P1 | Zod schemas for sales, purchases, expenses, stock API bodies |
 | P2 | Audit user create/enable/reset-password actions |
 | P2 | Content-Security-Policy header (tune for Next.js assets) |
-| P2 | Wire UI audit log to `GET /api/audit-log` in API mode |
-| P3 | Branch-scoped write authorization (enforce session branch on mutations) |
+| P2 | Extend audit coverage for user create/enable/reset-password (UI wired to `GET /api/system-audit-log`) |
+| P3 | Extend branch-scoped write authorization to all mutation paths (partially implemented in sales/purchases/expenses services) |
 | P3 | Session rotation on password reset |
 
 ---

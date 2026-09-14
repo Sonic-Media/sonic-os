@@ -8,6 +8,7 @@ import {
 } from "@/lib/backup/database-url";
 import { exportDatabaseSql } from "@/lib/backup/export";
 import { exportDatabaseJson } from "@/lib/backup/json-export";
+import { stringifyJsonSafe } from "@/lib/backup/json-serialize";
 import {
   createBackupBasename,
   resolveUniqueBackupPath,
@@ -48,6 +49,18 @@ export interface BackupResult {
   archivePath?: string;
   manifestPath: string;
   manifest: BackupManifest;
+}
+
+/**
+ * Resolve the on-disk backup artifact path for any engine/compress mode.
+ * Prefer archive (gzip), then SQL dump, then JSON export.
+ * Shop Reset and Backup Now must use the same resolution so a successful
+ * JSON backup cannot be treated as a missing artifact.
+ */
+export function resolveBackupArtifactPath(
+  result: Pick<BackupResult, "archivePath" | "sqlPath" | "jsonPath">
+): string | null {
+  return result.archivePath ?? result.sqlPath ?? result.jsonPath ?? null;
 }
 
 export interface CreateBackupOptions {
@@ -121,7 +134,11 @@ async function writeManifestAndMaybeCompress(options: {
     jsonPath = options.sourcePath;
   }
 
-  fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+  fs.writeFileSync(
+    manifestPath,
+    `${stringifyJsonSafe(manifest, 2)}\n`,
+    "utf8"
+  );
 
   return {
     basename: options.actualBasename,

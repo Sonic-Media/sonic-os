@@ -15,6 +15,10 @@ export interface ActivityRecord {
 
 let activityCache: ActivityRecord[] = [];
 
+export function clearActivityRecordsCache(): void {
+  activityCache = [];
+}
+
 export function setActivityRecordsCache(records: ActivityRecord[]): void {
   activityCache = records;
 }

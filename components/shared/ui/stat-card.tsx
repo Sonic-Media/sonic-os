@@ -1,5 +1,6 @@
 import { cn } from "@/lib/utils";
 import { formatCurrency } from "@/lib/format";
+import { uiSurface, uiTypography } from "@/lib/ui/design-tokens";
 
 interface StatCardProps {
   label: string;
@@ -25,27 +26,27 @@ export function StatCard({
   return (
     <div
       className={cn(
-        "rounded-2xl border p-5 transition-colors",
-        variant === "default" &&
-          "border-zinc-800/80 bg-zinc-900/60 shadow-lg shadow-black/20",
+        uiSurface.card,
+        "p-5 transition-all duration-200",
         variant === "accent" &&
-          "border-white/10 bg-white text-black shadow-xl shadow-white/5",
+          "border-indigo-500/20 bg-gradient-to-br from-indigo-500/10 to-violet-500/5",
         className
       )}
     >
       <p
         className={cn(
-          "text-sm font-medium tracking-wide",
-          variant === "default" ? "text-zinc-500" : "text-zinc-600"
+          uiTypography.sectionLabel,
+          variant === "accent" && "text-indigo-300/70"
         )}
       >
         {label}
       </p>
       <p
         className={cn(
-          "font-semibold tracking-tight mt-1",
+          uiTypography.money,
+          "mt-2",
           size === "large" ? "text-3xl sm:text-4xl" : "text-2xl",
-          variant === "default" ? "text-white" : "text-black"
+          variant === "accent" && "text-white"
         )}
       >
         {formatValue(value)}
@@ -53,11 +54,10 @@ export function StatCard({
       {detail && (
         <p
           className={cn(
-            "text-sm mt-1",
+            "mt-1.5 text-sm",
             detailTone === "positive" && "text-emerald-400",
             detailTone === "negative" && "text-red-400",
-            detailTone === "neutral" &&
-              (variant === "default" ? "text-zinc-500" : "text-zinc-600")
+            detailTone === "neutral" && "text-zinc-500"
           )}
         >
           {detail}

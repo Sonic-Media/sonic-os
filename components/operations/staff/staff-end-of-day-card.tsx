@@ -1,210 +1,265 @@
 "use client";
 
 import { useState } from "react";
+import { CloseDayConfirmDialog } from "@/components/operations/staff/close-day-confirm-dialog";
 import { Button } from "@/components/shared/ui/button";
-import { Input } from "@/components/shared/ui/input";
 import { Textarea } from "@/components/shared/ui/textarea";
-import { StaffOperationCard } from "@/components/operations/staff/staff-operation-card";
-import {
-  StaffAnimatedMoney,
-  StaffSectionLabel,
-  StaffStatusBadge,
-} from "@/components/operations/staff/primitives";
-import { parseAmount } from "@/lib/amounts";
+import { uiSpacing, uiSurface, uiTypography } from "@/lib/ui/design-tokens";
+import { cn } from "@/lib/utils";
 import type { EntryFormData } from "@/types";
 
 interface StaffEndOfDayCardProps {
   form: EntryFormData;
+  branchName: string;
+  businessDate: string;
   movieRevenue: number;
   accessorySales: number;
   totalExpenses: number;
   staffPayouts: number;
   cashToHandIn: number;
-  accessorySalesCount: number;
+  wageRecorded: boolean;
+  shopOpen: boolean;
+  closeRequestPending?: boolean;
+  dayClosed?: boolean;
   isClosing: boolean;
   closeError?: string | null;
   updateField: <K extends keyof EntryFormData>(
     key: K,
     value: EntryFormData[K]
   ) => void;
-  onCloseDay: () => void;
-  expanded?: boolean;
-  onExpandedChange?: (expanded: boolean) => void;
+  onCloseDay: () => Promise<boolean>;
 }
 
-function ChecklistRow({
+function ChecklistItem({
   label,
-  done,
+  status,
+  complete,
 }: {
   label: string;
-  done: boolean;
+  status: string;
+  complete?: boolean;
 }) {
   return (
-    <div className="flex items-center justify-between gap-3 rounded-2xl border border-white/[0.05] bg-black/20 px-4 py-3">
-      <span className="text-sm text-zinc-400">{label}</span>
-      {done ? (
-        <span className="inline-flex items-center gap-1.5 text-sm font-medium text-emerald-400 animate-in fade-in duration-300">
-          ✓
-        </span>
-      ) : (
-        <span className="text-xs text-zinc-600">Pending</span>
-      )}
+    <div className="flex items-start gap-3 rounded-2xl border border-white/[0.06] bg-black/20 px-4 py-3.5">
+      <span
+        className={cn(
+          "mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-xs font-bold",
+          complete
+            ? "bg-emerald-500/15 text-emerald-400 ring-1 ring-emerald-500/25"
+            : "bg-zinc-800/80 text-zinc-500 ring-1 ring-white/[0.06]"
+        )}
+        aria-hidden
+      >
+        {complete ? "✓" : "·"}
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-medium text-white">{label}</p>
+        <p
+          className={cn(
+            "mt-0.5 text-sm",
+            complete ? "text-emerald-400/90" : "text-zinc-500"
+          )}
+        >
+          {status}
+        </p>
+      </div>
     </div>
   );
 }
 
-function SummaryRow({
-  label,
-  value,
-  highlight,
-}: {
-  label: string;
-  value: number;
-  highlight?: boolean;
-}) {
+function CloseDayErrorBanner({ message }: { message: string }) {
   return (
-    <div className="flex items-center justify-between gap-4 py-1.5">
-      <span className="text-sm font-normal text-zinc-500">{label}</span>
-      <StaffAnimatedMoney
-        value={value}
-        fromZero={false}
-        className={
-          highlight
-            ? "text-sm font-bold tabular-nums text-blue-200"
-            : "text-sm font-bold tabular-nums text-white"
-        }
-      />
+    <div
+      role="alert"
+      className="rounded-2xl border border-red-500/20 bg-red-500/[0.08] px-4 py-3.5"
+    >
+      <p className="text-sm leading-relaxed text-red-300">{message}</p>
+    </div>
+  );
+}
+
+function ClosingRequestSentBanner() {
+  return (
+    <div className="rounded-2xl border border-indigo-500/20 bg-indigo-500/[0.08] px-4 py-4">
+      <p className="text-sm font-semibold uppercase tracking-[0.12em] text-indigo-200">
+        Closing Request Sent
+      </p>
+      <p className="mt-1.5 text-sm leading-relaxed text-indigo-300/90">
+        Your operations have been submitted for review. The business day will remain
+        open until approved.
+      </p>
     </div>
   );
 }
 
 export function StaffEndOfDayCard({
   form,
+  branchName,
+  businessDate,
   movieRevenue,
   accessorySales,
   totalExpenses,
   staffPayouts,
   cashToHandIn,
-  accessorySalesCount,
+  wageRecorded,
+  shopOpen,
+  closeRequestPending = false,
+  dayClosed = false,
   isClosing,
   closeError,
   updateField,
   onCloseDay,
-  expanded,
-  onExpandedChange,
 }: StaffEndOfDayCardProps) {
-  const [movieError, setMovieError] = useState<string | null>(null);
-  const accessoriesDone = accessorySalesCount > 0;
-  const expensesDone = totalExpenses > 0;
-  const wageDone = staffPayouts > 0;
-  const movieDone = movieRevenue > 0;
-  const readyToClose =
-    accessoriesDone && expensesDone && wageDone && movieDone;
-  const totalRevenue = movieRevenue + accessorySales;
+  const [confirmOpen, setConfirmOpen] = useState(false);
 
-  function handleCloseClick() {
-    const parsedMovie = parseAmount(form.sales);
-    if (parsedMovie <= 0) {
-      setMovieError("Enter today's movie revenue before closing.");
-      return;
+  const totalSales = movieRevenue + accessorySales;
+  const salesRecorded = totalSales > 0;
+  const expensesRecorded = totalExpenses > 0;
+  const readyToClose = shopOpen && !closeRequestPending && !dayClosed;
+
+  function handleOpenConfirm() {
+    if (isClosing || closeRequestPending || dayClosed) return;
+    setConfirmOpen(true);
+  }
+
+  async function handleConfirmClose() {
+    const success = await onCloseDay();
+    if (success) {
+      setConfirmOpen(false);
     }
-    setMovieError(null);
-    onCloseDay();
   }
 
   return (
-    <StaffOperationCard
-      accent="default"
-      title="End of Day"
-      description="Enter movie revenue, add notes, and close today's shop."
-      expanded={expanded}
-      onExpandedChange={onExpandedChange}
-      collapsedPreview={
-        readyToClose ? (
-          <StaffStatusBadge tone="success">Ready to Close ✓</StaffStatusBadge>
-        ) : (
-          <span className="text-sm text-zinc-500">Complete the checklist</span>
-        )
-      }
-    >
-      <div className="space-y-6">
-        <div className="space-y-2">
-          <ChecklistRow label="Accessories Recorded" done={accessoriesDone} />
-          <ChecklistRow label="Expenses Recorded" done={expensesDone} />
-          <ChecklistRow label="Daily Wage Recorded" done={wageDone} />
+    <>
+      <section
+        className={cn(
+          uiSurface.cardElevated,
+          uiSpacing.cardPaddingLg,
+          "shadow-[0_24px_80px_-48px_rgba(99,102,241,0.35)]"
+        )}
+      >
+        <header className="space-y-1">
+          <p className={uiTypography.sectionLabel}>End of Day</p>
+          <h2 className={uiTypography.sectionTitle}>
+            {closeRequestPending
+              ? "Closing request sent — pending review."
+              : dayClosed
+                ? "Business day closed."
+                : "Review today's activity before submitting for closing."}
+          </h2>
+        </header>
+
+        <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2 lg:gap-8">
+          <div className="space-y-3">
+            <div>
+              <p className="text-sm font-medium text-white">Daily Notes</p>
+              <p className="mt-1 text-xs text-zinc-500">Optional</p>
+            </div>
+            <Textarea
+              id="daily-notes"
+              aria-label="Daily notes"
+              placeholder="Add a note about today's operations..."
+              value={form.notes}
+              onChange={(event) => updateField("notes", event.target.value)}
+              className="min-h-[180px]"
+              disabled={dayClosed}
+            />
+          </div>
+
+          <div className="space-y-3">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-zinc-500">
+              Day Checklist
+            </p>
+            <ChecklistItem
+              label="Sales"
+              status={salesRecorded ? "Recorded" : "No sales recorded"}
+              complete={salesRecorded}
+            />
+            <ChecklistItem
+              label="Expenses"
+              status={expensesRecorded ? "Recorded" : "None recorded"}
+              complete={expensesRecorded}
+            />
+            <ChecklistItem
+              label="Daily Wage"
+              status={wageRecorded ? "Recorded" : "Pending"}
+              complete={wageRecorded}
+            />
+            <ChecklistItem
+              label="Ready to Close"
+              status={
+                closeRequestPending
+                  ? "Request sent"
+                  : dayClosed
+                    ? "Closed"
+                    : readyToClose
+                      ? "Ready"
+                      : "Action required"
+              }
+              complete={closeRequestPending || dayClosed || readyToClose}
+            />
+          </div>
         </div>
 
-        {readyToClose ? (
-          <div className="rounded-2xl border border-emerald-500/15 bg-emerald-500/[0.05] px-4 py-3 text-center">
-            <p className="text-sm font-semibold text-emerald-400">
-              Ready to Close ✓
-            </p>
+        {closeError ? (
+          <div className="mt-6">
+            <CloseDayErrorBanner message={closeError} />
           </div>
         ) : null}
 
-        <div className="space-y-5">
-          <div>
-            <StaffSectionLabel>Movie Revenue</StaffSectionLabel>
-            <div className="mt-3">
-              <Input
-                label="Movie Revenue (UGX)"
-                type="number"
-                inputMode="numeric"
-                placeholder="0"
-                value={form.sales}
-                error={movieError ?? undefined}
-                onChange={(event) => {
-                  updateField("sales", event.target.value);
-                  if (movieError) setMovieError(null);
-                }}
-              />
-            </div>
+        {closeRequestPending ? (
+          <div className="mt-6">
+            <ClosingRequestSentBanner />
           </div>
-
-          <Textarea
-            label="Daily Notes"
-            placeholder="Optional notes about today's shift"
-            value={form.notes}
-            onChange={(event) => updateField("notes", event.target.value)}
-          />
-
-          {closeError ? <p className="text-sm text-red-400">{closeError}</p> : null}
-
-          <div className="space-y-3 rounded-2xl border border-white/[0.05] bg-black/20 p-5">
-            <StaffSectionLabel>Today&apos;s Summary</StaffSectionLabel>
-            <div className="mt-4 space-y-1">
-              <SummaryRow label="Today's Revenue" value={totalRevenue} />
-              <SummaryRow label="Movie Revenue" value={movieRevenue} />
-              <SummaryRow label="Accessory Revenue" value={accessorySales} />
-              <div className="my-2 h-px bg-white/[0.06]" />
-              <SummaryRow label="Expenses" value={totalExpenses} />
-              <SummaryRow label="Daily Wage" value={staffPayouts} />
-              <div className="my-2 h-px bg-white/[0.06]" />
-              <SummaryRow
-                label="Cash To Hand In"
-                value={cashToHandIn}
-                highlight
-              />
-            </div>
+        ) : dayClosed ? (
+          <div className="mt-6 rounded-2xl border border-emerald-500/20 bg-emerald-500/[0.08] px-4 py-4">
+            <p className="text-sm font-semibold uppercase tracking-[0.12em] text-emerald-200">
+              Business Day Closed
+            </p>
+            <p className="mt-1.5 text-sm leading-relaxed text-emerald-300/90">
+              Today&apos;s records are now locked.
+            </p>
           </div>
+        ) : (
+          <div className="mt-6 space-y-3">
+            <Button
+              type="button"
+              size="lg"
+              loading={isClosing}
+              loadingLabel="Submitting closing request..."
+              disabled={isClosing || !shopOpen}
+              onClick={handleOpenConfirm}
+              className="w-full"
+            >
+              <span className="inline-flex items-center gap-2">
+                <span aria-hidden>📋</span>
+                Submit for Closing
+              </span>
+            </Button>
+            <p className="text-center text-xs leading-relaxed text-zinc-500">
+              Your operations are saved. Submitting sends a closing request for review
+              — the business day is not locked until approved.
+            </p>
+          </div>
+        )}
+      </section>
 
-          <Button
-            type="button"
-            size="lg"
-            loading={isClosing}
-            loadingLabel="Closing Day..."
-            disabled={isClosing || !readyToClose}
-            onClick={handleCloseClick}
-            className="w-full"
-          >
-            Confirm Close Shop
-          </Button>
-
-          <p className="text-center text-xs leading-relaxed text-zinc-500">
-            Once you close the day, all records will be locked until tomorrow.
-          </p>
-        </div>
-      </div>
-    </StaffOperationCard>
+      {confirmOpen ? (
+        <CloseDayConfirmDialog
+          branchName={branchName}
+          businessDate={businessDate}
+          totalSales={totalSales}
+          totalExpenses={totalExpenses}
+          dailyWage={staffPayouts}
+          cashToHandIn={cashToHandIn}
+          isSubmitting={isClosing}
+          mode="submit"
+          onConfirm={() => void handleConfirmClose()}
+          onCancel={() => {
+            if (!isClosing) setConfirmOpen(false);
+          }}
+        />
+      ) : null}
+    </>
   );
 }

@@ -2,7 +2,7 @@
 
 import { Card } from "@/components/shared/ui/card";
 import { StatCard } from "@/components/shared/ui/stat-card";
-import { useSettings } from "@/context/settings-context";
+import { useBranch } from "@/context/branch-context";
 import { formatCurrency } from "@/lib/format";
 import type { ReportInsights } from "@/types";
 
@@ -11,15 +11,15 @@ interface ReportsInsightsProps {
 }
 
 export function ReportsInsights({ insights }: ReportsInsightsProps) {
-  const { getBranchName } = useSettings();
+  const { getBranchName } = useBranch();
   const bestBranchName = insights.bestPerformingBranch
     ? getBranchName(insights.bestPerformingBranch)
     : "—";
 
   return (
-    <section className="mb-8 space-y-6">
+    <section className="space-y-6">
       <div>
-        <h2 className="text-sm font-medium text-zinc-500 mb-3 tracking-wide uppercase">
+        <h2 className="mb-3 text-[10px] font-semibold uppercase tracking-[0.18em] text-zinc-500">
           Insights
         </h2>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -67,10 +67,10 @@ export function ReportsInsights({ insights }: ReportsInsightsProps) {
       </div>
 
       <div>
-        <h2 className="text-sm font-medium text-zinc-500 mb-3 tracking-wide uppercase">
+        <h2 className="mb-3 text-[10px] font-semibold uppercase tracking-[0.18em] text-zinc-500">
           Expense Breakdown
         </h2>
-        <Card>
+        <Card className="border-white/[0.08] bg-[rgba(12,14,26,0.72)]">
           <div className="space-y-3">
             {insights.expenseBreakdown.map((item) => (
               <div

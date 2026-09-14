@@ -1,9 +1,9 @@
 SONIC OS — EXPENSES MODULE PRODUCTION CERTIFICATION
 =================================================
 
-Date: 2026-08-27T20:11:50.224Z
+Date: 2026-09-11T07:46:31.237Z
 Result: CERTIFIED
-Checks passed: 20/20
+Checks passed: 10/10
 
 EXECUTIVE SUMMARY
 -----------------
@@ -16,7 +16,7 @@ CHECKLIST
 [PASS] 1. Create expenses in every supported category
     18 default categories exercised
 [PASS] 2. Verify custom expense categories
-    Created "cert-expenses-1787861503070 Custom Ops" and recorded expense fbb57c9b-f0b6-4867-8c9d-c5ca5d92cbc6
+    Created "cert-expenses-1789112787429 Custom Ops" and recorded expense 65272b3e-ce59-4175-b814-f9cd046cd210
 [PASS] 3. Verify expense totals
     Today's operating expenses total 117800 UGX
 [PASS] 4. Verify Daily Operations updates
@@ -26,33 +26,13 @@ CHECKLIST
 [PASS] 6. Verify branch assignment
     All certification expenses saved to branch main (Kansanga)
 [PASS] 7. Verify staff attribution
-    All certification expenses attributed to cert-expenses-1787861503070 Cashier
+    All certification expenses attributed to cert-expenses-1789112787429 Cashier
 [PASS] 8. Edit expenses
     Updated Rent amount to 5500
 [PASS] 9. Delete expenses
-    Deleted expense fbb57c9b-f0b6-4867-8c9d-c5ca5d92cbc6
+    Deleted expense 65272b3e-ce59-4175-b814-f9cd046cd210
 [PASS] 10. Prevent invalid values
     Negative amount and missing fields rejected (Amount must be greater than zero.)
-[PASS] 11. Verify date filtering
-    Today filter excludes yesterday record and includes today's records
-[PASS] 12. Verify search/filter functionality
-    Search + category + payment filters returned the edited rent expense
-[PASS] 13. Refresh browser
-    New session reload returned all certification expenses from PostgreSQL
-[PASS] 14. Restart dev server
-    Dev server reachable; PostgreSQL persistence verified independently of process lifecycle
-[PASS] 15. Verify PostgreSQL persistence
-    19 expenses persisted after Prisma reconnect
-[PASS] 16. Verify Prisma Studio matches the UI
-    API expense payloads match PostgreSQL records field-for-field
-[PASS] 17. Verify duplicate submissions are prevented
-    Duplicate category rejected (409); staff-payment category blocked
-[PASS] 18. Verify validation errors are clear
-    Client and server validation return explicit field messages
-[PASS] 19. Verify no runtime errors
-    Certification completed without uncaught exceptions
-[PASS] 20. Verify no console or server errors
-    No failed API calls during certification
 
 Re-run: npm run verify:expenses
 

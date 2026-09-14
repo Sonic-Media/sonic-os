@@ -48,7 +48,12 @@ export function generateStaffInsights(context: BIAnalysisContext): BIInsight[] {
       matchesBranch(member.branch, branch.code)
     );
 
-    if (branchStaff.length > 0 && branchPayments.length === 0) {
+    const unpaidStaff = branchStaff.filter(
+      (member) =>
+        !branchPayments.some((payment) => payment.staffId === member.id)
+    );
+
+    if (unpaidStaff.length > 0) {
       pushUniqueInsight(
         insights,
         {

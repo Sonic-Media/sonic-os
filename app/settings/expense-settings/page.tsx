@@ -34,13 +34,13 @@ export default function ExpenseSettingsPage() {
     setSelectedCategory(null);
   }
 
-  function handleDelete(category: ExpenseCategory) {
+  async function handleDelete(category: ExpenseCategory) {
     const confirmed = window.confirm(
       `Delete category "${category.name}"? This cannot be undone.`
     );
     if (!confirmed) return;
 
-    const result = deleteCategory(category.id);
+    const result = await deleteCategory(category.id);
     if (!result.success) {
       setErrorMessage(result.errors.form ?? "Unable to delete category.");
     } else {

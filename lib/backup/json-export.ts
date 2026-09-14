@@ -1,6 +1,10 @@
 import fs from "node:fs";
 import { getAdminPrismaClient } from "@/lib/db/admin-prisma";
 import type { ParsedDatabaseUrl } from "@/lib/backup/database-url";
+import {
+  serializeJsonValue,
+  stringifyJsonSafe,
+} from "@/lib/backup/json-serialize";
 
 export interface JsonBackupPayload {
   version: 1;
@@ -80,8 +84,57 @@ export async function exportDatabaseJson(
     prisma.auditLogEntry.findMany(),
     prisma.activityLog.findMany(),
     prisma.staffPayment.findMany(),
-    prisma.backupRecord.findMany(),
+    prisma.backupRecord.findMany({
+      // Omit binary payload blobs from JSON table dump (stored separately when
+      // serverless persistence is used). Metadata rows remain included.
+      select: {
+        id: true,
+        createdAt: true,
+        trigger: true,
+        createdById: true,
+        createdByName: true,
+        manifestPath: true,
+        filePath: true,
+        fileSizeBytes: true,
+        compressed: true,
+        status: true,
+        error: true,
+        storageType: true,
+        manifestJson: true,
+      },
+    }),
   ]);
+
+  const tables = serializeJsonValue({
+    Role: role,
+    Branch: branch,
+    User: user,
+    Session: session,
+    UserPreference: userPreference,
+    AuthAuditLog: authAuditLog,
+    Staff: staff,
+    AppSetting: appSetting,
+    ExpenseTemplate: expenseTemplate,
+    DailyOperation: dailyOperation,
+    DailyOperationExpense: dailyOperationExpense,
+    ProductCategory: productCategory,
+    Product: product,
+    StockMovement: stockMovement,
+    StockPriceChange: stockPriceChange,
+    Customer: customer,
+    Sale: sale,
+    SaleLineItem: saleLineItem,
+    Supplier: supplier,
+    Purchase: purchase,
+    PurchaseLineItem: purchaseLineItem,
+    ExpenseCategory: expenseCategory,
+    ExpenseRecord: expenseRecord,
+    DayClosing: dayClosing,
+    AuditLogEntry: auditLogEntry,
+    ActivityLog: activityLog,
+    StaffPayment: staffPayment,
+    BackupRecord: backupRecord,
+  }) as Record<string, unknown[]>;
 
   const payload: JsonBackupPayload = {
     version: 1,
@@ -89,45 +142,12 @@ export async function exportDatabaseJson(
     createdAt,
     database: options.connection.database,
     host: options.connection.host,
-    tables: {
-      Role: role,
-      Branch: branch,
-      User: user,
-      Session: session,
-      UserPreference: userPreference,
-      AuthAuditLog: authAuditLog,
-      Staff: staff,
-      AppSetting: appSetting,
-      ExpenseTemplate: expenseTemplate,
-      DailyOperation: dailyOperation,
-      DailyOperationExpense: dailyOperationExpense,
-      ProductCategory: productCategory,
-      Product: product,
-      StockMovement: stockMovement,
-      StockPriceChange: stockPriceChange,
-      Customer: customer,
-      Sale: sale,
-      SaleLineItem: saleLineItem,
-      Supplier: supplier,
-      Purchase: purchase,
-      PurchaseLineItem: purchaseLineItem,
-      ExpenseCategory: expenseCategory,
-      ExpenseRecord: expenseRecord,
-      DayClosing: dayClosing,
-      AuditLogEntry: auditLogEntry,
-      ActivityLog: activityLog,
-      StaffPayment: staffPayment,
-      BackupRecord: backupRecord.map((record) => ({
-        ...record,
-        fileSizeBytes:
-          record.fileSizeBytes !== null ? Number(record.fileSizeBytes) : null,
-      })),
-    },
+    tables,
   };
 
   fs.writeFileSync(
     options.outputPath,
-    `${JSON.stringify(payload, null, 2)}\n`,
+    `${stringifyJsonSafe(payload, 2)}\n`,
     "utf8"
   );
 

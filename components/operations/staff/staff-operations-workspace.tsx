@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useCallback, useEffect } from "react";
 import { DuplicateEntryDialog } from "@/components/entry/duplicate-entry-dialog";
 import { StaffDailyWageCard } from "@/components/operations/staff/staff-daily-wage-card";
 import { StaffEndOfDayCard } from "@/components/operations/staff/staff-end-of-day-card";
@@ -8,25 +8,42 @@ import { StaffExpensesCard } from "@/components/operations/staff/staff-expenses-
 import { StaffRecentTransactionsCard } from "@/components/operations/staff/staff-recent-transactions-card";
 import { StaffRevenueCard } from "@/components/operations/staff/staff-revenue-card";
 import { StaffTodayActivityCard } from "@/components/operations/staff/staff-today-activity-card";
+import { StaffActiveBusinessDayBanner } from "@/components/operations/staff/staff-active-business-day-banner";
 import { StaffWelcomeCard } from "@/components/operations/staff/staff-welcome-card";
 import { StaffCashSummaryCard } from "@/components/operations/staff/staff-cash-summary-card";
 import { useToast } from "@/context/toast-context";
 import { useEntryForm } from "@/hooks/use-entry-form";
+import { useLinkedStaff } from "@/hooks/use-linked-staff";
+import { useBranchStaffOnShift } from "@/hooks/use-branch-staff-on-shift";
 import { useStaffCloseDay } from "@/hooks/use-staff-close-day";
+import { useStaffOperationsRefresh } from "@/hooks/use-staff-operations-refresh";
+import { shouldClearStaffOnShiftCloseError } from "@/lib/ux/stale-close-error";
+import { useStaffPaymentsModule } from "@/context/staff-payments-context";
+import {
+  computeStaffPayoutTotalForStaffBranchDate,
+  findStaffDailyWagePayment,
+  hasStaffDailyWagePayment,
+} from "@/lib/staff-payments/calculations";
 import { useSales } from "@/context/sales-context";
 import { useActiveBranch } from "@/context/active-branch-context";
+import { useBranches } from "@/context/branches-context";
 import { filterByBranchField } from "@/lib/active-branch/filters";
 import { parseAmount } from "@/lib/amounts";
 import { isPayrollEntryExpense } from "@/lib/expenses";
+import { mapCloseDayError } from "@/lib/ux/close-day-messages";
+import { getTodayISO } from "@/lib/dates";
 import { uiSpacing } from "@/lib/ui/design-tokens";
 import { cn } from "@/lib/utils";
 import type { Branch, Entry } from "@/types";
+import type { DayClosingStatus } from "@/types/day-closing";
 
 type StaffWorkflowSection = "expenses" | "daily-wage" | "end-of-day";
 
 interface StaffOperationsWorkspaceProps {
   branch: Branch;
   entry?: Entry;
+  businessDate?: string;
+  activeBusinessDayStatus?: DayClosingStatus;
 }
 
 function resolveInitialSection({
@@ -44,10 +61,17 @@ function resolveInitialSection({
 export function StaffOperationsWorkspace({
   branch,
   entry,
+  businessDate: businessDateProp,
+  activeBusinessDayStatus,
 }: StaffOperationsWorkspaceProps) {
+  const calendarDate = getTodayISO();
   const { sales } = useSales();
   const { activeBranch } = useActiveBranch();
-  const { success: toastSuccess, error: toastError } = useToast();
+  const { getBranchName } = useBranches();
+  const { payments } = useStaffPaymentsModule();
+  const { linkedStaff } = useLinkedStaff(branch);
+  const { success: toastSuccess } = useToast();
+  const [closeFlowError, setCloseFlowError] = useState<string | null>(null);
 
   const {
     form,
@@ -68,14 +92,43 @@ export function StaffOperationsWorkspace({
   } = useEntryForm({
     entry,
     initialBranch: branch,
-    initialDate: entry?.date,
+    initialDate: entry?.date ?? businessDateProp,
     lockDate: true,
     mode: "today",
+    scopedStaffId: linkedStaff?.id,
   });
 
-  const { closeStaffDay, isClosing, error: closeError } = useStaffCloseDay(
-    form.date
+  const {
+    closeStaffDay,
+    isClosing,
+    clearError: clearCloseError,
+    shopOpen,
+    businessDate,
+    closeRequestPending,
+    dayClosed,
+  } = useStaffCloseDay(businessDateProp ?? form.date);
+
+  const resolvedBusinessDate = businessDateProp ?? businessDate;
+
+  const { staffOnShift, refresh: refreshBranchStaffOnShift } = useBranchStaffOnShift(
+    activeBranch,
+    resolvedBusinessDate
   );
+
+  const { refreshAll: refreshStaffOperations } = useStaffOperationsRefresh({
+    closeRequestPending,
+    watchForClose: closeRequestPending || Boolean(activeBusinessDayStatus),
+  });
+
+  useEffect(() => {
+    if (shouldClearStaffOnShiftCloseError(closeFlowError, staffOnShift.length)) {
+      setCloseFlowError(null);
+    }
+  }, [closeFlowError, staffOnShift.length]);
+
+  const handleClockOutComplete = useCallback(async () => {
+    await Promise.all([refreshStaffOperations(), refreshBranchStaffOnShift()]);
+  }, [refreshBranchStaffOnShift, refreshStaffOperations]);
 
   const accessorySalesCount = useMemo(
     () =>
@@ -93,7 +146,39 @@ export function StaffOperationsWorkspace({
     [form.expenses]
   );
 
-  const wageRecorded = staffPayouts > 0;
+  const ownDailyWagePayment = useMemo(() => {
+    if (!linkedStaff) return undefined;
+    return findStaffDailyWagePayment(
+      linkedStaff.id,
+      form.branch,
+      form.date,
+      payments
+    );
+  }, [linkedStaff, form.branch, form.date, payments]);
+
+  const wageRecorded = Boolean(ownDailyWagePayment);
+
+  const displayedStaffPayouts = useMemo(() => {
+    if (ownDailyWagePayment) {
+      return ownDailyWagePayment.amount;
+    }
+    if (!linkedStaff) {
+      return staffPayouts;
+    }
+    return computeStaffPayoutTotalForStaffBranchDate(
+      linkedStaff.id,
+      form.branch,
+      form.date,
+      payments
+    );
+  }, [
+    ownDailyWagePayment,
+    linkedStaff,
+    staffPayouts,
+    form.branch,
+    form.date,
+    payments,
+  ]);
 
   const [expandedSection, setExpandedSection] = useState<
     StaffWorkflowSection | null
@@ -124,36 +209,56 @@ export function StaffOperationsWorkspace({
     setExpandedSection(section);
   }
 
-  async function handleCloseDay() {
-    if (movieRevenue <= 0) {
-      toastError("Enter movie revenue before closing the day.");
-      expandSection("end-of-day");
-      return;
-    }
+  const handleCloseDay = useCallback(async (): Promise<boolean> => {
+    setCloseFlowError(null);
+    clearCloseError();
 
-    const saved = await handleSubmitRequest();
-    if (!saved) {
-      toastError(saveError ?? "Could not save today's operations. Please try again.");
-      expandSection("end-of-day");
-      return;
+    const saveResult = await handleSubmitRequest();
+    if (!saveResult.success) {
+      setCloseFlowError(mapCloseDayError(saveResult.error ?? ""));
+      return false;
     }
 
     const result = await closeStaffDay(form.notes.trim());
     if (result.success) {
-      toastSuccess("Day Closed");
-      return;
+      setCloseFlowError(null);
+      toastSuccess("Closing request sent.");
+      await Promise.all([refreshStaffOperations(), refreshBranchStaffOnShift()]);
+      return true;
     }
 
-    toastError(
-      ("message" in result && result.message) ||
-        "Could not close the day. Please try again."
-    );
-    expandSection("end-of-day");
-  }
+    if ("message" in result && result.message) {
+      setCloseFlowError(result.message);
+    }
+    return false;
+  }, [
+    clearCloseError,
+    closeStaffDay,
+    form.notes,
+    handleSubmitRequest,
+    refreshBranchStaffOnShift,
+    refreshStaffOperations,
+    toastSuccess,
+  ]);
 
   return (
     <div className={cn("mx-auto max-w-3xl", uiSpacing.page, uiSpacing.section)}>
-      <StaffWelcomeCard />
+      {activeBusinessDayStatus ? (
+        <StaffActiveBusinessDayBanner
+          businessDate={resolvedBusinessDate}
+          calendarDate={calendarDate}
+          status={
+            activeBusinessDayStatus === "close_requested"
+              ? "close_requested"
+              : "open"
+          }
+        />
+      ) : null}
+
+      <StaffWelcomeCard
+        businessDate={resolvedBusinessDate}
+        onClockOutComplete={() => void handleClockOutComplete()}
+      />
 
       <StaffRevenueCard
         movieRevenue={movieRevenue}
@@ -191,33 +296,47 @@ export function StaffOperationsWorkspace({
         date={form.date}
         expanded={expandedSection === "daily-wage"}
         onExpandedChange={(open) => expandSection(open ? "daily-wage" : null)}
-        onRecorded={() => expandSection("end-of-day")}
+        onRecorded={() => {
+          expandSection("end-of-day");
+          void refreshStaffOperations();
+        }}
       />
 
       <StaffCashSummaryCard
         movieRevenue={movieRevenue}
         accessorySales={accessorySales}
         totalExpenses={totalExpenses}
-        staffPayouts={staffPayouts}
-        netCash={balance}
+        staffPayouts={displayedStaffPayouts}
+        netCash={
+          movieRevenue + accessorySales - totalExpenses - displayedStaffPayouts
+        }
         savingsAllocation={parseAmount(form.savingsAllocation)}
         collapsible={false}
       />
 
       <StaffEndOfDayCard
         form={form}
+        branchName={getBranchName(form.branch)}
+        businessDate={businessDate}
         movieRevenue={movieRevenue}
         accessorySales={accessorySales}
         totalExpenses={totalExpenses}
-        staffPayouts={staffPayouts}
-        cashToHandIn={remainingCash}
-        accessorySalesCount={accessorySalesCount}
+        staffPayouts={displayedStaffPayouts}
+        cashToHandIn={
+          movieRevenue +
+          accessorySales -
+          totalExpenses -
+          displayedStaffPayouts -
+          parseAmount(form.savingsAllocation)
+        }
+        wageRecorded={wageRecorded}
+        shopOpen={shopOpen}
+        closeRequestPending={closeRequestPending}
+        dayClosed={dayClosed}
         isClosing={isClosing || isSaving}
-        closeError={closeError ?? saveError}
+        closeError={closeFlowError}
         updateField={updateField}
-        onCloseDay={() => void handleCloseDay()}
-        expanded={expandedSection === "end-of-day"}
-        onExpandedChange={(open) => expandSection(open ? "end-of-day" : null)}
+        onCloseDay={handleCloseDay}
       />
 
       {duplicateEntry ? (

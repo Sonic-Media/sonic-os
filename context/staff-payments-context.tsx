@@ -35,6 +35,7 @@ import {
   isBranchDayOpened,
   SHOP_NOT_OPENED_MESSAGE,
 } from "@/lib/day-closing/storage";
+import { findStaffDailyWagePayment } from "@/lib/staff-payments/calculations";
 import {
   normalizeStaffPaymentList,
   sortStaffPaymentsByDate,
@@ -259,9 +260,20 @@ export function StaffPaymentsProvider({
 
         return createValidationResult({}, payment);
       } catch (error) {
-        return createValidationResult({
-          form: getDataSourceErrorMessage(error),
-        });
+        const message = getDataSourceErrorMessage(error);
+        if (/already recorded/i.test(message)) {
+          await refreshPaymentsFromApi();
+          const existing = findStaffDailyWagePayment(
+            input.staffId,
+            staff.branch,
+            input.date,
+            paymentsRef.current
+          );
+          if (existing) {
+            return createValidationResult({}, existing);
+          }
+        }
+        return createValidationResult({ form: message });
       }
     },
     [getStaffById, refreshPaymentsFromApi]

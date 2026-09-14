@@ -44,6 +44,13 @@ import { pickAuditFields } from "@/lib/audit-log/snapshots";
 import { recordStaffAction } from "@/lib/staff/audit";
 import { resolveCurrentStaffAction } from "@/lib/staff/session";
 import { useAuth } from "@/context/auth-context";
+import { useBranch } from "@/context/branch-context";
+import {
+  beginBranchScopedFetch,
+  resetBranchScopedFetchRefs,
+  shouldSkipBranchScopedFetch,
+} from "@/lib/context/branch-scoped-load";
+import type { Branch } from "@/types";
 import {
   DAY_CLOSED_EDIT_MESSAGE,
   isBranchDayClosed,
@@ -70,12 +77,12 @@ interface PurchasingContextValue {
   refreshPurchases: () => Promise<void>;
   getPurchaseById: (id: string) => Purchase | undefined;
   getSupplierById: (id: string) => Supplier | undefined;
-  addSupplier: (input: SupplierInput) => PurchaseValidationResult;
+  addSupplier: (input: SupplierInput) => Promise<PurchaseValidationResult>;
   updateSupplier: (
     id: string,
     input: SupplierUpdateInput
-  ) => PurchaseValidationResult;
-  deleteSupplier: (id: string) => PurchaseValidationResult;
+  ) => Promise<PurchaseValidationResult>;
+  deleteSupplier: (id: string) => Promise<PurchaseValidationResult>;
   completePurchase: (input: PurchaseInput) => Promise<PurchaseValidationResult>;
 }
 
@@ -96,6 +103,7 @@ export function PurchasingProvider({
   children: React.ReactNode;
 }) {
   const { isAuthenticated, isLoaded: authLoaded, session } = useAuth();
+  const { activeBranch } = useBranch();
   const { getProductById, refreshStockFromApi } = useStock();
 
   const [purchases, setPurchases] = useState<Purchase[]>([]);
@@ -103,6 +111,7 @@ export function PurchasingProvider({
   const [isLoaded, setIsLoaded] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const hasLoaded = useRef(false);
+  const lastFetchedBranch = useRef<Branch | null>(null);
   const purchaseInFlight = useRef(false);
   const purchasesRef = useRef(purchases);
   const suppliersRef = useRef(suppliers);
@@ -136,13 +145,28 @@ export function PurchasingProvider({
       setPurchases([]);
       setSuppliers([]);
       setLoadError(null);
-      hasLoaded.current = false;
+      resetBranchScopedFetchRefs(hasLoaded, lastFetchedBranch);
       setIsLoaded(true);
       return;
     }
 
-    if (hasLoaded.current) return;
-    hasLoaded.current = true;
+    if (shouldSkipBranchScopedFetch(hasLoaded, lastFetchedBranch, activeBranch)) {
+      return;
+    }
+
+    const branchChanged = beginBranchScopedFetch(
+      hasLoaded,
+      lastFetchedBranch,
+      activeBranch
+    );
+    if (branchChanged) {
+      purchasesRef.current = [];
+      suppliersRef.current = [];
+      setPurchases([]);
+      setSuppliers([]);
+      setLoadError(null);
+      setIsLoaded(false);
+    }
 
     queueMicrotask(() => {
       void (async () => {
@@ -165,13 +189,17 @@ export function PurchasingProvider({
           setSuppliers(suppliersRef.current);
           setLoadError(null);
         } catch (error) {
+          purchasesRef.current = [];
+          suppliersRef.current = [];
+          setPurchases([]);
+          setSuppliers([]);
           setLoadError(getDataSourceErrorMessage(error));
         } finally {
           setIsLoaded(true);
         }
       })();
     });
-  }, [authLoaded, isAuthenticated]);
+  }, [authLoaded, isAuthenticated, activeBranch]);
 
   const purchaseLookup = useMemo(
     () => new Map(purchases.map((purchase) => [purchase.id, purchase])),
@@ -199,30 +227,32 @@ export function PurchasingProvider({
   );
 
   const addSupplier = useCallback(
-    (input: SupplierInput): PurchaseValidationResult => {
+    async (input: SupplierInput): Promise<PurchaseValidationResult> => {
       const errors = validateSupplierInput(input);
       if (hasValidationErrors(errors)) {
         return createValidationResult(errors);
       }
 
-      void (async () => {
-        try {
-          await runOnApi(async () => {
-            await createSupplierApi(input);
-            await refreshPurchasesFromApi();
-          });
-        } catch (error) {
-          console.error(getDataSourceErrorMessage(error));
-        }
-      })();
-
-      return createValidationResult({});
+      try {
+        await runOnApi(async () => {
+          await createSupplierApi(input);
+          await refreshPurchasesFromApi();
+        });
+        return createValidationResult({});
+      } catch (error) {
+        return createValidationResult({
+          form: getDataSourceErrorMessage(error),
+        });
+      }
     },
     [refreshPurchasesFromApi]
   );
 
   const updateSupplier = useCallback(
-    (id: string, input: SupplierUpdateInput): PurchaseValidationResult => {
+    async (
+      id: string,
+      input: SupplierUpdateInput
+    ): Promise<PurchaseValidationResult> => {
       const existing = suppliersRef.current.find(
         (supplier) => supplier.id === id
       );
@@ -235,24 +265,23 @@ export function PurchasingProvider({
         return createValidationResult(errors);
       }
 
-      void (async () => {
-        try {
-          await runOnApi(async () => {
-            await updateSupplierApi(id, input);
-            await refreshPurchasesFromApi();
-          });
-        } catch (error) {
-          console.error(getDataSourceErrorMessage(error));
-        }
-      })();
-
-      return createValidationResult({});
+      try {
+        await runOnApi(async () => {
+          await updateSupplierApi(id, input);
+          await refreshPurchasesFromApi();
+        });
+        return createValidationResult({});
+      } catch (error) {
+        return createValidationResult({
+          form: getDataSourceErrorMessage(error),
+        });
+      }
     },
     [refreshPurchasesFromApi]
   );
 
   const deleteSupplier = useCallback(
-    (id: string): PurchaseValidationResult => {
+    async (id: string): Promise<PurchaseValidationResult> => {
       const inUse = purchasesRef.current.some(
         (purchase) => purchase.supplierId === id
       );
@@ -262,18 +291,17 @@ export function PurchasingProvider({
         });
       }
 
-      void (async () => {
-        try {
-          await runOnApi(async () => {
-            await deleteSupplierApi(id);
-            await refreshPurchasesFromApi();
-          });
-        } catch (error) {
-          console.error(getDataSourceErrorMessage(error));
-        }
-      })();
-
-      return createValidationResult({});
+      try {
+        await runOnApi(async () => {
+          await deleteSupplierApi(id);
+          await refreshPurchasesFromApi();
+        });
+        return createValidationResult({});
+      } catch (error) {
+        return createValidationResult({
+          form: getDataSourceErrorMessage(error),
+        });
+      }
     },
     [refreshPurchasesFromApi]
   );

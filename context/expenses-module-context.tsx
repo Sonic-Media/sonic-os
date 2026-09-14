@@ -86,7 +86,7 @@ interface ExpensesModuleContextValue {
     id: string,
     input: ExpenseRecordUpdateInput
   ) => ExpenseValidationResult;
-  deleteExpense: (id: string) => void;
+  deleteExpense: (id: string) => Promise<ExpenseValidationResult>;
   addCategory: (input: ExpenseCategoryInput) => ExpenseValidationResult;
   updateCategory: (
     id: string,
@@ -402,13 +402,15 @@ export function ExpensesModuleProvider({
   );
 
   const deleteExpense = useCallback(
-    (id: string) => {
+    async (id: string): Promise<ExpenseValidationResult> => {
       const existing = expensesRef.current.find((expense) => expense.id === id);
       if (
         existing?.staffPaymentId ||
         (existing && isStaffPaymentExpense(existing))
       ) {
-        return;
+        return createValidationResult({
+          form: "Staff payment expenses are managed in Staff Payments.",
+        });
       }
 
       if (
@@ -416,35 +418,38 @@ export function ExpensesModuleProvider({
         (isBranchDayClosed(existing.branch, existing.date) ||
           !isBranchDayOpened(existing.branch, existing.date))
       ) {
-        return;
+        return createValidationResult({ form: DAY_CLOSED_EDIT_MESSAGE });
       }
 
-      void (async () => {
-        try {
-          await runOnApi(async () => {
-            await deleteExpenseApi(id);
-            await refreshFromApi();
+      if (!existing) {
+        return createValidationResult({ form: "Expense not found." });
+      }
 
-            if (existing) {
-              recordStaffAction({
-                branch: existing.branch,
-                action: AUDIT_ACTIONS.DELETE,
-                module: "expenses",
-                recordId: existing.id,
-                oldValues: pickAuditFields(existing, [
-                  "date",
-                  "categoryName",
-                  "description",
-                  "amount",
-                  "branch",
-                ]),
-              });
-            }
+      try {
+        await runOnApi(async () => {
+          await deleteExpenseApi(id);
+          await refreshFromApi();
+
+          recordStaffAction({
+            branch: existing.branch,
+            action: AUDIT_ACTIONS.DELETE,
+            module: "expenses",
+            recordId: existing.id,
+            oldValues: pickAuditFields(existing, [
+              "date",
+              "categoryName",
+              "description",
+              "amount",
+              "branch",
+            ]),
           });
-        } catch (error) {
-          console.error(getDataSourceErrorMessage(error));
-        }
-      })();
+        });
+        return createValidationResult({});
+      } catch (error) {
+        return createValidationResult({
+          form: getDataSourceErrorMessage(error),
+        });
+      }
     },
     [refreshFromApi]
   );

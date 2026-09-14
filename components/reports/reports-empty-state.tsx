@@ -1,12 +1,13 @@
-import { Card } from "@/components/shared/ui/card";
+import { uiSurface } from "@/lib/ui/design-tokens";
+import { cn } from "@/lib/utils";
 
 export function ReportsEmptyState() {
   return (
-    <Card className="text-center py-12">
-      <p className="text-zinc-500 text-sm">No data for this period yet.</p>
-      <p className="text-zinc-600 text-xs mt-1">
-        Add entries to see charts and reports.
+    <section className={cn(uiSurface.card, "px-5 py-12 text-center")}>
+      <p className="text-sm text-zinc-500">No chart data for this period.</p>
+      <p className="mt-1 text-xs text-zinc-600">
+        Totals above reflect UGX 0 when no completed operations were recorded.
       </p>
-    </Card>
+    </section>
   );
 }

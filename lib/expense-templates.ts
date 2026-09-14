@@ -14,6 +14,7 @@ export function templateToExpense(template: ExpenseTemplate): Expense {
   return {
     id: template.id,
     name: template.name,
+    // UI pre-fill only; zero amounts are stripped before PostgreSQL persist.
     amount: template.defaultAmount ?? 0,
   };
 }

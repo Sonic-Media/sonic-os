@@ -37,9 +37,9 @@ export const STOCK_STATUS_OPTIONS: {
   id: StockProductStatus;
   label: string;
 }[] = [
-  { id: "in-stock", label: "🟢 In Stock" },
-  { id: "low-stock", label: "🟡 Low Stock" },
-  { id: "out-of-stock", label: "🔴 Out of Stock" },
+  { id: "in-stock", label: "In Stock" },
+  { id: "low-stock", label: "Low Stock" },
+  { id: "out-of-stock", label: "Out of Stock" },
 ];
 
 export const STOCK_PRODUCT_SORT_OPTIONS: {
@@ -71,7 +71,7 @@ export const STOCK_NAV_ITEMS: {
   label: string;
   exact?: boolean;
 }[] = [
-  { href: "/stock", label: "Dashboard", exact: true },
+  { href: "/stock", label: "Overview", exact: true },
   { href: "/stock/products", label: "Products" },
   { href: "/stock/movement", label: "Stock Movement" },
 ];

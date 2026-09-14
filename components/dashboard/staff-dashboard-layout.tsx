@@ -12,6 +12,7 @@ import { DayClosingStatusCardContainer } from "@/components/dashboard/day-closin
 import { TodayAtAGlance } from "@/components/dashboard/today-at-a-glance";
 import { CashFlowGlanceCard } from "@/components/dashboard/cash-flow-glance-card";
 import { TodayProgress } from "@/components/dashboard/today-progress";
+import { ClosingRequestsPanel } from "@/components/dashboard/closing-requests/closing-requests-panel";
 import { PageContainer } from "@/components/shared/layout/page-container";
 import { BranchBadge } from "@/components/shared/layout/branch-badge";
 import { filterByBranchField } from "@/lib/active-branch/filters";
@@ -19,7 +20,10 @@ import { getTodayISO } from "@/lib/dates";
 import { filterEntriesByDate } from "@/lib/entry-helpers";
 import { getBranchTotals } from "@/lib/aggregations";
 import { useEntriesContext } from "@/context/entries-context";
-import { useSettings } from "@/context/settings-context";
+import { useAuth } from "@/context/auth-context";
+import { useBranch } from "@/context/branch-context";
+import { useManagementDashboardRefresh } from "@/hooks/use-management-dashboard-refresh";
+import { canApproveAndClose } from "@/lib/day-closing/permissions";
 import type { BranchProgress, Entry, ReportSummary } from "@/types";
 
 interface StaffDashboardLayoutProps {
@@ -47,11 +51,23 @@ export function StaffDashboardLayout({
   activeBranch,
   lastUpdatedAt,
 }: StaffDashboardLayoutProps) {
-  const { branches } = useSettings();
-  const activeBranchConfig = branches.find((branch) => branch.id === activeBranch);
+  const { session } = useAuth();
+  const { getBranchByCode } = useBranch();
+  const activeBranchEntity = getBranchByCode(activeBranch);
+  const showClosingRequests = session
+    ? canApproveAndClose(session.role)
+    : false;
+
+  useManagementDashboardRefresh();
 
   return (
     <PageContainer>
+      {showClosingRequests ? (
+        <div className="mb-6">
+          <ClosingRequestsPanel />
+        </div>
+      ) : null}
+
       <div className="relative mb-8">
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_minmax(280px,340px)] lg:items-start">
           <div className="space-y-4">
@@ -88,11 +104,11 @@ export function StaffDashboardLayout({
             Branch
           </h2>
           <div className="grid grid-cols-1 gap-3">
-            {activeBranchConfig ? (
+            {activeBranchEntity ? (
               <BranchCard
-                key={activeBranchConfig.id}
-                name={activeBranchConfig.name}
-                totals={getBranchTotals(summary.byBranch, activeBranchConfig.id)}
+                key={activeBranchEntity.code}
+                name={activeBranchEntity.name}
+                totals={getBranchTotals(summary.byBranch, activeBranchEntity.code)}
               />
             ) : null}
           </div>

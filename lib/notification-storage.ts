@@ -1,6 +1,7 @@
 import { NOTIFICATIONS_STORAGE_KEY } from "@/lib/constants";
 import {
   readLocalStorageJson,
+  removeLocalStorageItem,
   writeLocalStorageItem,
 } from "@/lib/safe-storage";
 
@@ -84,6 +85,5 @@ export function dismissNotifications(ids: string[]): NotificationPreferences {
 }
 
 export function clearNotificationPreferences(): void {
-  if (typeof window === "undefined") return;
-  localStorage.removeItem(NOTIFICATIONS_STORAGE_KEY);
+  removeLocalStorageItem(NOTIFICATIONS_STORAGE_KEY);
 }

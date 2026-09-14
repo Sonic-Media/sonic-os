@@ -17,6 +17,11 @@ export function useExpensesDialogs() {
     setSelectedExpense(null);
   }
 
+  function openAddExpense() {
+    setSelectedExpense(null);
+    setActiveDialog("add");
+  }
+
   function openAddHistoricalExpense() {
     setSelectedExpense(null);
     setActiveDialog("historical");
@@ -30,6 +35,13 @@ export function useExpensesDialogs() {
   function renderDialogs() {
     return (
       <>
+        {activeDialog === "add" && (
+          <ExpenseDialog
+            key="add-expense"
+            mode="add"
+            onClose={closeDialog}
+          />
+        )}
         {activeDialog === "historical" && (
           <ExpenseDialog
             key="historical-expense"
@@ -53,6 +65,7 @@ export function useExpensesDialogs() {
   return {
     activeDialog,
     selectedExpense,
+    openAddExpense,
     openAddHistoricalExpense,
     openEditExpense,
     closeDialog,

@@ -16,18 +16,18 @@ import {
 import { useAuth } from "@/context/auth-context";
 import { useActiveBranch } from "@/context/active-branch-context";
 import { useDayClosing } from "@/context/day-closing-context";
+import { getActiveOpenDayRecord } from "@/lib/day-closing/business-date";
 import { useSettings } from "@/context/settings-context";
 import { useStaff } from "@/context/staff-context";
 import { useStaffAttendance } from "@/hooks/use-staff-attendance";
 import { useTodayISO } from "@/hooks/use-today-iso";
 import { useToast } from "@/context/toast-context";
+import { clockInApi } from "@/lib/api/staff-attendance";
+import { runOnApi } from "@/lib/data-source/context-api";
 import { canOpenShop } from "@/lib/day-closing/permissions";
 import { formatEntryDisplayDate } from "@/lib/dates";
-import {
-  formatClockTime,
-  recordStaffClockIn,
-  recordStaffStartShiftAttendance,
-} from "@/lib/staff/attendance";
+import { mergeStaffAuditRecords } from "@/lib/staff/audit";
+import { formatClockTime } from "@/lib/staff/attendance";
 import {
   formatGreetingTime,
   getDaysSinceLastShift,
@@ -83,6 +83,17 @@ export function OpenShopPage({
         ? getStartShiftSuccessLine(staffName, today)
         : `${staffName}, you are now on shift.`,
     [mode, staffName, today]
+  );
+
+  const activeOpenRecord = useMemo(
+    () => getActiveOpenDayRecord(activeBranch, closings),
+    [activeBranch, closings]
+  );
+  const hasStaleOpenBusinessDay = Boolean(
+    activeOpenRecord &&
+      activeOpenRecord.date !== today &&
+      (activeOpenRecord.status === "open" ||
+        activeOpenRecord.status === "close_requested")
   );
 
   const canStart = session ? canOpenShop(session.role) : false;
@@ -154,29 +165,42 @@ export function OpenShopPage({
           return;
         }
 
-        const attendanceRecord = recordStaffStartShiftAttendance(activeBranch);
-        if (!attendanceRecord) {
-          setError(
-            "The branch opened, but we couldn't start your attendance session. Please try Clock In again."
-          );
-          return;
-        }
-
         toastSuccess("Shop Opened");
         setPhase("success");
         return;
       }
 
-      const clockInRecord = recordStaffClockIn(activeBranch);
-      if (!clockInRecord) {
-        setError(
-          "We couldn't record your clock-in. Please sign out and back in, then try again."
-        );
-        return;
-      }
+      const clockInRecord = await runOnApi(() =>
+        clockInApi({ branch: activeBranch, date: today })
+      );
+      mergeStaffAuditRecords([
+        {
+          id: clockInRecord.id,
+          timestamp: clockInRecord.timestamp,
+          staffId: clockInRecord.userId,
+          staffName: clockInRecord.userName,
+          role: clockInRecord.role as never,
+          branch: clockInRecord.branch,
+          action: clockInRecord.action,
+          module: clockInRecord.module as never,
+        },
+      ]);
 
       toastSuccess("Clocked In");
       setPhase("success");
+    } catch (caught) {
+      const message =
+        caught instanceof Error
+          ? caught.message
+          : isStartShift
+            ? "Could not open the shop."
+            : "Could not record your clock-in.";
+      setError(
+        toStaffFacingError(message, {
+          ownerName: settings.ownerName,
+          context: isStartShift ? "start-shift" : "general",
+        })
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -240,16 +264,42 @@ export function OpenShopPage({
           {!isStartShift ? (
             <div className="rounded-2xl border border-emerald-500/10 bg-emerald-500/[0.04] px-4 py-4 text-center">
               <p className="text-sm text-emerald-300">
-                The branch is already open. Clock in to start your session.
+                The branch is already open for business today. Clock in to
+                record that you are on shift.
               </p>
               <p className="mt-1 text-xs text-zinc-500">
-                Last check: {formatClockTime(now.toISOString())}
+                Opening the shop and clocking in are separate steps. If you
+                opened the shop earlier, you may still need to clock in after
+                returning or after clocking out.
               </p>
             </div>
           ) : (
             <ShopScheduleCountdown now={now} />
           )}
         </div>
+
+        {hasStaleOpenBusinessDay ? (
+          <div className="mt-5 rounded-2xl border border-amber-500/20 bg-amber-500/[0.08] px-4 py-4 text-center">
+            <p className="text-sm font-medium text-amber-100">
+              An earlier business day is still open
+            </p>
+            <p className="mt-2 text-sm leading-relaxed text-zinc-400">
+              {activeOpenRecord?.status === "close_requested"
+                ? "A closing request has already been sent for that business day and is awaiting review."
+                : "Return to that business day's operations, then submit it for closing before opening a new day."}
+            </p>
+            <Button
+              type="button"
+              variant="secondary"
+              className="mt-4"
+              onClick={() => {
+                void refreshClosings().then(() => router.refresh());
+              }}
+            >
+              Continue Previous Business Day
+            </Button>
+          </div>
+        ) : null}
 
         {error ? (
           <p className="mt-5 whitespace-pre-line text-center text-sm text-red-400">
@@ -267,7 +317,12 @@ export function OpenShopPage({
                 ? "bg-gradient-to-r from-emerald-600 to-teal-600 shadow-[0_16px_40px_-16px_rgba(16,185,129,0.7)] hover:from-emerald-500 hover:to-teal-500"
                 : ""
             )}
-            disabled={!canStart || isSubmitting || !scheduleAllowsOpen}
+            disabled={
+              !canStart ||
+              isSubmitting ||
+              !scheduleAllowsOpen ||
+              hasStaleOpenBusinessDay
+            }
             loading={isSubmitting}
             loadingLabel={isStartShift ? "Opening shop..." : "Clocking in..."}
             onClick={() => void handleSubmit()}

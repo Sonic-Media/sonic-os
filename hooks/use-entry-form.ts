@@ -17,6 +17,8 @@ import { createDefaultExpenses } from "@/lib/expenses";
 import { getTodayISO } from "@/lib/dates";
 import { upsertEntryInList } from "@/lib/storage";
 import { getDataSourceErrorMessage } from "@/lib/data-source/context-api";
+import { isApiError } from "@/lib/api/errors";
+import { toCloseDayFacingError } from "@/lib/ux/close-day-messages";
 import { getClientSession } from "@/lib/client/session-registry";
 import {
   buildStaffActionRecord,
@@ -31,7 +33,20 @@ import { useSales } from "@/context/sales-context";
 import { useDayClosing } from "@/context/day-closing-context";
 import { filterByBranchField } from "@/lib/active-branch/filters";
 import { isBranchDayClosed } from "@/lib/day-closing/storage";
-import { computeStaffPayoutTotalForBranchDate } from "@/lib/staff-payments/calculations";
+import {
+  awaitInFlightSave,
+  beginExplicitSave,
+  clearInFlightSaveIfCurrent,
+  createSaveCoordinatorState,
+  endExplicitSave,
+  isAutosavePermitted,
+  shouldApplySaveResult,
+  trackInFlightSave,
+} from "@/lib/entry-form/save-coordination";
+import {
+  computeStaffPayoutTotalForBranchDate,
+  computeStaffPayoutTotalForStaffBranchDate,
+} from "@/lib/staff-payments/calculations";
 import type { Branch, Entry, EntryFormData, Expense } from "@/types";
 
 function createBlankForm(
@@ -52,6 +67,11 @@ function createBlankForm(
 
 export type OperationsMode = "today" | "historical";
 
+export interface SubmitRequestResult {
+  success: boolean;
+  error?: string;
+}
+
 interface UseEntryFormOptions {
   entry?: Entry;
   redirectTo?: string;
@@ -60,6 +80,8 @@ interface UseEntryFormOptions {
   lockBranch?: boolean;
   lockDate?: boolean;
   mode?: OperationsMode;
+  /** When set, staff payout deductions use this staff member only (not whole branch). */
+  scopedStaffId?: string;
 }
 
 export function useEntryForm(options: UseEntryFormOptions = {}) {
@@ -95,7 +117,7 @@ export function useEntryForm(options: UseEntryFormOptions = {}) {
   );
   const entriesRef = useRef(entries);
   const autosaveTimerRef = useRef<number | null>(null);
-  const saveLockRef = useRef(false);
+  const saveCoordinatorRef = useRef(createSaveCoordinatorState());
 
   useEffect(() => {
     entriesRef.current = entries;
@@ -113,15 +135,22 @@ export function useEntryForm(options: UseEntryFormOptions = {}) {
   );
   const savingsAllocation = parseAmount(form.savingsAllocation);
   const totalExpenses = calculateExpenses(form);
-  const staffPayouts = useMemo(
-    () =>
-      computeStaffPayoutTotalForBranchDate(
-        payments,
+  const staffPayouts = useMemo(() => {
+    if (options.scopedStaffId) {
+      return computeStaffPayoutTotalForStaffBranchDate(
+        options.scopedStaffId,
         form.branch,
-        form.date
-      ),
-    [payments, form.branch, form.date]
-  );
+        form.date,
+        payments
+      );
+    }
+
+    return computeStaffPayoutTotalForBranchDate(
+      payments,
+      form.branch,
+      form.date
+    );
+  }, [options.scopedStaffId, payments, form.branch, form.date]);
   const balance = movieRevenue + accessorySales - totalExpenses - staffPayouts;
   const remainingCash = balance - savingsAllocation;
   const mode = options.mode ?? "today";
@@ -213,23 +242,6 @@ export function useEntryForm(options: UseEntryFormOptions = {}) {
     [form, resolveCreatedBy, resolveStaffName]
   );
 
-  function promoteToCompletedSync(
-    entryId: string,
-    existing?: Entry,
-    formData: EntryFormData = form
-  ): Entry {
-    const completed = formToEntry(formData, {
-      id: entryId,
-      status: "completed",
-      existing,
-      staffName: resolveStaffName(existing),
-    });
-    upsertEntry(completed);
-    syncEntriesRef(completed);
-    draftIdRef.current = entryId;
-    return completed;
-  }
-
   function switchBranch(nextBranch: Branch) {
     cancelPendingAutosave();
 
@@ -280,32 +292,34 @@ export function useEntryForm(options: UseEntryFormOptions = {}) {
     ) {
       return;
     }
-    if (saveLockRef.current) return;
+    if (!isAutosavePermitted(saveCoordinatorRef.current)) return;
 
     cancelPendingAutosave();
 
     autosaveTimerRef.current = window.setTimeout(() => {
       autosaveTimerRef.current = null;
-      if (saveLockRef.current) return;
+      if (!isAutosavePermitted(saveCoordinatorRef.current)) return;
 
-      saveLockRef.current = true;
+      const epochAtStart = saveCoordinatorRef.current.epoch;
       const activeDraftId = resolveActiveDraftId();
       const existing = activeDraftId
         ? entriesRef.current.find((entry) => entry.id === activeDraftId)
         : undefined;
       const entry = buildDraftEntry(activeDraftId, existing);
 
-      void upsertEntry(entry)
+      const persistPromise = upsertEntry(entry)
         .then((saved) => {
-          syncEntriesRef(saved);
-          draftIdRef.current = saved.id;
+          if (shouldApplySaveResult(saveCoordinatorRef.current, epochAtStart)) {
+            syncEntriesRef(saved);
+            draftIdRef.current = saved.id;
+          }
+          return saved;
         })
         .catch(() => {
           // Autosave failures surface on explicit save/close actions.
-        })
-        .finally(() => {
-          saveLockRef.current = false;
         });
+
+      trackInFlightSave(saveCoordinatorRef.current, persistPromise);
     }, AUTOSAVE_DEBOUNCE_MS);
 
     return cancelPendingAutosave;
@@ -367,12 +381,23 @@ export function useEntryForm(options: UseEntryFormOptions = {}) {
     setForm((prev) => ({ ...prev, [key]: value }));
   }
 
-  function handleSave() {
+  function resolveSubmitError(error: unknown): string {
+    if (isApiError(error)) {
+      return toCloseDayFacingError(error);
+    }
+
+    return getDataSourceErrorMessage(error);
+  }
+
+  async function handleSave(): Promise<SubmitRequestResult> {
     cancelPendingAutosave();
-    saveLockRef.current = true;
+    const saveEpoch = beginExplicitSave(saveCoordinatorRef.current);
     setIsSaving(true);
+    setSaveError(null);
 
     try {
+      await awaitInFlightSave(saveCoordinatorRef.current);
+
       const formWithAllocation = {
         ...form,
         savingsAllocation:
@@ -395,88 +420,119 @@ export function useEntryForm(options: UseEntryFormOptions = {}) {
 
       if (conflict && !(options.entry?.id === conflict.id)) {
         setDuplicateEntry(conflict);
-        setIsSaving(false);
-        return;
+        return { success: false, error: "A completed entry already exists for this day." };
       }
 
       const existing = entryId
         ? entriesRef.current.find((entry) => entry.id === entryId)
         : undefined;
 
-      const shouldPersistDraft =
-        hasInteracted.current && (!existing || existing.status === "draft");
-
-      if (shouldPersistDraft) {
-        entryId = entryId ?? crypto.randomUUID();
-        const draft = formToEntry(formWithAllocation, {
-          id: entryId,
-          status: "draft",
-          existing,
-          staffName: resolveStaffName(existing),
-        });
-        upsertEntry(draft);
-        syncEntriesRef(draft);
-        draftIdRef.current = entryId;
-      }
-
       const recordId = entryId ?? crypto.randomUUID();
       const promoteFrom = entriesRef.current.find(
         (entry) => entry.id === recordId
       );
 
-      promoteToCompletedSync(recordId, promoteFrom ?? existing, formWithAllocation);
+      const completed = formToEntry(formWithAllocation, {
+        id: recordId,
+        status: "completed",
+        existing: promoteFrom ?? existing,
+        staffName: resolveStaffName(promoteFrom ?? existing),
+        createdBy: resolveCreatedBy(formWithAllocation.branch),
+      });
+
+      const persistPromise = upsertEntry(completed);
+      trackInFlightSave(saveCoordinatorRef.current, persistPromise);
+      let saved: Entry;
+      try {
+        saved = await persistPromise;
+      } finally {
+        clearInFlightSaveIfCurrent(saveCoordinatorRef.current, persistPromise);
+      }
+
+      if (!shouldApplySaveResult(saveCoordinatorRef.current, saveEpoch)) {
+        return {
+          success: false,
+          error: "Save was interrupted. Please try again.",
+        };
+      }
+
+      syncEntriesRef(saved);
+      draftIdRef.current = saved.id;
+      setLastSavedAt(Date.now());
 
       const redirect =
         options.redirectTo ??
         (mode === "today" ? "/operations/today" : "/history");
-      router.push(
-        mode === "today"
-          ? "/operations/today"
-          : redirect
-      );
+      router.push(mode === "today" ? "/operations/today" : redirect);
+      return { success: true };
+    } catch (error) {
+      const message = resolveSubmitError(error);
+      setSaveError(message);
+      setLastSavedAt(null);
+      return { success: false, error: message };
     } finally {
-      saveLockRef.current = false;
+      endExplicitSave(saveCoordinatorRef.current);
+      setIsSaving(false);
     }
   }
 
-  async function handleSubmitRequest(): Promise<boolean> {
+  async function handleSubmitRequest(): Promise<SubmitRequestResult> {
     if (
       mode === "today" &&
       closingLoaded &&
       isBranchDayClosed(form.branch, form.date)
     ) {
-      setSaveError("This day is closed. Records cannot be changed.");
-      return false;
+      const message = "This day is closed. Records cannot be changed.";
+      setSaveError(message);
+      return { success: false, error: message };
     }
 
     if (mode === "today") {
       cancelPendingAutosave();
       setSaveError(null);
-      saveLockRef.current = true;
+      const saveEpoch = beginExplicitSave(saveCoordinatorRef.current);
       setIsSaving(true);
 
       try {
+        await awaitInFlightSave(saveCoordinatorRef.current);
+
         const activeDraftId = resolveActiveDraftId();
         const existing = activeDraftId
           ? entriesRef.current.find((entry) => entry.id === activeDraftId)
           : undefined;
         const entry = buildDraftEntry(activeDraftId, existing);
-        const saved = await upsertEntry(entry);
+        const persistPromise = upsertEntry(entry);
+        trackInFlightSave(saveCoordinatorRef.current, persistPromise);
+        let saved: Entry;
+        try {
+          saved = await persistPromise;
+        } finally {
+          clearInFlightSaveIfCurrent(saveCoordinatorRef.current, persistPromise);
+        }
+
+        if (!shouldApplySaveResult(saveCoordinatorRef.current, saveEpoch)) {
+          return {
+            success: false,
+            error: "Save was interrupted. Please try again.",
+          };
+        }
+
         syncEntriesRef(saved);
         draftIdRef.current = saved.id;
         setLastSavedAt(Date.now());
-        return true;
+        return { success: true };
       } catch (error) {
-        setSaveError(getDataSourceErrorMessage(error));
+        const message = resolveSubmitError(error);
+        setSaveError(message);
         setLastSavedAt(null);
-        return false;
+        return { success: false, error: message };
       } finally {
-        saveLockRef.current = false;
+        endExplicitSave(saveCoordinatorRef.current);
         setIsSaving(false);
       }
     }
-    handleSave();
-    return true;
+
+    return handleSave();
   }
 
   function handleCancelDuplicate() {

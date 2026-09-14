@@ -16,6 +16,23 @@ export function getTodayISO(): string {
   return formatDateISO(new Date());
 }
 
+const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
+/** Parse YYYY-MM-DD for report anchors (local calendar date, noon-safe). */
+export function parseReportReferenceDate(value: string): Date {
+  const trimmed = value.trim();
+  if (!ISO_DATE_PATTERN.test(trimmed)) {
+    throw new Error(`Invalid report date: ${value}`);
+  }
+
+  const parsed = new Date(`${trimmed}T12:00:00`);
+  if (Number.isNaN(parsed.getTime())) {
+    throw new Error(`Invalid report date: ${value}`);
+  }
+
+  return parsed;
+}
+
 export function formatEntryDisplayDate(dateStr: string): string {
   const date = new Date(dateStr + "T12:00:00");
   return date.toLocaleDateString("en-US", DATE_FORMATS.entryDisplay);

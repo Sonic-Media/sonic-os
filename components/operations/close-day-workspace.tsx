@@ -18,6 +18,7 @@ import { useStaffPaymentsModule } from "@/context/staff-payments-context";
 import { usePurchasing } from "@/context/purchasing-context";
 import { useSales } from "@/context/sales-context";
 import { useStaff } from "@/context/staff-context";
+import { useAppDataRefresh } from "@/hooks/use-app-data-refresh";
 import {
   buildStaffPayoutRows,
   computeDayClosingMetrics,
@@ -26,7 +27,9 @@ import {
   computeCashDifference,
   resolveCashStatus,
 } from "@/lib/day-closing/calculations";
-import { canReopenDay } from "@/lib/day-closing/permissions";
+import { getActiveOpenDayRecord } from "@/lib/day-closing/business-date";
+import { canApproveAndClose, canReopenDay } from "@/lib/day-closing/permissions";
+import { readCloseRequest } from "@/lib/day-closing/close-request";
 import { formatCurrency } from "@/lib/format";
 import { getStaffRoleName } from "@/lib/staff/roles";
 import { getTodayISO } from "@/lib/dates";
@@ -84,7 +87,7 @@ export function CloseDayWorkspace({
   savings?: number;
 } = {}) {
   const router = useRouter();
-  const today = getTodayISO();
+  const calendarDate = getTodayISO();
   const { activeBranch } = useActiveBranch();
   const branch = activeBranch;
   const { activeBranches, getBranchName } = useBranches();
@@ -96,7 +99,14 @@ export function CloseDayWorkspace({
   const { staff } = useStaff();
   const { session } = useAuth();
   const { settings } = useSettings();
-  const { closeDay, reopenDay, getClosedRecord } = useDayClosing();
+  const {
+    closings,
+    approveAndClose,
+    reopenDay,
+    getClosedRecord,
+    getCloseRequestedRecord,
+  } = useDayClosing();
+  const { refreshAll } = useAppDataRefresh();
 
   const [step, setStep] = useState(0);
   const [staffPayouts, setStaffPayouts] = useState<DayClosingStaffPayout[]>([]);
@@ -119,7 +129,13 @@ export function CloseDayWorkspace({
   }, [activeBranch]);
 
   const branchEntity = activeBranches.find((item) => item.code === branch);
-  const closedRecord = getClosedRecord(branch, today);
+  const businessDate = useMemo(
+    () => getActiveOpenDayRecord(branch, closings)?.date ?? calendarDate,
+    [branch, calendarDate, closings]
+  );
+  const closedRecord = getClosedRecord(branch, businessDate);
+  const closeRequestedRecord = getCloseRequestedRecord(branch, businessDate);
+  const canApprove = session ? canApproveAndClose(session.role) : false;
 
   const metrics = useMemo(() => {
     if (!branchEntity) return null;
@@ -130,14 +146,14 @@ export function CloseDayWorkspace({
       expenses,
       entries,
       payments,
-      today
+      businessDate
     );
-  }, [branchEntity, sales, purchases, expenses, entries, payments, today]);
+  }, [branchEntity, sales, purchases, expenses, entries, payments, businessDate]);
 
   const payoutRows = useMemo(() => {
     if (!metrics) return [];
-    return buildStaffPayoutRows(staff, branch, payments, today);
-  }, [metrics, staff, branch, payments, today]);
+    return buildStaffPayoutRows(staff, branch, payments, businessDate);
+  }, [metrics, staff, branch, payments, businessDate]);
 
   const effectivePayouts = staffPayouts.length > 0 ? staffPayouts : payoutRows;
   const expectedCash = metrics
@@ -198,20 +214,36 @@ export function CloseDayWorkspace({
   }
 
   async function handleCloseDay() {
-    if (!metrics || !summary) return;
+    if (!metrics) return;
+
+    const approvalRecord = closeRequestedRecord;
+    const resolvedActualCash = approvalRecord
+      ? approvalRecord.actualCashCounted
+      : parsedActualCash;
+    const resolvedSummary = approvalRecord?.summary ?? summary;
+    const resolvedPayouts = approvalRecord?.staffPayouts ?? effectivePayouts;
+    const resolvedExpectedCash = approvalRecord?.expectedCash ?? expectedCash;
+    const resolvedReconciliationNotes =
+      approvalRecord?.reconciliationNotes ?? reconciliationNotes;
+    const resolvedClosingNotes =
+      approvalRecord?.closingNotes ?? closingNotes;
+
+    if (!resolvedSummary || !Number.isFinite(resolvedActualCash)) {
+      return;
+    }
 
     setIsSubmitting(true);
     setErrors({});
 
-    const result = await closeDay({
+    const result = await approveAndClose({
       branch,
-      date: today,
-      metrics,
-      staffPayouts: effectivePayouts,
-      expectedCash,
-      actualCashCounted: parsedActualCash,
-      reconciliationNotes,
-      closingNotes,
+      date: businessDate,
+      metrics: approvalRecord?.metrics ?? metrics,
+      staffPayouts: resolvedPayouts,
+      expectedCash: resolvedExpectedCash,
+      actualCashCounted: resolvedActualCash,
+      reconciliationNotes: resolvedReconciliationNotes,
+      closingNotes: resolvedClosingNotes,
     });
 
     setIsSubmitting(false);
@@ -227,6 +259,7 @@ export function CloseDayWorkspace({
     }
 
     if (result.record) {
+      await refreshAll();
       setCloseSuccessRecord(result.record);
     }
   }
@@ -254,7 +287,7 @@ export function CloseDayWorkspace({
   }
 
   async function handleReopen() {
-    const result = await reopenDay(branch, today);
+    const result = await reopenDay(branch, businessDate);
     if (!result.success) {
       setErrors(result.errors);
       return;
@@ -265,6 +298,77 @@ export function CloseDayWorkspace({
     setReconciliationNotes("");
     setClosingNotes("");
     setErrors({});
+  }
+
+  if (closeRequestedRecord && canApprove) {
+    const closeRequest = readCloseRequest(closeRequestedRecord.summary);
+
+    return (
+      <div className="space-y-6">
+        <Card>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-xs uppercase tracking-wide text-zinc-500">
+                Closing Request
+              </p>
+              <p className="mt-2 text-2xl font-semibold text-indigo-300">
+                Awaiting Approval
+              </p>
+              <p className="mt-2 text-sm text-zinc-400">
+                {getBranchName(branch)} · {businessDate}
+              </p>
+              {closeRequest?.submittedByName ? (
+                <p className="mt-1 text-sm text-zinc-500">
+                  Submitted by {closeRequest.submittedByName}
+                </p>
+              ) : null}
+            </div>
+          </div>
+        </Card>
+
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <MetricCard
+            label="Total Revenue"
+            value={formatCurrency(closeRequestedRecord.summary.sales)}
+          />
+          <MetricCard
+            label="Expenses"
+            value={formatCurrency(closeRequestedRecord.summary.expenses)}
+          />
+          <MetricCard
+            label="Cash to Hand In"
+            value={formatCurrency(closeRequestedRecord.summary.remainingCash)}
+          />
+        </div>
+
+        {closeRequestedRecord.closingNotes ? (
+          <Card>
+            <p className="text-xs uppercase tracking-wide text-zinc-500">
+              Daily Notes
+            </p>
+            <p className="mt-2 text-sm text-zinc-300">
+              {closeRequestedRecord.closingNotes}
+            </p>
+          </Card>
+        ) : null}
+
+        {errors.form && (
+          <p className="text-sm text-red-400">{errors.form}</p>
+        )}
+
+        <div className="flex justify-end">
+          <Button
+            type="button"
+            onClick={handleCloseDay}
+            disabled={isSubmitting}
+            loading={isSubmitting}
+            loadingLabel="Approving and closing..."
+          >
+            Approve & Close
+          </Button>
+        </div>
+      </div>
+    );
   }
 
   if (closedRecord) {
@@ -280,7 +384,7 @@ export function CloseDayWorkspace({
                 CLOSED
               </p>
               <p className="mt-2 text-sm text-zinc-400">
-                {getBranchName(branch)} · {today}
+                {getBranchName(branch)} · {businessDate}
               </p>
             </div>
             <div className="text-sm text-zinc-400">
@@ -551,7 +655,7 @@ export function CloseDayWorkspace({
             <p className="text-sm text-zinc-400">
               Confirm closing for{" "}
               <span className="text-white">{getBranchName(branch)}</span> on{" "}
-              <span className="text-white">{today}</span>. This will mark the
+              <span className="text-white">{businessDate}</span>. This will mark the
               day closed and prevent further editing of today&apos;s records.
             </p>
           </Card>
@@ -587,7 +691,7 @@ export function CloseDayWorkspace({
           </Button>
         ) : (
           <Button type="button" onClick={handleCloseDay} disabled={isSubmitting}>
-            {isSubmitting ? "Closing..." : "Close Day"}
+            {isSubmitting ? "Approving and closing..." : "Approve & Close"}
           </Button>
         )}
       </div>

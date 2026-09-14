@@ -11,6 +11,11 @@ import type { StaffAuditInput, StaffAuditRecord } from "@/types/staff-audit";
 let staffListCache: Staff[] = [];
 let auditRecordCache: StaffAuditRecord[] = [];
 
+export function clearStaffAuditClientCaches(): void {
+  staffListCache = [];
+  auditRecordCache = [];
+}
+
 export function setStaffAuditCache(records: StaffAuditRecord[]): void {
   auditRecordCache = records;
 }
@@ -54,6 +59,10 @@ export function mergeStaffAuditRecords(records: StaffAuditRecord[]): void {
   auditRecordCache = [...merged.values()].sort((left, right) =>
     right.timestamp.localeCompare(left.timestamp)
   );
+
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent(AUDIT_LOG_UPDATED_EVENT));
+  }
 }
 
 export function getStaffAuditRecords(): StaffAuditRecord[] {
