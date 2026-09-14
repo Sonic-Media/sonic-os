@@ -8,6 +8,7 @@ import {
 } from "@/lib/backup/database-url";
 import { exportDatabaseSql } from "@/lib/backup/export";
 import { exportDatabaseJson } from "@/lib/backup/json-export";
+import { stringifyJsonSafe } from "@/lib/backup/json-serialize";
 import {
   createBackupBasename,
   resolveUniqueBackupPath,
@@ -121,7 +122,11 @@ async function writeManifestAndMaybeCompress(options: {
     jsonPath = options.sourcePath;
   }
 
-  fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+  fs.writeFileSync(
+    manifestPath,
+    `${stringifyJsonSafe(manifest, 2)}\n`,
+    "utf8"
+  );
 
   return {
     basename: options.actualBasename,

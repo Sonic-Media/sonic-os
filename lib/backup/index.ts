@@ -6,6 +6,11 @@ export { parseDatabaseUrl, sanitizeDatabaseName } from "@/lib/backup/database-ur
 export type { ParsedDatabaseUrl } from "@/lib/backup/database-url";
 export { exportDatabaseJson } from "@/lib/backup/json-export";
 export {
+  serializeJsonValue,
+  stringifyJsonSafe,
+} from "@/lib/backup/json-serialize";
+export type { JsonSafeValue } from "@/lib/backup/json-serialize";
+export {
   ensureBackupDirectory,
   isServerlessRuntime,
   resolveBackupEngine,
