@@ -70,12 +70,48 @@ export function getShopResetConfirmationPhrase(scope: ShopResetScope): string {
   return option.confirmationPhrase;
 }
 
+/**
+ * Normalize confirmation input before exact phrase comparison.
+ * Strips accidental wrapping quotes copied from UI labels like:
+ * Type "RESET KANSANGA SHOP" to confirm
+ */
+export function normalizeShopResetConfirmation(confirmation: string): string {
+  const trimmed = confirmation.trim();
+  if (trimmed.length >= 2) {
+    const first = trimmed[0];
+    const last = trimmed[trimmed.length - 1];
+    if (
+      (first === '"' && last === '"') ||
+      (first === "'" && last === "'")
+    ) {
+      return trimmed.slice(1, -1).trim();
+    }
+  }
+  return trimmed;
+}
+
 export function assertShopResetConfirmation(
   scope: ShopResetScope,
   confirmation: string
 ): void {
   const expected = getShopResetConfirmationPhrase(scope);
-  if (confirmation.trim() !== expected) {
+  if (normalizeShopResetConfirmation(confirmation) !== expected) {
     throw new Error(`Confirmation phrase must be exactly "${expected}".`);
   }
+}
+
+/**
+ * Pure target-resolution helper for dry-run / regression checks.
+ * Returns the branch codes used to look up branch IDs (aliases allowed).
+ * Does not touch the database.
+ */
+export function resolveShopResetLookupCodes(scope: ShopResetScope): Branch[] {
+  if (scope === "both") {
+    return ["main", "salaama"];
+  }
+  if (scope === "main") {
+    return ["main"];
+  }
+  // salaama inventory canonical is branch2; lookups accept either alias.
+  return [resolveCanonicalBranchCode("salaama")];
 }

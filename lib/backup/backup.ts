@@ -51,6 +51,18 @@ export interface BackupResult {
   manifest: BackupManifest;
 }
 
+/**
+ * Resolve the on-disk backup artifact path for any engine/compress mode.
+ * Prefer archive (gzip), then SQL dump, then JSON export.
+ * Shop Reset and Backup Now must use the same resolution so a successful
+ * JSON backup cannot be treated as a missing artifact.
+ */
+export function resolveBackupArtifactPath(
+  result: Pick<BackupResult, "archivePath" | "sqlPath" | "jsonPath">
+): string | null {
+  return result.archivePath ?? result.sqlPath ?? result.jsonPath ?? null;
+}
+
 export interface CreateBackupOptions {
   backupDir?: string;
   compress?: boolean;

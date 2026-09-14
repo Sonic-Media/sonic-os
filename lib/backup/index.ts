@@ -1,4 +1,4 @@
-export { createDatabaseBackup, restoreDatabaseBackup, runScheduledBackup } from "@/lib/backup/backup";
+export { createDatabaseBackup, resolveBackupArtifactPath, restoreDatabaseBackup, runScheduledBackup } from "@/lib/backup/backup";
 export type { BackupManifest, BackupResult, CreateBackupOptions, RestoreBackupOptions } from "@/lib/backup/backup";
 export { getBackupConfig, requireDatabaseUrl } from "@/lib/backup/config";
 export type { BackupConfig } from "@/lib/backup/config";

@@ -13,6 +13,7 @@ import {
 } from "@/lib/api/shop-reset";
 import {
   getShopResetConfirmationPhrase,
+  normalizeShopResetConfirmation,
   SHOP_RESET_CONFIRM_BOTH,
   SHOP_RESET_SCOPE_OPTIONS,
   type ShopResetScope,
@@ -98,7 +99,8 @@ export function ShopResetSection() {
     return `Reset ${selectedLabel} Shop`;
   }, [scope, selectedLabel]);
 
-  const confirmationMatches = confirmation.trim() === confirmationPhrase;
+  const confirmationMatches =
+    normalizeShopResetConfirmation(confirmation) === confirmationPhrase;
   const resetTargetAuthorized = preview?.resetTarget.authorized ?? false;
   const canSubmit =
     confirmationMatches &&
@@ -106,6 +108,12 @@ export function ShopResetSection() {
     phase !== "backing_up" &&
     phase !== "resetting" &&
     phase !== "verifying";
+  const confirmationBlocker =
+    resetTargetAuthorized && !confirmationMatches
+      ? confirmation.trim().length === 0
+        ? `Type the exact confirmation phrase to enable reset: ${confirmationPhrase}`
+        : `Confirmation does not match. Required exactly: ${confirmationPhrase}`
+      : null;
 
   const loadPreview = useCallback(async () => {
     setIsLoadingPreview(true);
@@ -144,7 +152,7 @@ export function ShopResetSection() {
       setPhase("resetting");
       const result = await resetShopApi({
         scope,
-        confirmation: confirmation.trim(),
+        confirmation: normalizeShopResetConfirmation(confirmation),
       });
       setPhase("verifying");
       setReport(result);
@@ -304,15 +312,31 @@ export function ShopResetSection() {
           </div>
         ) : null}
 
-        <Input
-          label={`Type "${confirmationPhrase}" to confirm`}
-          value={confirmation}
-          onChange={(event) => setConfirmation(event.target.value)}
-          placeholder={confirmationPhrase}
-          autoComplete="off"
-          spellCheck={false}
-          disabled={phase === "resetting" || phase === "backing_up"}
-        />
+        <div className="space-y-2">
+          <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">
+            Confirmation phrase
+          </p>
+          <p className="rounded-xl border border-white/[0.08] bg-black/30 px-4 py-3 font-mono text-sm text-amber-100">
+            {confirmationPhrase}
+          </p>
+          <Input
+            label="Type the phrase above exactly (no quotes)"
+            value={confirmation}
+            onChange={(event) => setConfirmation(event.target.value)}
+            placeholder={confirmationPhrase}
+            autoComplete="off"
+            spellCheck={false}
+            disabled={phase === "resetting" || phase === "backing_up"}
+          />
+          {confirmationBlocker ? (
+            <p className="text-xs text-amber-300/90">{confirmationBlocker}</p>
+          ) : null}
+          {confirmationMatches && resetTargetAuthorized ? (
+            <p className="text-xs text-emerald-300/90">
+              Confirmation accepted. Reset is ready to run.
+            </p>
+          ) : null}
+        </div>
 
         <div className="flex flex-wrap gap-3">
           <Button

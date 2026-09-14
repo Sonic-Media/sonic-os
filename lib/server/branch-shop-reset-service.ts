@@ -1,5 +1,8 @@
 import { ApiError } from "@/lib/api/errors";
-import { createDatabaseBackup } from "@/lib/backup/backup";
+import {
+  createDatabaseBackup,
+  resolveBackupArtifactPath,
+} from "@/lib/backup/backup";
 import { getEquivalentBranchCodes } from "@/lib/branch/codes";
 import { prisma } from "@/lib/db";
 import { getAdminPrismaClient, disconnectAdminPrismaClient } from "@/lib/db/admin-prisma";
@@ -410,7 +413,10 @@ export async function runBranchShopReset(
       { status: 500, code: "backup_failed" }
     );
   }
-  const backupPath = backup.archivePath ?? backup.sqlPath;
+  // Must accept JSON artifacts (jsonPath) as well as archive/sql — Preview
+  // serverless backups are JSON (optionally gzip). Omitting jsonPath made a
+  // successful JSON backup look like a failure and blocked shop reset.
+  const backupPath = resolveBackupArtifactPath(backup);
   if (!backupPath) {
     throw new ApiError("Backup failed — shop reset was not started.", {
       status: 500,
