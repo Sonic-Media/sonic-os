@@ -120,6 +120,10 @@ export function ClosingRequestsPanel() {
     }
   }
 
+  if (pendingRequests.length === 0) {
+    return null;
+  }
+
   return (
     <>
       <OwnerCard accent="purple">
@@ -128,22 +132,16 @@ export function ClosingRequestsPanel() {
           Pending business-day closing requests awaiting approval
         </p>
 
-        {pendingRequests.length === 0 ? (
-          <p className="mt-4 rounded-2xl border border-white/[0.06] bg-black/20 px-4 py-3 text-sm text-zinc-500">
-            No closing requests pending.
-          </p>
-        ) : (
-          <div className="mt-4 space-y-3">
-            {pendingRequests.map((record) => (
-              <CloseRequestCard
-                key={record.id}
-                record={record}
-                branchName={getBranchName(record.branch)}
-                onReview={() => setSelectedRecord(record)}
-              />
-            ))}
-          </div>
-        )}
+        <div className="mt-4 space-y-3">
+          {pendingRequests.map((record) => (
+            <CloseRequestCard
+              key={record.id}
+              record={record}
+              branchName={getBranchName(record.branch)}
+              onReview={() => setSelectedRecord(record)}
+            />
+          ))}
+        </div>
 
         {error ? (
           <p className="mt-4 text-sm text-red-400" role="alert">
