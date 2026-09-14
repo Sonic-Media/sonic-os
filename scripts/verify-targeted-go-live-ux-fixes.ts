@@ -117,7 +117,7 @@ async function main() {
     summary.totalExpenses === 0 && summary.totalSavings === 50_000
   );
 
-  const emptySummary = aggregateEntries([], { branchIds: ["main", "branch2"] });
+  const emptySummary = aggregateEntries([], { branchIds: ["main", "salaama"] });
   recordCheck(
     "Empty period returns zero totals without error",
     emptySummary.totalSales === 0 &&

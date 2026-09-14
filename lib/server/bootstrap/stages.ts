@@ -17,6 +17,7 @@ import {
   resetPrismaClientCache,
 } from "@/lib/db";
 import { getTodayISO } from "@/lib/dates";
+import { reconcileDuplicateSalaamaBranches } from "@/lib/server/branch-reconcile";
 import { clearBranchLookupCache } from "@/lib/server/branch-lookup";
 import {
   DEFAULT_OWNER_DISPLAY_NAME,
@@ -49,25 +50,62 @@ export async function runMigrationsVerifiedStage(): Promise<void> {
 }
 
 const PRODUCTION_BRANCHES = [
-  { code: DEFAULT_BRANCH_CODE, name: DEFAULT_BRANCH_NAME },
-  { code: SALAAMA_BRANCH_CODE, name: SALAAMA_BRANCH_NAME },
+  { code: DEFAULT_BRANCH_CODE, name: DEFAULT_BRANCH_NAME, legacyCodes: [] as string[] },
+  {
+    code: SALAAMA_BRANCH_CODE,
+    name: SALAAMA_BRANCH_NAME,
+    legacyCodes: ["branch2"],
+  },
 ] as const;
+
+async function ensureProductionBranch(input: {
+  code: string;
+  name: string;
+  legacyCodes?: readonly string[];
+}): Promise<void> {
+  const canonical = await prisma.branch.findUnique({
+    where: { code: input.code },
+    select: { id: true },
+  });
+
+  if (canonical) {
+    await prisma.branch.update({
+      where: { id: canonical.id },
+      data: { name: input.name, active: true },
+    });
+    return;
+  }
+
+  for (const legacyCode of input.legacyCodes ?? []) {
+    const legacy = await prisma.branch.findUnique({
+      where: { code: legacyCode },
+      select: { id: true },
+    });
+
+    if (legacy) {
+      await prisma.branch.update({
+        where: { id: legacy.id },
+        data: { name: input.name, active: true },
+      });
+      return;
+    }
+  }
+
+  await prisma.branch.create({
+    data: {
+      name: input.name,
+      code: input.code,
+      active: true,
+    },
+  });
+}
 
 export async function runBranchesStage(): Promise<void> {
   for (const branch of PRODUCTION_BRANCHES) {
-    await prisma.branch.upsert({
-      where: { code: branch.code },
-      update: {
-        name: branch.name,
-        active: true,
-      },
-      create: {
-        name: branch.name,
-        code: branch.code,
-        active: true,
-      },
-    });
+    await ensureProductionBranch(branch);
   }
+
+  await reconcileDuplicateSalaamaBranches();
 
   const settings = await prisma.appSetting.findUnique({
     where: { id: "default" },

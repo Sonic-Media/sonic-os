@@ -2,8 +2,8 @@
 /**
  * Fix #26 — Reports branch code alignment
  *
- * Ensures Reports UI uses PostgreSQL Branch.code (e.g. main, branch2)
- * instead of deprecated settings BRANCH_IDS (main, salaama).
+ * Ensures Reports UI uses PostgreSQL Branch.code (e.g. main, salaama)
+ * with legacy branch2 entries normalized during aggregation.
  */
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -34,7 +34,7 @@ function makeProductionBranches(): BranchEntity[] {
     {
       id: "f0eb9232-a8d2-492a-ae16-eda47407700a",
       name: "Salaama",
-      code: "branch2",
+      code: "salaama",
       address: "Binzaari stage, Salaama Rd, Kampala",
       active: true,
       createdAt: "2026-08-27T22:00:25.199Z",
@@ -102,8 +102,8 @@ async function main() {
   recordCheck(
     "Production branch codes resolve from DB entities",
     branchCodes.includes("main") &&
-      branchCodes.includes("branch2") &&
-      !branchCodes.includes("salaama"),
+      branchCodes.includes("salaama") &&
+      !branchCodes.includes("branch2"),
     `codes=${branchCodes.join(",")}`
   );
 
@@ -111,8 +111,8 @@ async function main() {
   recordCheck(
     "Report UI branches preserve display names",
     reportBranches.some((b) => b.code === "main" && b.name === "Kansanga") &&
-      reportBranches.some((b) => b.code === "branch2" && b.name === "Salaama"),
-    "Kansanga/Salaama labels with main/branch2 codes"
+      reportBranches.some((b) => b.code === "salaama" && b.name === "Salaama"),
+    "Kansanga/Salaama labels with main/salaama codes"
   );
 
   const entries = [
@@ -130,11 +130,11 @@ async function main() {
 
   const summary = aggregateEntries(entries, { branchIds: branchCodes });
   recordCheck(
-    "Server aggregation keys match DB branch codes",
+    "Server aggregation keys match authoritative branch codes",
     typeof summary.byBranch.main === "object" &&
-      typeof summary.byBranch.branch2 === "object" &&
-      summary.byBranch.salaama === undefined,
-    "byBranch uses main and branch2"
+      typeof summary.byBranch.salaama === "object" &&
+      summary.byBranch.branch2 === undefined,
+    "byBranch uses main and salaama"
   );
 
   for (const branch of reportBranches) {
@@ -147,24 +147,9 @@ async function main() {
   }
 
   recordCheck(
-    "Salaama (branch2) totals remain branch-correct",
-    getBranchTotals(summary.byBranch, "branch2").sales === 80_000,
-    "branch2 sales isolated from main"
-  );
-
-  let legacyLookupThrows = false;
-  try {
-    getBranchTotals(summary.byBranch, "salaama");
-  } catch (error) {
-    legacyLookupThrows =
-      error instanceof Error &&
-      error.message.includes("salaama") &&
-      error.message.includes("missing");
-  }
-  recordCheck(
-    "Legacy salaama key lookup fails (integrity guard preserved)",
-    legacyLookupThrows,
-    "getBranchTotals still throws for wrong client alias"
+    "Salaama totals include legacy branch2 entry data",
+    getBranchTotals(summary.byBranch, "salaama").sales === 80_000,
+    "legacy branch2 sales roll up to salaama"
   );
 
   console.log("\nAll reports branch code alignment checks passed.");
