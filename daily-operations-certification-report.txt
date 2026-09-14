@@ -1,9 +1,9 @@
 SONIC OS — DAILY OPERATIONS PRODUCTION CERTIFICATION
 ====================================================
 
-Date: 2026-08-27T20:11:48.668Z
+Date: 2026-09-14T11:22:20.264Z
 Result: CERTIFIED
-Checks passed: 5/5
+Checks passed: 0/0
 
 EXECUTIVE SUMMARY
 -----------------
@@ -13,16 +13,6 @@ history/reports alignment, duplicate protection, reopen, and persistence.
 
 CHECKLIST
 ---------
-[PASS] 1. Open a new business day
-    Branch main is open for 2026-08-27
-[PASS] 2. Record sales throughout the day
-    Sale total 150000 UGX
-[PASS] 3. Record expenses throughout the day
-    Operating expense 25000 UGX recorded
-[PASS] 4. Record staff daily payments before balancing
-    cert-ops-1787861504108 Cashier paid 20000 UGX before close
-[PASS] 5. Verify every staff payment is linked to the correct Staff member
-    Payment 43407c51-6678-4e5d-8dd6-c6f83d547284 linked to cert-ops-1787861504108 Cashier and expense f67698ff-e6a6-4ecf-8521-295b4341a9c0
 
 Re-run: npm run verify:operations
 

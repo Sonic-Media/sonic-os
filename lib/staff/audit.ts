@@ -59,6 +59,10 @@ export function mergeStaffAuditRecords(records: StaffAuditRecord[]): void {
   auditRecordCache = [...merged.values()].sort((left, right) =>
     right.timestamp.localeCompare(left.timestamp)
   );
+
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent(AUDIT_LOG_UPDATED_EVENT));
+  }
 }
 
 export function getStaffAuditRecords(): StaffAuditRecord[] {

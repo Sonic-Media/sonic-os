@@ -34,7 +34,7 @@ export function StaffWelcomeCard({ businessDate }: { businessDate?: string } = {
     isBranchDayClosed,
     isCloseRequestPending,
   } = useDayClosing();
-  const { currentAttendance } = useStaffAttendance(today);
+  const { currentAttendance } = useStaffAttendance(resolvedDate);
   const [now, setNow] = useState(() => new Date());
   const [isClockingOut, setIsClockingOut] = useState(false);
 

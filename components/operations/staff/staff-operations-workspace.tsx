@@ -106,7 +106,7 @@ export function StaffOperationsWorkspace({
     dayClosed,
   } = useStaffCloseDay(businessDateProp ?? form.date);
 
-  useStaffOperationsRefresh({
+  const { refreshAll: refreshStaffOperations } = useStaffOperationsRefresh({
     closeRequestPending,
     watchForClose: closeRequestPending || Boolean(activeBusinessDayStatus),
   });
@@ -204,6 +204,7 @@ export function StaffOperationsWorkspace({
     if (result.success) {
       setCloseFlowError(null);
       toastSuccess("Closing request sent.");
+      await refreshStaffOperations();
       return true;
     }
 
@@ -216,6 +217,7 @@ export function StaffOperationsWorkspace({
     closeStaffDay,
     form.notes,
     handleSubmitRequest,
+    refreshStaffOperations,
     toastSuccess,
   ]);
 
@@ -273,7 +275,10 @@ export function StaffOperationsWorkspace({
         date={form.date}
         expanded={expandedSection === "daily-wage"}
         onExpandedChange={(open) => expandSection(open ? "daily-wage" : null)}
-        onRecorded={() => expandSection("end-of-day")}
+        onRecorded={() => {
+          expandSection("end-of-day");
+          void refreshStaffOperations();
+        }}
       />
 
       <StaffCashSummaryCard
