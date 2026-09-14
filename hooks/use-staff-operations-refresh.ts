@@ -2,9 +2,12 @@
 
 import { useCallback, useEffect, useRef } from "react";
 import { useActiveBranch } from "@/context/active-branch-context";
+import { useAuditLog } from "@/context/audit-log-context";
 import { useAuth } from "@/context/auth-context";
 import { useDayClosing } from "@/context/day-closing-context";
 import { useEntriesContext } from "@/context/entries-context";
+import { useSales } from "@/context/sales-context";
+import { useStaffPaymentsModule } from "@/context/staff-payments-context";
 import { canSubmitCloseRequest } from "@/lib/day-closing/permissions";
 
 const STAFF_OPERATIONS_REFRESH_MS = 12_000;
@@ -12,11 +15,14 @@ const STAFF_OPERATIONS_REFRESH_MS = 12_000;
 export function useStaffOperationsRefresh(options?: {
   closeRequestPending?: boolean;
   watchForClose?: boolean;
-}): void {
+}): { refreshAll: () => Promise<void> } {
   const { session, isAuthenticated, isLoaded: authLoaded } = useAuth();
   const { activeBranch } = useActiveBranch();
+  const { refreshAuditLog } = useAuditLog();
   const { refreshClosings, getActiveOpenRecord } = useDayClosing();
   const { refreshEntries } = useEntriesContext();
+  const { refreshSales } = useSales();
+  const { refreshPayments } = useStaffPaymentsModule();
   const refreshInFlight = useRef(false);
 
   const activeRecord = getActiveOpenRecord(activeBranch);
@@ -33,13 +39,25 @@ export function useStaffOperationsRefresh(options?: {
     refreshInFlight.current = true;
 
     try {
-      await Promise.all([refreshClosings(), refreshEntries()]);
+      await Promise.all([
+        refreshAuditLog(),
+        refreshClosings(),
+        refreshEntries(),
+        refreshSales(),
+        refreshPayments(),
+      ]);
     } catch (error) {
       console.error("[staff-operations] live refresh failed:", error);
     } finally {
       refreshInFlight.current = false;
     }
-  }, [refreshClosings, refreshEntries]);
+  }, [
+    refreshAuditLog,
+    refreshClosings,
+    refreshEntries,
+    refreshPayments,
+    refreshSales,
+  ]);
 
   useEffect(() => {
     if (!authLoaded || !isAuthenticated || !session) {
@@ -80,4 +98,6 @@ export function useStaffOperationsRefresh(options?: {
     session,
     shouldPoll,
   ]);
+
+  return { refreshAll };
 }

@@ -80,7 +80,8 @@
     "verify:closing-request-approval-flow": "tsx scripts/verify-closing-request-approval-flow.ts",
     "verify:close-request-staff-catalog": "tsx scripts/verify-close-request-staff-catalog.ts",
     "verify:preview-close-day-e2e": "tsx scripts/verify-preview-close-day-e2e.ts",
-    "verify:owner-closing-approval-auth": "tsx scripts/verify-owner-closing-approval-auth.ts"
+    "verify:owner-closing-approval-auth": "tsx scripts/verify-owner-closing-approval-auth.ts",
+    "verify:closing-confirm-auto-refresh": "tsx scripts/verify-closing-confirm-auto-refresh.ts"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.9.1",

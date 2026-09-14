@@ -25,6 +25,7 @@ export function useBranchState() {
   const { metrics: salesMetrics } = useSalesDashboard();
   const { activeOnShift } = useStaffAttendance(today);
   const {
+    closings,
     getOpenRecord,
     getClosedRecord,
     getActiveOpenRecord,
@@ -113,6 +114,7 @@ export function useBranchState() {
   }, [
     activeBranch,
     activeOnShift,
+    closings,
     entries,
     expenses,
     getActiveOpenRecord,
