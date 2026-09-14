@@ -2,6 +2,7 @@ import type { Prisma } from "@/lib/generated/prisma/client";
 import { z } from "zod";
 import { AUDIT_ACTIONS } from "@/lib/audit-log/constants";
 import { ApiError } from "@/lib/api/errors";
+import { getEquivalentBranchCodes } from "@/lib/branch/codes";
 import { getTodayISO } from "@/lib/dates";
 import { prisma } from "@/lib/db";
 import {
@@ -75,16 +76,32 @@ async function resolveActorDisplayName(
   return staffName ?? session.displayName;
 }
 
+async function resolveActiveBusinessDateForBranch(
+  branchId: string
+): Promise<string | null> {
+  const openRecord = await prisma.dayClosing.findFirst({
+    where: {
+      branchId,
+      status: { in: ["open", "close_requested"] },
+      OR: [{ openedAt: { not: null } }, { reopenedAt: { not: null } }],
+    },
+    orderBy: [{ date: "asc" }, { openedAt: "asc" }],
+  });
+
+  return openRecord?.date ?? null;
+}
+
 async function fetchBranchAttendanceAudit(
   branch: Branch,
   date: string
 ): Promise<StaffAuditRecord[]> {
   const dayStart = new Date(`${date}T00:00:00.000Z`);
   const dayEnd = new Date(`${date}T23:59:59.999Z`);
+  const branchCodes = getEquivalentBranchCodes(branch);
 
   const records = await prisma.auditLogEntry.findMany({
     where: {
-      branchCode: branch,
+      branchCode: { in: branchCodes },
       action: { in: [...ATTENDANCE_ACTIONS] },
       timestamp: {
         gte: dayStart,
@@ -139,10 +156,15 @@ async function assertBranchDayOpen(
   }
 }
 
+export type StaffOnShiftMember = {
+  staffId: string;
+  staffName: string;
+};
+
 export async function getStaffOnShiftAtBranch(
   branch: Branch,
   date: string
-): Promise<Array<{ staffId: string; staffName: string }>> {
+): Promise<StaffOnShiftMember[]> {
   const branchId = await getBranchIdByCode(branch);
   const auditRecords = await fetchBranchAttendanceAudit(branch, date);
 
@@ -216,11 +238,14 @@ export async function recordAttendanceAction(
   input: unknown
 ): Promise<AuditLogRecord> {
   const parsed = attendanceActionSchema.parse(input);
-  const date = parsed.date ?? getTodayISO();
   const branch = parsed.branch as Branch;
   const session = await requireSession();
   assertStaffOperationalRole(session);
-  await getBranchIdForSession(session, branch);
+  const branchId = await getBranchIdForSession(session, branch);
+  const date =
+    parsed.date ??
+    (await resolveActiveBusinessDateForBranch(branchId)) ??
+    getTodayISO();
 
   const linkedStaff = await getLinkedStaffForUser(session.userId);
   if (!linkedStaff) {

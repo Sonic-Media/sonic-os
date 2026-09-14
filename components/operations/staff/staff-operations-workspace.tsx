@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useCallback } from "react";
+import { useMemo, useState, useCallback, useEffect } from "react";
 import { DuplicateEntryDialog } from "@/components/entry/duplicate-entry-dialog";
 import { StaffDailyWageCard } from "@/components/operations/staff/staff-daily-wage-card";
 import { StaffEndOfDayCard } from "@/components/operations/staff/staff-end-of-day-card";
@@ -14,6 +14,7 @@ import { StaffCashSummaryCard } from "@/components/operations/staff/staff-cash-s
 import { useToast } from "@/context/toast-context";
 import { useEntryForm } from "@/hooks/use-entry-form";
 import { useLinkedStaff } from "@/hooks/use-linked-staff";
+import { useBranchStaffOnShift } from "@/hooks/use-branch-staff-on-shift";
 import { useStaffCloseDay } from "@/hooks/use-staff-close-day";
 import { useStaffOperationsRefresh } from "@/hooks/use-staff-operations-refresh";
 import { useStaffPaymentsModule } from "@/context/staff-payments-context";
@@ -220,6 +221,16 @@ export function StaffOperationsWorkspace({
   ]);
 
   const resolvedBusinessDate = businessDateProp ?? businessDate;
+  const { staffOnShift } = useBranchStaffOnShift(form.branch, resolvedBusinessDate);
+
+  useEffect(() => {
+    if (
+      staffOnShift.length === 0 &&
+      closeFlowError?.includes("still on shift")
+    ) {
+      setCloseFlowError(null);
+    }
+  }, [staffOnShift, closeFlowError]);
 
   return (
     <div className={cn("mx-auto max-w-3xl", uiSpacing.page, uiSpacing.section)}>
@@ -304,6 +315,7 @@ export function StaffOperationsWorkspace({
           parseAmount(form.savingsAllocation)
         }
         wageRecorded={wageRecorded}
+        staffOnShift={staffOnShift}
         shopOpen={shopOpen}
         closeRequestPending={closeRequestPending}
         dayClosed={dayClosed}

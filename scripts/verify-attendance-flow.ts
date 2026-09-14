@@ -11,6 +11,10 @@ import {
   loginWithCredentials,
   VERIFY_OWNER_CREDENTIALS,
 } from "./verify-session";
+import {
+  EMPTY_CLOSE_PAYLOAD,
+  submitCloseRequestApi,
+} from "./verify-close-request-helpers";
 
 loadEnvFiles();
 
@@ -153,38 +157,14 @@ async function main() {
       409
     );
 
+    const onShiftWhileActive = await cashierClient.json<
+      Array<{ staffId: string; staffName: string }>
+    >(`/api/staff/attendance/on-shift?branch=${BRANCH}&date=${TODAY}`);
+    assert.ok(onShiftWhileActive.length > 0, "cashier should appear on shift");
+
     await cashierClient.expectFailure(
-      "close day blocked while staff on shift",
-      () =>
-        cashierClient.json("/api/day-closings", {
-          method: "POST",
-          body: JSON.stringify({
-            branch: BRANCH,
-            date: TODAY,
-            metrics: {
-              todaySales: 0,
-              todayPurchases: 0,
-              todayOperatingExpenses: 0,
-              todayInventoryInvestment: 0,
-              todayStaffPaymentsRecorded: 0,
-              cashBeforeClosing: 0,
-            },
-            staffPayouts: [],
-            expectedCash: 0,
-            actualCashCounted: 0,
-            cashDifference: 0,
-            cashStatus: "balanced",
-            summary: {
-              sales: 0,
-              expenses: 0,
-              inventoryInvestment: 0,
-              staffPayments: 0,
-              remainingCash: 0,
-              inventoryFund: 0,
-              operatingFund: 0,
-            },
-          }),
-        }),
+      "submit close request blocked while staff on shift",
+      () => submitCloseRequestApi(cashierClient, BRANCH, TODAY),
       409
     );
 
@@ -200,6 +180,22 @@ async function main() {
       }
     );
     assert.equal(clockOut.action, "Clock Out");
+
+    const onShiftAfterClockOut = await cashierClient.json<
+      Array<{ staffId: string; staffName: string }>
+    >(`/api/staff/attendance/on-shift?branch=${BRANCH}&date=${TODAY}`);
+    assert.equal(
+      onShiftAfterClockOut.length,
+      0,
+      "no staff should remain on shift after clock-out"
+    );
+
+    const closeRequest = await submitCloseRequestApi<{ status: string }>(
+      cashierClient,
+      BRANCH,
+      TODAY
+    );
+    assert.equal(closeRequest.status, "close_requested");
 
     await cashierClient.expectFailure(
       "clock-out when not on shift blocked",

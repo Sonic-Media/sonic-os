@@ -8,6 +8,11 @@ import { uiSpacing, uiSurface, uiTypography } from "@/lib/ui/design-tokens";
 import { cn } from "@/lib/utils";
 import type { EntryFormData } from "@/types";
 
+interface StaffOnShiftMember {
+  staffId: string;
+  staffName: string;
+}
+
 interface StaffEndOfDayCardProps {
   form: EntryFormData;
   branchName: string;
@@ -18,6 +23,7 @@ interface StaffEndOfDayCardProps {
   staffPayouts: number;
   cashToHandIn: number;
   wageRecorded: boolean;
+  staffOnShift?: StaffOnShiftMember[];
   shopOpen: boolean;
   closeRequestPending?: boolean;
   dayClosed?: boolean;
@@ -102,6 +108,7 @@ export function StaffEndOfDayCard({
   staffPayouts,
   cashToHandIn,
   wageRecorded,
+  staffOnShift = [],
   shopOpen,
   closeRequestPending = false,
   dayClosed = false,
@@ -115,7 +122,17 @@ export function StaffEndOfDayCard({
   const totalSales = movieRevenue + accessorySales;
   const salesRecorded = totalSales > 0;
   const expensesRecorded = totalExpenses > 0;
-  const readyToClose = shopOpen && !closeRequestPending && !dayClosed;
+  const staffStillOnShift = staffOnShift.length > 0;
+  const staffOnShiftLabel = staffStillOnShift
+    ? staffOnShift.map((member) => member.staffName).join(", ")
+    : "All staff clocked out";
+  const readyToClose =
+    shopOpen && !closeRequestPending && !dayClosed && !staffStillOnShift;
+  const displayCloseError =
+    closeError &&
+    !(closeError.includes("still on shift") && !staffStillOnShift)
+      ? closeError
+      : null;
 
   function handleOpenConfirm() {
     if (isClosing || closeRequestPending || dayClosed) return;
@@ -186,6 +203,15 @@ export function StaffEndOfDayCard({
               complete={wageRecorded}
             />
             <ChecklistItem
+              label="Staff On Shift"
+              status={
+                staffStillOnShift
+                  ? `${staffOnShiftLabel} still on shift`
+                  : staffOnShiftLabel
+              }
+              complete={!staffStillOnShift}
+            />
+            <ChecklistItem
               label="Ready to Close"
               status={
                 closeRequestPending
@@ -201,9 +227,9 @@ export function StaffEndOfDayCard({
           </div>
         </div>
 
-        {closeError ? (
+        {displayCloseError ? (
           <div className="mt-6">
-            <CloseDayErrorBanner message={closeError} />
+            <CloseDayErrorBanner message={displayCloseError} />
           </div>
         ) : null}
 
