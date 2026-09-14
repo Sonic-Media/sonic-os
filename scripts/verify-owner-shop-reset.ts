@@ -199,6 +199,15 @@ async function main() {
   );
 
   recordCheck(
+    "I2-static",
+    "Current Stock metric sums Product.currentStock units for branch scope",
+    serviceSource.includes("sumBranchCurrentStockUnits") &&
+      serviceSource.includes("branchCurrentStockUnits") &&
+      apiSource.includes("branchCurrentStockUnits"),
+    "branch-shop-reset-service.ts + shop-reset API types"
+  );
+
+  recordCheck(
     "K-static",
     "Reset deletion runs inside transaction (rollback on failure)",
     serviceSource.includes("await client.$transaction(async (tx) => {") &&

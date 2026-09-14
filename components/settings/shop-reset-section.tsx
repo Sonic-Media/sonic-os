@@ -226,7 +226,7 @@ export function ShopResetSection() {
                 ["Closing Records", preview?.counts.dayClosings],
                 ["Stock Movements", preview?.counts.stockMovements],
                 ["Customers / Suppliers", (preview?.counts.customers ?? 0) + (preview?.counts.suppliers ?? 0)],
-                ["Current Stock", preview?.counts.productStockReset],
+                ["Current Stock", preview?.counts.branchCurrentStockUnits],
               ].map(([label, count]) => (
                 <li key={String(label)} className="flex justify-between gap-3">
                   <span>{label}</span>
@@ -385,8 +385,8 @@ export function ShopResetSection() {
               <SummaryRow label="Stock Movements" value={report.verification.stockMovements} highlight="success" />
               <SummaryRow label="Customers / Suppliers" value={report.verification.customers + report.verification.suppliers} highlight="success" />
               <SummaryRow
-                label="Products with current stock = 0"
-                value={report.verification.productStockReset}
+                label="Current Stock"
+                value={report.verification.branchCurrentStockUnits}
                 highlight="success"
               />
             </div>
