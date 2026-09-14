@@ -1,6 +1,7 @@
 # Shop Reset Current Stock Fix — Report
 
 **Branch:** `cursor/shop-reset-current-stock-fix-b6e7`  
+**Commit:** `f3a0cf6`  
 **Date:** 2026-09-14
 
 ---
