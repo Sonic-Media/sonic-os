@@ -26,15 +26,18 @@ export function ReportsBranchTotals({
   }
 
   return (
-    <section className="mb-8">
-      <h2 className="text-sm font-medium text-zinc-500 mb-3 tracking-wide uppercase">
+    <section>
+      <h2 className="mb-3 text-[10px] font-semibold uppercase tracking-[0.18em] text-zinc-500">
         By Branch
       </h2>
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
         {reportBranches.map((branch) => {
           const totals = getBranchTotals(byBranch, branch.code);
           return (
-            <Card key={branch.code}>
+            <Card
+              key={branch.code}
+              className="border-white/[0.08] bg-[rgba(12,14,26,0.72)]"
+            >
               <h3 className="text-base font-semibold text-white mb-4">
                 {branch.name}
               </h3>

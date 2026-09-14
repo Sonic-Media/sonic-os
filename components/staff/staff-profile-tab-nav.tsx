@@ -4,6 +4,7 @@ import { cn } from "@/lib/utils";
 
 export type StaffProfileTab =
   | "overview"
+  | "attendance"
   | "activity"
   | "payments"
   | "sales"
@@ -14,8 +15,9 @@ export type StaffProfileTab =
 
 export const STAFF_PROFILE_TABS: { id: StaffProfileTab; label: string }[] = [
   { id: "overview", label: "Overview" },
-  { id: "activity", label: "Activity" },
+  { id: "attendance", label: "Attendance" },
   { id: "payments", label: "Payments" },
+  { id: "activity", label: "Activity" },
   { id: "sales", label: "Sales" },
   { id: "inventory", label: "Inventory" },
   { id: "expenses", label: "Expenses" },
@@ -34,17 +36,17 @@ export function StaffProfileTabNav({
 }: StaffProfileTabNavProps) {
   return (
     <nav className="mb-8">
-      <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
+      <div className="flex gap-2 overflow-x-auto pb-1">
         {STAFF_PROFILE_TABS.map((tab) => (
           <button
             key={tab.id}
             type="button"
             onClick={() => onTabChange(tab.id)}
             className={cn(
-              "flex-shrink-0 h-10 px-5 rounded-xl text-sm font-medium transition-all duration-200 inline-flex items-center",
+              "inline-flex h-9 shrink-0 items-center rounded-xl px-4 text-sm font-medium transition-all duration-200",
               activeTab === tab.id
-                ? "bg-white text-black"
-                : "bg-zinc-900/80 text-zinc-400 border border-zinc-800 hover:border-zinc-600"
+                ? "bg-gradient-to-r from-indigo-500/20 to-violet-500/15 text-white ring-1 ring-indigo-500/30"
+                : "border border-white/[0.08] bg-white/[0.03] text-zinc-400 hover:border-white/[0.12] hover:text-zinc-200"
             )}
           >
             {tab.label}

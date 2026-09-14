@@ -1,26 +1,27 @@
 import { getAdminPrismaClient, disconnectAdminPrismaClient } from "@/lib/db/admin-prisma";
 import { createDatabaseBackup } from "@/lib/backup/backup";
 
-/** Transactional tables cleared by the safe pre-production reset. */
+/** Transactional / operational tables cleared by the safe reset. */
 const TRANSACTIONAL_TABLES = [
   "staffPayment",
   "expenseRecord",
-  "sale",
   "saleLineItem",
+  "sale",
   "customer",
-  "purchase",
   "purchaseLineItem",
-  "dailyOperation",
+  "purchase",
   "dailyOperationExpense",
+  "dailyOperation",
   "dayClosing",
   "stockMovement",
   "stockPriceChange",
-  "product",
   "supplier",
+  "auditLogEntry",
+  "activityLog",
   "session",
 ] as const;
 
-/** Preserved configuration and identity tables. */
+/** Preserved master / identity / catalog tables. */
 const PRESERVED_TABLES = [
   "role",
   "branch",
@@ -30,7 +31,10 @@ const PRESERVED_TABLES = [
   "appSetting",
   "expenseTemplate",
   "productCategory",
+  "product",
   "expenseCategory",
+  "authAuditLog",
+  "backupRecord",
 ] as const;
 
 export type TableCounts = Record<string, number>;
@@ -39,6 +43,7 @@ export interface SafeTransactionalResetReport {
   backupPath?: string;
   deleted: TableCounts;
   preserved: TableCounts;
+  productStockResetCount: number;
   verification: SafeTransactionalResetVerification;
 }
 
@@ -47,6 +52,8 @@ export interface SafeTransactionalResetVerification {
   errors: string[];
   transactionalRecordCount: number;
   preservedCounts: TableCounts;
+  openDayClosingCount: number;
+  closeRequestedCount: number;
 }
 
 async function countTables(
@@ -69,6 +76,10 @@ async function countTables(
     product: () => client.product.count(),
     supplier: () => client.supplier.count(),
     session: () => client.session.count(),
+    auditLogEntry: () => client.auditLogEntry.count(),
+    activityLog: () => client.activityLog.count(),
+    authAuditLog: () => client.authAuditLog.count(),
+    backupRecord: () => client.backupRecord.count(),
     role: () => client.role.count(),
     branch: () => client.branch.count(),
     user: () => client.user.count(),
@@ -142,8 +153,29 @@ export async function verifySafeTransactionalResetState(): Promise<SafeTransacti
     errors.push("No product categories remain.");
   }
 
+  if ((preservedCounts.product ?? 0) === 0) {
+    errors.push("Product catalog was removed.");
+  }
+
   if ((preservedCounts.appSetting ?? 0) === 0) {
     errors.push("System settings are missing.");
+  }
+
+  const openDayClosingCount = await client.dayClosing.count({
+    where: { status: { in: ["open", "close_requested"] } },
+  });
+  const closeRequestedCount = await client.dayClosing.count({
+    where: { status: "close_requested" },
+  });
+
+  if (openDayClosingCount > 0) {
+    errors.push(
+      `${openDayClosingCount} DayClosing record(s) still open or pending approval.`
+    );
+  }
+
+  if (closeRequestedCount > 0) {
+    errors.push(`${closeRequestedCount} pending closing request(s) remain.`);
   }
 
   return {
@@ -151,6 +183,8 @@ export async function verifySafeTransactionalResetState(): Promise<SafeTransacti
     errors,
     transactionalRecordCount,
     preservedCounts,
+    openDayClosingCount,
+    closeRequestedCount,
   };
 }
 
@@ -172,38 +206,52 @@ export async function runSafeTransactionalReset(options?: {
   const deleted = await client.$transaction(async (tx) => {
     const staffPayment = await tx.staffPayment.deleteMany();
     const expenseRecord = await tx.expenseRecord.deleteMany();
-    const sale = await tx.sale.deleteMany();
     const saleLineItem = await tx.saleLineItem.deleteMany();
+    const sale = await tx.sale.deleteMany();
     const customer = await tx.customer.deleteMany();
-    const purchase = await tx.purchase.deleteMany();
     const purchaseLineItem = await tx.purchaseLineItem.deleteMany();
-    const dailyOperation = await tx.dailyOperation.deleteMany();
+    const purchase = await tx.purchase.deleteMany();
     const dailyOperationExpense = await tx.dailyOperationExpense.deleteMany();
+    const dailyOperation = await tx.dailyOperation.deleteMany();
     const dayClosing = await tx.dayClosing.deleteMany();
     const stockMovement = await tx.stockMovement.deleteMany();
     const stockPriceChange = await tx.stockPriceChange.deleteMany();
-    const product = await tx.product.deleteMany();
     const supplier = await tx.supplier.deleteMany();
+    const auditLogEntry = await tx.auditLogEntry.deleteMany();
+    const activityLog = await tx.activityLog.deleteMany();
     const session = await tx.session.deleteMany();
+
+    const productStockReset = await tx.product.updateMany({
+      data: {
+        currentStock: 0,
+        status: "in-stock",
+        deletedAt: null,
+      },
+    });
 
     return {
       staffPayment: staffPayment.count,
       expenseRecord: expenseRecord.count,
-      sale: sale.count,
       saleLineItem: saleLineItem.count,
+      sale: sale.count,
       customer: customer.count,
-      purchase: purchase.count,
       purchaseLineItem: purchaseLineItem.count,
-      dailyOperation: dailyOperation.count,
+      purchase: purchase.count,
       dailyOperationExpense: dailyOperationExpense.count,
+      dailyOperation: dailyOperation.count,
       dayClosing: dayClosing.count,
       stockMovement: stockMovement.count,
       stockPriceChange: stockPriceChange.count,
-      product: product.count,
       supplier: supplier.count,
+      auditLogEntry: auditLogEntry.count,
+      activityLog: activityLog.count,
       session: session.count,
+      productStockReset: productStockReset.count,
     };
   });
+
+  const productStockResetCount = deleted.productStockReset ?? 0;
+  const { productStockReset: _ignored, ...deletedCounts } = deleted;
 
   const preserved = await countTables(PRESERVED_TABLES, client);
   const verification = await verifySafeTransactionalResetState();
@@ -212,8 +260,9 @@ export async function runSafeTransactionalReset(options?: {
 
   return {
     backupPath,
-    deleted,
+    deleted: deletedCounts,
     preserved,
+    productStockResetCount,
     verification,
   };
 }

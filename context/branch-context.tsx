@@ -31,6 +31,7 @@ import { resolveBranchDisplayName } from "@/lib/branch/display-name";
 import { canSwitchActiveBranch } from "@/lib/branch/access";
 import { resolveAuthoritativeActiveBranch } from "@/lib/branch/active-branch-resolution";
 import { resolveInventoryBranchCode } from "@/lib/branch/codes";
+import { buildAssignedBranchFallback } from "@/lib/branch/resolve-branch-entity";
 import { filterByBranchField } from "@/lib/active-branch/filters";
 import {
   ACTIVE_BRANCH_STORAGE_KEY,
@@ -136,11 +137,24 @@ export function BranchProvider({ children }: { children: React.ReactNode }) {
   const canSwitchBranch = session ? canSwitchActiveBranch(session.role) : false;
 
   const refreshBranchesFromApi = useCallback(async () => {
-    const remoteBranches = await fetchBranches();
-    const normalized = sortBranchesByName(remoteBranches);
-    branchesRef.current = normalized;
-    setBranches(normalized);
-    setLoadError(null);
+    try {
+      const remoteBranches = await fetchBranches();
+      const normalized = sortBranchesByName(remoteBranches);
+      branchesRef.current = normalized;
+      setBranches(normalized);
+      setLoadError(null);
+    } catch (error) {
+      const currentSession = sessionRef.current;
+      if (currentSession && !canSwitchActiveBranch(currentSession.role)) {
+        const fallback = buildAssignedBranchFallback(currentSession);
+        branchesRef.current = [fallback];
+        setBranches([fallback]);
+        setLoadError(null);
+        return;
+      }
+
+      throw error;
+    }
   }, []);
 
   useEffect(() => {

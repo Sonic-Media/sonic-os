@@ -19,6 +19,28 @@ export async function closeDayApi(
   return apiPost<DayClosingRecord>("/api/day-closings", input);
 }
 
+export async function submitCloseRequestApi(
+  input: Omit<DayClosingRecord, "id" | "createdAt" | "updatedAt" | "status"> & {
+    status?: DayClosingRecord["status"];
+  }
+): Promise<DayClosingRecord> {
+  return apiPost<DayClosingRecord>("/api/day-closings", {
+    ...input,
+    action: "submit-close-request",
+  });
+}
+
+export async function approveCloseDayApi(
+  input: Omit<DayClosingRecord, "id" | "createdAt" | "updatedAt" | "status"> & {
+    status?: DayClosingRecord["status"];
+  }
+): Promise<DayClosingRecord> {
+  return apiPost<DayClosingRecord>("/api/day-closings", {
+    ...input,
+    action: "approve-close",
+  });
+}
+
 export async function reopenDayApi(input: {
   branch: DayClosingRecord["branch"];
   date: string;

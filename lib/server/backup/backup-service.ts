@@ -3,6 +3,7 @@ import path from "node:path";
 import { ApiError } from "@/lib/api/errors";
 import {
   createDatabaseBackup,
+  resolveBackupArtifactPath,
   type BackupManifest,
   type BackupResult,
 } from "@/lib/backup/backup";
@@ -74,8 +75,7 @@ function logBackupFailure(error: unknown): void {
 function resolveBackupFileSize(
   result: BackupResult
 ): { filePath: string; fileSizeBytes: number | null } {
-  const filePath =
-    result.archivePath ?? result.sqlPath ?? result.jsonPath ?? "";
+  const filePath = resolveBackupArtifactPath(result) ?? "";
   if (!filePath) {
     return { filePath: "", fileSizeBytes: null };
   }
@@ -95,8 +95,7 @@ function persistServerlessBackupPayload(
     return null;
   }
 
-  const sourcePath =
-    result.archivePath ?? result.sqlPath ?? result.jsonPath ?? "";
+  const sourcePath = resolveBackupArtifactPath(result) ?? "";
   if (!sourcePath) {
     return null;
   }

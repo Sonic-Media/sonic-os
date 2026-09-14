@@ -38,5 +38,5 @@ export async function syncClosedDayDailyOperation(input: {
     entry.id = existing.id;
   }
 
-  return upsertDailyOperation(entry);
+  return upsertDailyOperation(entry, { allowCloseRequested: true });
 }

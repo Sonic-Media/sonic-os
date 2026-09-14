@@ -31,6 +31,7 @@ function TodayOperationsContent() {
     isBranchDayClosed,
     needsShopOpening,
     getClosedRecord,
+    getActiveOpenRecord,
     isLoaded: closingLoaded,
   } = useDayClosing();
   const { currentAttendance } = useStaffAttendance(today);
@@ -46,28 +47,43 @@ function TodayOperationsContent() {
     setShiftGateCleared(true);
   }, []);
 
+  const activeOpenRecord = getActiveOpenRecord(activeBranch);
+  const hasActiveBusinessDay = Boolean(
+    activeOpenRecord &&
+      (activeOpenRecord.status === "open" ||
+        activeOpenRecord.status === "close_requested")
+  );
+  const businessDate = hasActiveBusinessDay ? activeOpenRecord!.date : today;
+
   const { completedEntry, draftEntry } = useMemo(() => {
     if (!isLoaded) {
       return { completedEntry: undefined, draftEntry: undefined };
     }
 
     return {
-      completedEntry: findCompletedEntryForBranchDate(entries, activeBranch, today),
-      draftEntry: findDraftForBranchDate(entries, activeBranch, today),
+      completedEntry: findCompletedEntryForBranchDate(
+        entries,
+        activeBranch,
+        businessDate
+      ),
+      draftEntry: findDraftForBranchDate(entries, activeBranch, businessDate),
     };
-  }, [entries, activeBranch, today, isLoaded]);
+  }, [entries, activeBranch, businessDate, isLoaded]);
 
   if (!isLoaded || !closingLoaded || !branchLoaded) {
     return <PageSkeleton />;
   }
 
   const activeEntry = completedEntry ?? draftEntry;
-  const closedRecord = getClosedRecord(activeBranch, today);
-  const isDayClosed = isBranchDayClosed(activeBranch, today);
-  const shopNeedsOpening = needsShopOpening(activeBranch, today);
+  const closedRecord = getClosedRecord(activeBranch, businessDate);
+  const isDayClosed =
+    !hasActiveBusinessDay && isBranchDayClosed(activeBranch, today);
+  const shopNeedsOpening =
+    !hasActiveBusinessDay && needsShopOpening(activeBranch, today);
   const staffOnShift = currentAttendance?.presence === "on-shift";
   const showStartShiftGate = shopNeedsOpening && !shiftGateCleared;
-  const showClockInGate = !shopNeedsOpening && !staffOnShift && !shiftGateCleared;
+  const showClockInGate =
+    !shopNeedsOpening && !hasActiveBusinessDay && !staffOnShift && !shiftGateCleared;
 
   if (isOwner) {
     return (
@@ -112,7 +128,7 @@ function TodayOperationsContent() {
   if (isDayClosed) {
     return (
       <PageContainer className="lg:max-w-5xl">
-        <StaffDayClosedView branch={activeBranch} date={today} />
+        <StaffDayClosedView branch={activeBranch} date={businessDate} />
       </PageContainer>
     );
   }
@@ -135,7 +151,14 @@ function TodayOperationsContent() {
 
   return (
     <PageContainer className="lg:max-w-5xl">
-      <StaffOperationsWorkspace branch={activeBranch} entry={activeEntry} />
+      <StaffOperationsWorkspace
+        branch={activeBranch}
+        entry={activeEntry}
+        businessDate={businessDate}
+        activeBusinessDayStatus={
+          hasActiveBusinessDay ? activeOpenRecord!.status : undefined
+        }
+      />
     </PageContainer>
   );
 }

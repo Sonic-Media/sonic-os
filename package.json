@@ -40,6 +40,11 @@
     "db:production-reset": "tsx scripts/production-reset.ts",
     "db:production-init": "tsx scripts/production-initialization.ts",
     "db:safe-reset": "tsx scripts/safe-transactional-reset.ts",
+    "verify:safe-transactional-reset": "tsx scripts/verify-safe-transactional-reset-state.ts",
+    "verify:owner-shop-reset": "tsx scripts/verify-owner-shop-reset.ts",
+    "verify:shop-reset-target-guard": "tsx scripts/verify-shop-reset-target-guard.ts",
+    "verify:backup-bigint": "tsx scripts/verify-backup-bigint-serialization.ts",
+    "verify:shop-reset-blocker": "tsx scripts/verify-shop-reset-blocker.ts",
     "db:postgres:start": "sh scripts/start-postgres.sh",
     "docker:build": "docker compose build app",
     "docker:up:dev": "docker compose --profile development up",
@@ -69,7 +74,12 @@
     "verify:expense-inventory-separation": "tsx scripts/verify-expense-inventory-separation.ts",
     "verify:reports-branch-code-alignment": "tsx scripts/verify-reports-branch-code-alignment.ts",
     "verify:targeted-go-live-ux": "tsx scripts/verify-targeted-go-live-ux-fixes.ts",
-    "verify:final-open-day-guard": "tsx scripts/verify-final-open-day-guard.ts"
+    "verify:final-open-day-guard": "tsx scripts/verify-final-open-day-guard.ts",
+    "verify:close-time-flexibility": "tsx scripts/verify-close-time-flexibility.ts",
+    "verify:close-request-workflow": "tsx scripts/verify-close-request-workflow.ts",
+    "verify:closing-request-approval-flow": "tsx scripts/verify-closing-request-approval-flow.ts",
+    "verify:close-request-staff-catalog": "tsx scripts/verify-close-request-staff-catalog.ts",
+    "verify:preview-close-day-e2e": "tsx scripts/verify-preview-close-day-e2e.ts"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.9.1",

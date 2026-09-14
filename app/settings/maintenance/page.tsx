@@ -7,6 +7,7 @@ import { PageHeader } from "@/components/shared/layout/page-header";
 import { PageSkeleton } from "@/components/shared/page-skeleton";
 import { ResetBusinessDataSection } from "@/components/settings/reset-business-data-section";
 import { DataProtectionSection } from "@/components/settings/data-protection-section";
+import { ShopResetSection } from "@/components/settings/shop-reset-section";
 import { useAuth } from "@/context/auth-context";
 
 export default function SettingsMaintenancePage() {
@@ -35,6 +36,7 @@ export default function SettingsMaintenancePage() {
       />
       <div className="space-y-4">
         <DataProtectionSection />
+        <ShopResetSection />
         <ResetBusinessDataSection />
       </div>
     </PageContainer>

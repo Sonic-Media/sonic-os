@@ -13,7 +13,7 @@ function SkeletonBlock({
 }) {
   return (
     <div
-      className={`animate-pulse rounded-3xl border border-white/[0.04] bg-zinc-900/60 ${className ?? ""}`}
+      className={`animate-pulse rounded-[14px] border border-white/[0.06] bg-[rgba(12,14,26,0.6)] ${className ?? ""}`}
     />
   );
 }

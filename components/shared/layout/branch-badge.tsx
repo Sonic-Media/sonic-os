@@ -15,7 +15,7 @@ export function BranchBadge({ className }: BranchBadgeProps) {
   return (
     <span
       className={cn(
-        "inline-flex items-center rounded-full border border-zinc-700/80 bg-zinc-900/80 px-3 py-1 text-xs font-medium text-zinc-300",
+        "inline-flex items-center rounded-full border border-indigo-500/20 bg-indigo-500/10 px-3 py-1 text-xs font-medium text-indigo-300",
         className
       )}
     >

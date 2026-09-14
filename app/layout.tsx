@@ -40,7 +40,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className={`${geist.variable} dark h-full`}>
-      <body className="min-h-full bg-black text-white font-sans antialiased">
+      <body className="min-h-full bg-[#05060d] text-white font-sans antialiased">
         <AuthProvider>
         <SettingsProvider>
           <AuditLogProvider>

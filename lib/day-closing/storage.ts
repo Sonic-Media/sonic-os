@@ -34,7 +34,9 @@ function normalizeBranchCode(value: unknown): Branch {
 }
 
 function normalizeStatus(value: unknown): DayClosingStatus {
-  return value === "closed" ? "closed" : "open";
+  if (value === "closed") return "closed";
+  if (value === "close_requested") return "close_requested";
+  return "open";
 }
 
 export function normalizeDayClosingRecord(value: unknown): DayClosingRecord | null {
@@ -88,6 +90,38 @@ export function getOpenDayRecord(
   );
 }
 
+export function getCloseRequestedRecord(
+  branch: Branch,
+  date: string,
+  records: DayClosingRecord[] = uiDayClosingsCache
+): DayClosingRecord | undefined {
+  return records.find(
+    (record) =>
+      matchesBranch(record.branch, branch) &&
+      record.date === date &&
+      record.status === "close_requested" &&
+      !!(record.openedAt || record.reopenedAt)
+  );
+}
+
+export function getCloseRequestedRecords(
+  records: DayClosingRecord[] = uiDayClosingsCache
+): DayClosingRecord[] {
+  return records.filter(
+    (record) =>
+      record.status === "close_requested" &&
+      !!(record.openedAt || record.reopenedAt)
+  );
+}
+
+export function isCloseRequestPending(
+  branch: Branch,
+  date: string,
+  records: DayClosingRecord[] = uiDayClosingsCache
+): boolean {
+  return !!getCloseRequestedRecord(branch, date, records);
+}
+
 /** UI hint only — server gates must query PostgreSQL. */
 export function isBranchDayOpened(
   branch: Branch,
@@ -117,9 +151,14 @@ export function canRecordTodaysActivity(
   date: string,
   records: DayClosingRecord[] = uiDayClosingsCache
 ): boolean {
+  if (isBranchDayClosed(branch, date, records)) {
+    return false;
+  }
+
+  const activeRecord = resolveActiveOpenDayRecord(branch, records);
   return (
-    isBranchDayOpened(branch, date, records) &&
-    !isBranchDayClosed(branch, date, records)
+    !!activeRecord &&
+    (activeRecord.status === "open" || activeRecord.status === "close_requested")
   );
 }
 

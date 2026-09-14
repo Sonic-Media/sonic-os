@@ -27,27 +27,38 @@ export function useBranchState() {
   const {
     getOpenRecord,
     getClosedRecord,
+    getActiveOpenRecord,
+    getCloseRequestedRecord,
     isBranchDayClosed,
     isBranchDayOpened,
     isLoaded,
   } = useDayClosing();
 
   return useMemo(() => {
-    const openRecord = getOpenRecord(activeBranch, today);
-    const closedRecord = getClosedRecord(activeBranch, today);
-    const isClosed = isBranchDayClosed(activeBranch, today);
-    const isOpen = isBranchDayOpened(activeBranch, today);
-    const status = isClosed ? "closed" : isOpen ? "open" : "waiting";
+    const activeRecord = getActiveOpenRecord(activeBranch);
+    const businessDate = activeRecord?.date ?? today;
+    const openRecord = getOpenRecord(activeBranch, businessDate);
+    const closeRequestedRecord = getCloseRequestedRecord(activeBranch, businessDate);
+    const closedRecord = getClosedRecord(activeBranch, businessDate);
+    const isClosed = isBranchDayClosed(activeBranch, businessDate);
+    const isOpen = isBranchDayOpened(activeBranch, businessDate);
+    const status = isClosed
+      ? "closed"
+      : closeRequestedRecord || activeRecord?.status === "close_requested"
+        ? "close_requested"
+        : isOpen
+          ? "open"
+          : "waiting";
 
     const branchPurchases = filterByBranchField(purchases, activeBranch).filter(
-      (purchase) => purchase.date === today
+      (purchase) => purchase.date === businessDate
     );
     const branchSales = filterByBranchField(sales, activeBranch).filter(
-      (sale) => sale.date === today && sale.status === "completed"
+      (sale) => sale.date === businessDate && sale.status === "completed"
     );
 
     const branchEntries = filterByBranchField(entries, activeBranch).filter(
-      (entry) => entry.date === today
+      (entry) => entry.date === businessDate
     );
     const completedEntry = branchEntries.find((entry) => entry.status === "completed");
     const draftEntry = branchEntries.find((entry) => entry.status === "draft");
@@ -62,13 +73,13 @@ export function useBranchState() {
 
     const operatingExpenses = computeDashboardOperatingExpenses(
       activeBranch,
-      today,
+      businessDate,
       expenses,
       entries
     );
 
     const staffWages = filterByBranchField(payments, activeBranch)
-      .filter((payment) => payment.date === today)
+      .filter((payment) => payment.date === businessDate)
       .reduce((sum, payment) => sum + payment.amount, 0);
 
     const totalExpenses = operatingExpenses + staffWages;
@@ -81,7 +92,7 @@ export function useBranchState() {
 
     return {
       branch: activeBranch,
-      date: today,
+      date: businessDate,
       status,
       openedByName: openRecord?.openedByName ?? null,
       openedAt: openRecord?.openedAt ?? openRecord?.reopenedAt ?? null,
@@ -104,6 +115,8 @@ export function useBranchState() {
     activeOnShift,
     entries,
     expenses,
+    getActiveOpenRecord,
+    getCloseRequestedRecord,
     getClosedRecord,
     getOpenRecord,
     isBranchDayClosed,

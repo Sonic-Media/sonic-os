@@ -1,15 +1,27 @@
 @import "tailwindcss";
 
 :root {
-  --background: #000000;
-  --foreground: #ffffff;
-  --card: #18181b;
-  --card-border: #27272a;
+  /* Core surfaces — very dark navy/black */
+  --background: #05060d;
+  --background-elevated: #0a0c16;
+  --foreground: #f4f4f5;
+  --card: rgba(12, 14, 26, 0.72);
+  --card-border: rgba(99, 102, 241, 0.12);
   --muted: #71717a;
-  --accent: #ffffff;
+  --accent: #6366f1;
+
+  /* Semantic accents */
+  --sonic-green: #34d399;
+  --sonic-blue: #60a5fa;
+  --sonic-purple: #a78bfa;
+  --sonic-orange: #fb923c;
+  --sonic-red: #f87171;
+
+  /* Layout */
+  --sidebar-width: 180px;
   --radius-sm: 0.75rem;
   --radius-md: 1rem;
-  --radius-lg: 1.5rem;
+  --radius-lg: 1.125rem;
 }
 
 @theme inline {
@@ -19,8 +31,14 @@
   --color-card-border: var(--card-border);
   --color-muted: var(--muted);
   --color-accent: var(--accent);
+  --color-sonic-green: var(--sonic-green);
+  --color-sonic-blue: var(--sonic-blue);
+  --color-sonic-purple: var(--sonic-purple);
+  --color-sonic-orange: var(--sonic-orange);
+  --color-sonic-red: var(--sonic-red);
   --font-sans: var(--font-geist-sans);
   --spacing-content: 1500px;
+  --spacing-sidebar: var(--sidebar-width);
 }
 
 * {
@@ -37,6 +55,15 @@ body {
   font-family: var(--font-geist-sans), system-ui, -apple-system, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+/* Atmospheric page backdrop */
+.sonic-app-backdrop {
+  background:
+    radial-gradient(ellipse 80% 50% at 20% -10%, rgba(99, 102, 241, 0.08), transparent 50%),
+    radial-gradient(ellipse 60% 40% at 80% 0%, rgba(167, 139, 250, 0.06), transparent 45%),
+    radial-gradient(ellipse 50% 30% at 50% 100%, rgba(59, 130, 246, 0.04), transparent 40%),
+    var(--background);
 }
 
 input[type="number"]::-webkit-inner-spin-button,
@@ -59,8 +86,20 @@ input[type="date"]::-webkit-calendar-picker-indicator {
 }
 
 ::selection {
-  background: rgba(255, 255, 255, 0.2);
+  background: rgba(99, 102, 241, 0.35);
   color: white;
+}
+
+/* Sidebar active nav glow */
+.sonic-nav-active {
+  background: linear-gradient(
+    135deg,
+    rgba(99, 102, 241, 0.18) 0%,
+    rgba(167, 139, 250, 0.1) 100%
+  );
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 0 20px -8px rgba(99, 102, 241, 0.35);
 }
 
 @keyframes command-palette-fade-in {

@@ -17,6 +17,8 @@ import { createDefaultExpenses } from "@/lib/expenses";
 import { getTodayISO } from "@/lib/dates";
 import { upsertEntryInList } from "@/lib/storage";
 import { getDataSourceErrorMessage } from "@/lib/data-source/context-api";
+import { isApiError } from "@/lib/api/errors";
+import { toCloseDayFacingError } from "@/lib/ux/close-day-messages";
 import { getClientSession } from "@/lib/client/session-registry";
 import {
   buildStaffActionRecord,
@@ -64,6 +66,11 @@ function createBlankForm(
 }
 
 export type OperationsMode = "today" | "historical";
+
+export interface SubmitRequestResult {
+  success: boolean;
+  error?: string;
+}
 
 interface UseEntryFormOptions {
   entry?: Entry;
@@ -374,7 +381,15 @@ export function useEntryForm(options: UseEntryFormOptions = {}) {
     setForm((prev) => ({ ...prev, [key]: value }));
   }
 
-  async function handleSave(): Promise<boolean> {
+  function resolveSubmitError(error: unknown): string {
+    if (isApiError(error)) {
+      return toCloseDayFacingError(error);
+    }
+
+    return getDataSourceErrorMessage(error);
+  }
+
+  async function handleSave(): Promise<SubmitRequestResult> {
     cancelPendingAutosave();
     const saveEpoch = beginExplicitSave(saveCoordinatorRef.current);
     setIsSaving(true);
@@ -405,7 +420,7 @@ export function useEntryForm(options: UseEntryFormOptions = {}) {
 
       if (conflict && !(options.entry?.id === conflict.id)) {
         setDuplicateEntry(conflict);
-        return false;
+        return { success: false, error: "A completed entry already exists for this day." };
       }
 
       const existing = entryId
@@ -435,7 +450,10 @@ export function useEntryForm(options: UseEntryFormOptions = {}) {
       }
 
       if (!shouldApplySaveResult(saveCoordinatorRef.current, saveEpoch)) {
-        return false;
+        return {
+          success: false,
+          error: "Save was interrupted. Please try again.",
+        };
       }
 
       syncEntriesRef(saved);
@@ -446,25 +464,27 @@ export function useEntryForm(options: UseEntryFormOptions = {}) {
         options.redirectTo ??
         (mode === "today" ? "/operations/today" : "/history");
       router.push(mode === "today" ? "/operations/today" : redirect);
-      return true;
+      return { success: true };
     } catch (error) {
-      setSaveError(getDataSourceErrorMessage(error));
+      const message = resolveSubmitError(error);
+      setSaveError(message);
       setLastSavedAt(null);
-      return false;
+      return { success: false, error: message };
     } finally {
       endExplicitSave(saveCoordinatorRef.current);
       setIsSaving(false);
     }
   }
 
-  async function handleSubmitRequest(): Promise<boolean> {
+  async function handleSubmitRequest(): Promise<SubmitRequestResult> {
     if (
       mode === "today" &&
       closingLoaded &&
       isBranchDayClosed(form.branch, form.date)
     ) {
-      setSaveError("This day is closed. Records cannot be changed.");
-      return false;
+      const message = "This day is closed. Records cannot be changed.";
+      setSaveError(message);
+      return { success: false, error: message };
     }
 
     if (mode === "today") {
@@ -491,17 +511,21 @@ export function useEntryForm(options: UseEntryFormOptions = {}) {
         }
 
         if (!shouldApplySaveResult(saveCoordinatorRef.current, saveEpoch)) {
-          return false;
+          return {
+            success: false,
+            error: "Save was interrupted. Please try again.",
+          };
         }
 
         syncEntriesRef(saved);
         draftIdRef.current = saved.id;
         setLastSavedAt(Date.now());
-        return true;
+        return { success: true };
       } catch (error) {
-        setSaveError(getDataSourceErrorMessage(error));
+        const message = resolveSubmitError(error);
+        setSaveError(message);
         setLastSavedAt(null);
-        return false;
+        return { success: false, error: message };
       } finally {
         endExplicitSave(saveCoordinatorRef.current);
         setIsSaving(false);

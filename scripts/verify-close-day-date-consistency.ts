@@ -7,6 +7,11 @@ import { getBranchDayState } from "@/lib/server/services/day-closings-service";
 import type { Branch } from "@/types";
 import type { DayClosingRecord } from "@/types/day-closing";
 import {
+  approveCloseDayApi,
+  submitAndApproveClose,
+  submitCloseRequestApi,
+} from "./verify-close-request-helpers";
+import {
   cleanupCertificationCashier,
   createCertificationCashier,
   type CertificationCashier,
@@ -147,7 +152,7 @@ async function closeStaleOpenDays(branch: Branch) {
   const staleOpen = await prisma.dayClosing.findMany({
     where: {
       branchId: branchRow.id,
-      status: "open",
+      status: { in: ["open", "close_requested"] },
       OR: [{ openedAt: { not: null } }, { reopenedAt: { not: null } }],
     },
   });
@@ -184,10 +189,10 @@ function scanStaticFixes(): void {
 
   recordCheck(
     3,
-    "No redundant post-close upsertEntry in closeDay client flow",
-    contextSource.includes("closeDayApi") &&
+    "No redundant post-close upsertEntry in approveAndClose client flow",
+    contextSource.includes("approveCloseDayApi") &&
       !contextSource.includes("buildClosedDayDailyOperationEntry") &&
-      !contextSource.match(/closeDayApi[\s\S]*upsertEntry/),
+      !contextSource.match(/approveCloseDayApi[\s\S]*upsertEntry/),
     ""
   );
 
@@ -252,17 +257,12 @@ async function main() {
       }),
     });
 
-    const sameDayClosed = await kansangaClient.json<{ date: string; status: string }>(
-      "/api/day-closings",
-      {
-        method: "POST",
-        body: JSON.stringify({
-          action: "close",
-          branch: "main",
-          date: sameDayDate,
-          ...EMPTY_CLOSE_PAYLOAD,
-        }),
-      }
+    const sameDayClosed = await submitAndApproveClose<{ date: string; status: string }>(
+      kansangaClient,
+      owner,
+      "main",
+      sameDayDate,
+      EMPTY_CLOSE_PAYLOAD
     );
     const sameDayPg = await getDayClosingStatus(mainBranch, sameDayDate);
 
@@ -287,17 +287,12 @@ async function main() {
       }),
     });
 
-    const rolloverClosed = await kansangaClient.json<{ date: string; status: string }>(
-      "/api/day-closings",
-      {
-        method: "POST",
-        body: JSON.stringify({
-          action: "close",
-          branch: "main",
-          date: rolloverCloseHint,
-          ...EMPTY_CLOSE_PAYLOAD,
-        }),
-      }
+    await submitCloseRequestApi(kansangaClient, "main", rolloverCloseHint, EMPTY_CLOSE_PAYLOAD);
+    const rolloverClosed = await approveCloseDayApi<{ date: string; status: string }>(
+      owner,
+      "main",
+      rolloverCloseHint,
+      EMPTY_CLOSE_PAYLOAD
     );
     const openDayPg = await getDayClosingStatus(mainBranch, rolloverOpenDate);
     const hintDayCount = await countDayClosing(mainBranch, rolloverCloseHint);
@@ -357,23 +352,18 @@ async function main() {
       }),
     });
 
-    const postCloseResult = await kansangaClient.json<{ status: string }>(
-      "/api/day-closings",
-      {
-        method: "POST",
-        body: JSON.stringify({
-          action: "close",
-          branch: "main",
-          date: postCloseDate,
-          ...EMPTY_CLOSE_PAYLOAD,
-        }),
-      }
+    const postCloseResult = await submitAndApproveClose<{ status: string }>(
+      kansangaClient,
+      owner,
+      "main",
+      postCloseDate,
+      EMPTY_CLOSE_PAYLOAD
     );
     const postClosePg = await getBranchDayState(mainBranch, postCloseDate);
 
     recordCheck(
       10,
-      "Successful closeDayApi returns success with PostgreSQL closed state",
+      "Successful approve-close returns success with PostgreSQL closed state",
       postCloseResult.status === "closed" && postClosePg === "closed",
       `api=${postCloseResult.status}, pg=${postClosePg}`
     );
@@ -415,24 +405,22 @@ async function main() {
     );
 
     // Failure test: close without open
-    const closeWithoutOpen = await kansangaClient.jsonExpectFailure(
-      "/api/day-closings",
-      {
-        method: "POST",
-        body: JSON.stringify({
-          action: "close",
-          branch: "main",
-          date: failureDate,
-          ...EMPTY_CLOSE_PAYLOAD,
-        }),
-      }
-    );
+    const closeWithoutOpen = await owner.jsonExpectFailure("/api/day-closings", {
+      method: "POST",
+      body: JSON.stringify({
+        action: "approve-close",
+        branch: "main",
+        date: failureDate,
+        ...EMPTY_CLOSE_PAYLOAD,
+      }),
+    });
     const failurePg = await getDayClosingStatus(mainBranch, failureDate);
 
     recordCheck(
       13,
       "Failed close reports failure and leaves day unopened",
-      closeWithoutOpen.status === 400 && failurePg === null,
+      (closeWithoutOpen.status === 400 || closeWithoutOpen.code === "shop_not_opened") &&
+        failurePg === null,
       `status=${closeWithoutOpen.status}, pg=${failurePg}`
     );
 
@@ -451,10 +439,12 @@ async function main() {
 
     const salaamaClient = new CloseDayVerifier();
     await salaamaClient.loginAsCashier(salaamaCashier);
+    await submitCloseRequestApi(kansangaClient, "main", isolationDate, EMPTY_CLOSE_PAYLOAD);
+
     const foreignClose = await salaamaClient.jsonExpectFailure("/api/day-closings", {
       method: "POST",
       body: JSON.stringify({
-        action: "close",
+        action: "approve-close",
         branch: "main",
         date: isolationDate,
         ...EMPTY_CLOSE_PAYLOAD,
@@ -465,7 +455,8 @@ async function main() {
     recordCheck(
       14,
       "Salaama cannot close Kansanga open day",
-      foreignClose.status === 403 && kansangaStillOpen === "open",
+      foreignClose.status === 403 &&
+        (kansangaStillOpen === "open" || kansangaStillOpen === "close_requested"),
       `status=${foreignClose.status}, kansanga=${kansangaStillOpen}`
     );
 
@@ -478,12 +469,14 @@ async function main() {
       }),
     });
 
+    await submitCloseRequestApi(salaamaClient, "salaama", isolationDate, EMPTY_CLOSE_PAYLOAD);
+
     const kansangaTriesSalaama = await kansangaClient.jsonExpectFailure(
       "/api/day-closings",
       {
         method: "POST",
         body: JSON.stringify({
-          action: "close",
+          action: "approve-close",
           branch: "salaama",
           date: isolationDate,
           ...EMPTY_CLOSE_PAYLOAD,
@@ -495,12 +488,14 @@ async function main() {
     recordCheck(
       15,
       "Kansanga cannot close Salaama open day",
-      kansangaTriesSalaama.status === 403 && salaamaStillOpen === "open",
+      kansangaTriesSalaama.status === 403 &&
+        (salaamaStillOpen === "open" || salaamaStillOpen === "close_requested"),
       `status=${kansangaTriesSalaama.status}, salaama=${salaamaStillOpen}`
     );
 
     // Reopen behavior preserved (only one open business day allowed at a time)
     await closeStaleOpenDays(mainBranch);
+    await closeStaleOpenDays(salaamaBranch);
 
     await owner.json("/api/day-closings", {
       method: "POST",

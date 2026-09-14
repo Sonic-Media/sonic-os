@@ -16,6 +16,7 @@ import {
 import { useAuth } from "@/context/auth-context";
 import { useActiveBranch } from "@/context/active-branch-context";
 import { useDayClosing } from "@/context/day-closing-context";
+import { getActiveOpenDayRecord } from "@/lib/day-closing/business-date";
 import { useSettings } from "@/context/settings-context";
 import { useStaff } from "@/context/staff-context";
 import { useStaffAttendance } from "@/hooks/use-staff-attendance";
@@ -82,6 +83,17 @@ export function OpenShopPage({
         ? getStartShiftSuccessLine(staffName, today)
         : `${staffName}, you are now on shift.`,
     [mode, staffName, today]
+  );
+
+  const activeOpenRecord = useMemo(
+    () => getActiveOpenDayRecord(activeBranch, closings),
+    [activeBranch, closings]
+  );
+  const hasStaleOpenBusinessDay = Boolean(
+    activeOpenRecord &&
+      activeOpenRecord.date !== today &&
+      (activeOpenRecord.status === "open" ||
+        activeOpenRecord.status === "close_requested")
   );
 
   const canStart = session ? canOpenShop(session.role) : false;
@@ -266,6 +278,29 @@ export function OpenShopPage({
           )}
         </div>
 
+        {hasStaleOpenBusinessDay ? (
+          <div className="mt-5 rounded-2xl border border-amber-500/20 bg-amber-500/[0.08] px-4 py-4 text-center">
+            <p className="text-sm font-medium text-amber-100">
+              An earlier business day is still open
+            </p>
+            <p className="mt-2 text-sm leading-relaxed text-zinc-400">
+              {activeOpenRecord?.status === "close_requested"
+                ? "A closing request has already been sent for that business day and is awaiting review."
+                : "Return to that business day's operations, then submit it for closing before opening a new day."}
+            </p>
+            <Button
+              type="button"
+              variant="secondary"
+              className="mt-4"
+              onClick={() => {
+                void refreshClosings().then(() => router.refresh());
+              }}
+            >
+              Continue Previous Business Day
+            </Button>
+          </div>
+        ) : null}
+
         {error ? (
           <p className="mt-5 whitespace-pre-line text-center text-sm text-red-400">
             {error}
@@ -282,7 +317,12 @@ export function OpenShopPage({
                 ? "bg-gradient-to-r from-emerald-600 to-teal-600 shadow-[0_16px_40px_-16px_rgba(16,185,129,0.7)] hover:from-emerald-500 hover:to-teal-500"
                 : ""
             )}
-            disabled={!canStart || isSubmitting || !scheduleAllowsOpen}
+            disabled={
+              !canStart ||
+              isSubmitting ||
+              !scheduleAllowsOpen ||
+              hasStaleOpenBusinessDay
+            }
             loading={isSubmitting}
             loadingLabel={isStartShift ? "Opening shop..." : "Clocking in..."}
             onClick={() => void handleSubmit()}
