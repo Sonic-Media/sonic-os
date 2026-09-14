@@ -8,7 +8,7 @@ import { useDayClosing } from "@/context/day-closing-context";
 import { useSettings } from "@/context/settings-context";
 import { useStaff } from "@/context/staff-context";
 import { useStaffAttendance } from "@/hooks/use-staff-attendance";
-import { clockOutApi } from "@/lib/api/staff-attendance";
+import { clockOutApi, fetchStaffAttendance } from "@/lib/api/staff-attendance";
 import { runOnApi } from "@/lib/data-source/context-api";
 import { getTodayISO } from "@/lib/dates";
 import { formatRelativeTime, getGreeting } from "@/lib/format";
@@ -21,7 +21,35 @@ import {
   StaffStatusBadge,
 } from "@/components/operations/staff/primitives";
 
-export function StaffWelcomeCard({ businessDate }: { businessDate?: string } = {}) {
+function mapAttendanceRecord(record: {
+  id: string;
+  timestamp: string;
+  userId: string;
+  userName: string;
+  role: string;
+  branch: string;
+  action: string;
+  module: string;
+}) {
+  return {
+    id: record.id,
+    timestamp: record.timestamp,
+    staffId: record.userId,
+    staffName: record.userName,
+    role: record.role as never,
+    branch: record.branch as never,
+    action: record.action,
+    module: record.module as never,
+  };
+}
+
+export function StaffWelcomeCard({
+  businessDate,
+  onClockOutComplete,
+}: {
+  businessDate?: string;
+  onClockOutComplete?: () => void | Promise<void>;
+} = {}) {
   const today = getTodayISO();
   const resolvedDate = businessDate ?? today;
   const { session } = useAuth();
@@ -81,20 +109,16 @@ export function StaffWelcomeCard({ businessDate }: { businessDate?: string } = {
     setIsClockingOut(true);
     try {
       const record = await runOnApi(() =>
-        clockOutApi({ branch: activeBranch, date: today })
+        clockOutApi({ branch: activeBranch, date: resolvedDate })
       );
-      mergeStaffAuditRecords([
-        {
-          id: record.id,
-          timestamp: record.timestamp,
-          staffId: record.userId,
-          staffName: record.userName,
-          role: record.role as never,
-          branch: record.branch,
-          action: record.action,
-          module: record.module as never,
-        },
-      ]);
+      mergeStaffAuditRecords([mapAttendanceRecord(record)]);
+
+      const authoritativeRecords = await runOnApi(() =>
+        fetchStaffAttendance(resolvedDate)
+      );
+      mergeStaffAuditRecords(authoritativeRecords.map(mapAttendanceRecord));
+
+      await onClockOutComplete?.();
     } finally {
       setIsClockingOut(false);
     }

@@ -74,7 +74,8 @@ async function main(): Promise<void> {
 
   recordCheck(
     "Staff submit close request refreshes after success",
-    staffWorkspaceSource.includes("await refreshStaffOperations()") &&
+    staffWorkspaceSource.includes("refreshStaffOperations()") &&
+      staffWorkspaceSource.includes("refreshBranchStaffOnShift()") &&
       staffWorkspaceSource.includes("if (result.success)"),
     "handleCloseDay"
   );
