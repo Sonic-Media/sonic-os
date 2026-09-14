@@ -12,6 +12,7 @@ import { clockOutApi } from "@/lib/api/staff-attendance";
 import { runOnApi } from "@/lib/data-source/context-api";
 import { getTodayISO } from "@/lib/dates";
 import { formatRelativeTime, getGreeting } from "@/lib/format";
+import { resolveStaffAttendanceDateISO } from "@/lib/staff/attendance-date";
 import { mergeStaffAuditRecords } from "@/lib/staff/audit";
 import { formatClockTime } from "@/lib/staff/attendance";
 import { resolveStaffDisplayName } from "@/lib/ux/user-display";
@@ -23,7 +24,8 @@ import {
 
 export function StaffWelcomeCard({ businessDate }: { businessDate?: string } = {}) {
   const today = getTodayISO();
-  const resolvedDate = businessDate ?? today;
+  const attendanceDate = resolveStaffAttendanceDateISO(businessDate, today);
+  const resolvedDate = attendanceDate;
   const { session } = useAuth();
   const { activeBranch } = useActiveBranch();
   const { getBranchName } = useSettings();
@@ -34,7 +36,7 @@ export function StaffWelcomeCard({ businessDate }: { businessDate?: string } = {
     isBranchDayClosed,
     isCloseRequestPending,
   } = useDayClosing();
-  const { currentAttendance } = useStaffAttendance(today);
+  const { currentAttendance } = useStaffAttendance(attendanceDate);
   const [now, setNow] = useState(() => new Date());
   const [isClockingOut, setIsClockingOut] = useState(false);
 
@@ -81,7 +83,7 @@ export function StaffWelcomeCard({ businessDate }: { businessDate?: string } = {
     setIsClockingOut(true);
     try {
       const record = await runOnApi(() =>
-        clockOutApi({ branch: activeBranch, date: today })
+        clockOutApi({ branch: activeBranch, date: attendanceDate })
       );
       mergeStaffAuditRecords([
         {

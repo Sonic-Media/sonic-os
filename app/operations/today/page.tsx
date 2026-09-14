@@ -34,18 +34,9 @@ function TodayOperationsContent() {
     getActiveOpenRecord,
     isLoaded: closingLoaded,
   } = useDayClosing();
-  const { currentAttendance } = useStaffAttendance(today);
   const [shiftGateCleared, setShiftGateCleared] = useState(false);
 
   const isOwner = session?.role === "owner";
-
-  useEffect(() => {
-    setShiftGateCleared(false);
-  }, [activeBranch, today]);
-
-  const handleShiftGateComplete = useCallback(async () => {
-    setShiftGateCleared(true);
-  }, []);
 
   const activeOpenRecord = getActiveOpenRecord(activeBranch);
   const hasActiveBusinessDay = Boolean(
@@ -54,6 +45,16 @@ function TodayOperationsContent() {
         activeOpenRecord.status === "close_requested")
   );
   const businessDate = hasActiveBusinessDay ? activeOpenRecord!.date : today;
+
+  const { currentAttendance } = useStaffAttendance(businessDate);
+
+  useEffect(() => {
+    setShiftGateCleared(false);
+  }, [activeBranch, businessDate]);
+
+  const handleShiftGateComplete = useCallback(async () => {
+    setShiftGateCleared(true);
+  }, []);
 
   const { completedEntry, draftEntry } = useMemo(() => {
     if (!isLoaded) {

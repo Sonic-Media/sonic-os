@@ -79,7 +79,8 @@
     "verify:close-request-workflow": "tsx scripts/verify-close-request-workflow.ts",
     "verify:closing-request-approval-flow": "tsx scripts/verify-closing-request-approval-flow.ts",
     "verify:close-request-staff-catalog": "tsx scripts/verify-close-request-staff-catalog.ts",
-    "verify:preview-close-day-e2e": "tsx scripts/verify-preview-close-day-e2e.ts"
+    "verify:preview-close-day-e2e": "tsx scripts/verify-preview-close-day-e2e.ts",
+    "verify:staff-shift-state": "tsx scripts/verify-staff-shift-state-consistency.ts"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.9.1",
