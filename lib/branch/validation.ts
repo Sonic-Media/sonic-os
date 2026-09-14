@@ -1,3 +1,4 @@
+import { branchCodesReferToSameInventory } from "@/lib/branch/codes";
 import type { BranchEntity, BranchInput } from "@/types/branch";
 
 export function hasValidationErrors(
@@ -29,7 +30,10 @@ export function validateBranchInput(
     errors.code = "Code must use lowercase letters, numbers, or hyphens.";
   } else if (
     branches.some(
-      (branch) => branch.code === code && branch.id !== excludeId
+      (branch) =>
+        branch.id !== excludeId &&
+        (branch.code === code ||
+          branchCodesReferToSameInventory(branch.code, code))
     )
   ) {
     errors.code = "A branch with this code already exists.";

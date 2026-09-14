@@ -1,3 +1,4 @@
+import { resolveInventoryBranchCode } from "@/lib/branch/codes";
 import { BRANCH_IDS } from "@/lib/constants";
 import { filterCompletedEntries } from "@/lib/entry-helpers";
 import type { Branch, BranchTotals, Entry } from "@/types";
@@ -16,7 +17,9 @@ export function normalizeBranchId(branchId: Branch): Branch | null {
   }
 
   const normalized = branchId.trim().toLowerCase();
-  return normalized.length > 0 ? normalized : null;
+  return normalized.length > 0
+    ? resolveInventoryBranchCode(normalized)
+    : null;
 }
 
 export function resolveReportBranchIds(

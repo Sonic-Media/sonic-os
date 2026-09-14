@@ -1,4 +1,4 @@
-import { DEFAULT_BRANCH_CODE } from "@/lib/constants";
+import { DEFAULT_BRANCH_CODE, SALAAMA_BRANCH_CODE } from "@/lib/constants";
 import type { Branch } from "@/types";
 
 /**
@@ -7,8 +7,8 @@ import type { Branch } from "@/types";
  */
 const INVENTORY_BRANCH_ALIASES: Record<string, Branch> = {
   kansanga: DEFAULT_BRANCH_CODE,
-  /** Legacy settings/UI code; production PostgreSQL branch code is branch2. */
-  salaama: "branch2",
+  /** Legacy production PostgreSQL code before Salaama was renamed to salaama. */
+  branch2: SALAAMA_BRANCH_CODE,
 };
 
 export function resolveInventoryBranchCode(branchCode: string): Branch {
