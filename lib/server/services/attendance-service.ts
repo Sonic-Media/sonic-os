@@ -156,10 +156,15 @@ async function assertBranchDayOpen(
   }
 }
 
+export type StaffOnShiftMember = {
+  staffId: string;
+  staffName: string;
+};
+
 export async function getStaffOnShiftAtBranch(
   branch: Branch,
   date: string
-): Promise<Array<{ staffId: string; staffName: string }>> {
+): Promise<StaffOnShiftMember[]> {
   const branchId = await getBranchIdByCode(branch);
   const auditRecords = await fetchBranchAttendanceAudit(branch, date);
 
