@@ -20,6 +20,8 @@ import { useAuth } from "@/context/auth-context";
 import { useBranch } from "@/context/branch-context";
 import {
   beginBranchScopedFetch,
+  beginFetchGeneration,
+  isCurrentFetchGeneration,
   resetBranchScopedFetchRefs,
   shouldSkipBranchScopedFetch,
 } from "@/lib/context/branch-scoped-load";
@@ -53,12 +55,13 @@ const EntriesContext = createContext<EntriesContextValue | null>(null);
 
 export function EntriesProvider({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoaded: authLoaded } = useAuth();
-  const { activeBranch } = useBranch();
+  const { activeBranch, isLoaded: branchLoaded } = useBranch();
   const [entries, setEntries] = useState<Entry[]>([]);
   const [isLoaded, setIsLoaded] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const hasLoaded = useRef(false);
   const lastFetchedBranch = useRef<Branch | null>(null);
+  const fetchGeneration = useRef(0);
   const entriesRef = useRef<Entry[]>([]);
   const removeEntriesInFlight = useRef(false);
 
@@ -77,11 +80,17 @@ export function EntriesProvider({ children }: { children: React.ReactNode }) {
     if (!authLoaded) return;
 
     if (!isAuthenticated) {
+      beginFetchGeneration(fetchGeneration);
       entriesRef.current = [];
       setEntries([]);
       setLoadError(null);
       resetBranchScopedFetchRefs(hasLoaded, lastFetchedBranch);
       setIsLoaded(true);
+      return;
+    }
+
+    if (!branchLoaded) {
+      setIsLoaded(false);
       return;
     }
 
@@ -101,20 +110,34 @@ export function EntriesProvider({ children }: { children: React.ReactNode }) {
       setIsLoaded(false);
     }
 
+    const generation = beginFetchGeneration(fetchGeneration);
+
     queueMicrotask(() => {
       void (async () => {
         try {
           await loadFromApi(() => refreshEntriesFromApi());
+
+          if (!isCurrentFetchGeneration(fetchGeneration, generation)) {
+            return;
+          }
+
+          setLoadError(null);
         } catch (error) {
+          if (!isCurrentFetchGeneration(fetchGeneration, generation)) {
+            return;
+          }
+
           entriesRef.current = [];
           setEntries([]);
           setLoadError(getDataSourceErrorMessage(error));
         } finally {
-          setIsLoaded(true);
+          if (isCurrentFetchGeneration(fetchGeneration, generation)) {
+            setIsLoaded(true);
+          }
         }
       })();
     });
-  }, [authLoaded, isAuthenticated, activeBranch, refreshEntriesFromApi]);
+  }, [authLoaded, isAuthenticated, branchLoaded, activeBranch, refreshEntriesFromApi]);
 
   const upsertEntry = useCallback(async (entry: Entry): Promise<Entry> => {
     return runOnApi(async () => {

@@ -38,5 +38,8 @@ export async function syncClosedDayDailyOperation(input: {
     entry.id = existing.id;
   }
 
-  return upsertDailyOperation(entry, { allowCloseRequested: true });
+  return upsertDailyOperation(entry, {
+    allowCloseRequested: true,
+    allowOwnerManagementClose: true,
+  });
 }

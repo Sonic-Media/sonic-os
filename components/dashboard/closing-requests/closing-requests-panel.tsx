@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { ReviewClosingRequestDialog } from "@/components/dashboard/closing-requests/review-closing-request-dialog";
 import { useBranches } from "@/context/branches-context";
 import { useDayClosing } from "@/context/day-closing-context";
+import { useAppDataRefresh } from "@/hooks/use-app-data-refresh";
 import { useManagementApproveClose } from "@/hooks/use-management-approve-close";
 import { readCloseRequest } from "@/lib/day-closing/close-request";
 import { formatEntryDisplayDate } from "@/lib/dates";
@@ -92,13 +93,14 @@ function CloseRequestCard({
 
 export function ClosingRequestsPanel() {
   const { getBranchName } = useBranches();
-  const { getCloseRequestedRecords } = useDayClosing();
+  const { closings, getCloseRequestedRecords } = useDayClosing();
+  const { refreshAll } = useAppDataRefresh();
   const pendingRequests = useMemo(
     () =>
       getCloseRequestedRecords().sort((left, right) =>
         left.date.localeCompare(right.date)
       ),
-    [getCloseRequestedRecords]
+    [closings, getCloseRequestedRecords]
   );
 
   const [selectedRecord, setSelectedRecord] = useState<DayClosingRecord | null>(null);
@@ -114,6 +116,7 @@ export function ClosingRequestsPanel() {
     const result = await approveClose(selectedRecord.closingNotes);
     if (result.success) {
       setSelectedRecord(null);
+      await refreshAll();
     }
   }
 
