@@ -80,11 +80,8 @@
     "verify:closing-request-approval-flow": "tsx scripts/verify-closing-request-approval-flow.ts",
     "verify:close-request-staff-catalog": "tsx scripts/verify-close-request-staff-catalog.ts",
     "verify:preview-close-day-e2e": "tsx scripts/verify-preview-close-day-e2e.ts",
-<<<<<<< HEAD
-    "verify:staff-movie-revenue-eod": "tsx scripts/verify-staff-movie-revenue-eod.ts"
-=======
+    "verify:staff-movie-revenue-eod": "tsx scripts/verify-staff-movie-revenue-eod.ts",
     "verify:owner-closing-approval-auth": "tsx scripts/verify-owner-closing-approval-auth.ts"
->>>>>>> 27432f8 (Fix owner authorization for closing request approval)
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.9.1",
