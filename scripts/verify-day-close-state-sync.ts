@@ -6,6 +6,8 @@ import "dotenv/config";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { getEquivalentBranchCodes } from "@/lib/branch/codes";
+import { SALAAMA_BRANCH_CODE } from "@/lib/constants";
 import { prisma } from "@/lib/db";
 import {
   cleanupCertificationCashier,
@@ -71,7 +73,7 @@ class ApiClient {
 async function closeStaleActiveDays(branchCode: string): Promise<void> {
   const branches = await prisma.branch.findMany({
     where: {
-      code: { in: [branchCode, branchCode === "branch2" ? "salaama" : branchCode] },
+      code: { in: getEquivalentBranchCodes(branchCode) },
     },
     select: { id: true },
   });
@@ -92,7 +94,7 @@ async function closeStaleActiveDays(branchCode: string): Promise<void> {
 async function deleteDayClosing(branchCode: string, date: string) {
   const branches = await prisma.branch.findMany({
     where: {
-      code: { in: [branchCode, branchCode === "branch2" ? "salaama" : branchCode] },
+      code: { in: getEquivalentBranchCodes(branchCode) },
     },
     select: { id: true },
   });
