@@ -95,10 +95,16 @@ export async function listDailyOperationsInPeriod(
 
 export async function upsertDailyOperation(
   entry: Entry,
-  options?: { allowCloseRequested?: boolean }
+  options?: {
+    allowCloseRequested?: boolean;
+    /** Allows owner to persist the closed-day daily operation during approve-close. */
+    allowOwnerManagementClose?: boolean;
+  }
 ): Promise<Entry> {
   const session = await requireSession();
-  assertOwnerCannotEditTodayOperations(session, entry.date);
+  if (!options?.allowOwnerManagementClose) {
+    assertOwnerCannotEditTodayOperations(session, entry.date);
+  }
 
   if (options?.allowCloseRequested) {
     await assertBranchDayNotClosedForWrite(entry.branch, entry.date);

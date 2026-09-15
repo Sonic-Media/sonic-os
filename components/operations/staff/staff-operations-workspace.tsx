@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useCallback } from "react";
+import { useMemo, useState, useCallback, useEffect } from "react";
 import { DuplicateEntryDialog } from "@/components/entry/duplicate-entry-dialog";
 import { StaffDailyWageCard } from "@/components/operations/staff/staff-daily-wage-card";
 import { StaffEndOfDayCard } from "@/components/operations/staff/staff-end-of-day-card";
@@ -14,8 +14,10 @@ import { StaffCashSummaryCard } from "@/components/operations/staff/staff-cash-s
 import { useToast } from "@/context/toast-context";
 import { useEntryForm } from "@/hooks/use-entry-form";
 import { useLinkedStaff } from "@/hooks/use-linked-staff";
+import { useBranchStaffOnShift } from "@/hooks/use-branch-staff-on-shift";
 import { useStaffCloseDay } from "@/hooks/use-staff-close-day";
 import { useStaffOperationsRefresh } from "@/hooks/use-staff-operations-refresh";
+import { shouldClearStaffOnShiftCloseError } from "@/lib/ux/stale-close-error";
 import { useStaffPaymentsModule } from "@/context/staff-payments-context";
 import {
   computeStaffPayoutTotalForStaffBranchDate,
@@ -106,10 +108,27 @@ export function StaffOperationsWorkspace({
     dayClosed,
   } = useStaffCloseDay(businessDateProp ?? form.date);
 
-  useStaffOperationsRefresh({
+  const resolvedBusinessDate = businessDateProp ?? businessDate;
+
+  const { staffOnShift, refresh: refreshBranchStaffOnShift } = useBranchStaffOnShift(
+    activeBranch,
+    resolvedBusinessDate
+  );
+
+  const { refreshAll: refreshStaffOperations } = useStaffOperationsRefresh({
     closeRequestPending,
     watchForClose: closeRequestPending || Boolean(activeBusinessDayStatus),
   });
+
+  useEffect(() => {
+    if (shouldClearStaffOnShiftCloseError(closeFlowError, staffOnShift.length)) {
+      setCloseFlowError(null);
+    }
+  }, [closeFlowError, staffOnShift.length]);
+
+  const handleClockOutComplete = useCallback(async () => {
+    await Promise.all([refreshStaffOperations(), refreshBranchStaffOnShift()]);
+  }, [refreshBranchStaffOnShift, refreshStaffOperations]);
 
   const accessorySalesCount = useMemo(
     () =>
@@ -204,6 +223,7 @@ export function StaffOperationsWorkspace({
     if (result.success) {
       setCloseFlowError(null);
       toastSuccess("Closing request sent.");
+      await Promise.all([refreshStaffOperations(), refreshBranchStaffOnShift()]);
       return true;
     }
 
@@ -216,10 +236,10 @@ export function StaffOperationsWorkspace({
     closeStaffDay,
     form.notes,
     handleSubmitRequest,
+    refreshBranchStaffOnShift,
+    refreshStaffOperations,
     toastSuccess,
   ]);
-
-  const resolvedBusinessDate = businessDateProp ?? businessDate;
 
   return (
     <div className={cn("mx-auto max-w-3xl", uiSpacing.page, uiSpacing.section)}>
@@ -235,7 +255,10 @@ export function StaffOperationsWorkspace({
         />
       ) : null}
 
-      <StaffWelcomeCard businessDate={resolvedBusinessDate} />
+      <StaffWelcomeCard
+        businessDate={resolvedBusinessDate}
+        onClockOutComplete={() => void handleClockOutComplete()}
+      />
 
       <StaffRevenueCard
         movieRevenue={movieRevenue}
@@ -273,7 +296,10 @@ export function StaffOperationsWorkspace({
         date={form.date}
         expanded={expandedSection === "daily-wage"}
         onExpandedChange={(open) => expandSection(open ? "daily-wage" : null)}
-        onRecorded={() => expandSection("end-of-day")}
+        onRecorded={() => {
+          expandSection("end-of-day");
+          void refreshStaffOperations();
+        }}
       />
 
       <StaffCashSummaryCard
@@ -308,8 +334,11 @@ export function StaffOperationsWorkspace({
         closeRequestPending={closeRequestPending}
         dayClosed={dayClosed}
         isClosing={isClosing || isSaving}
+        isSavingMovieRevenue={isSaving}
+        movieRevenueError={saveError}
         closeError={closeFlowError}
         updateField={updateField}
+        onSaveMovieRevenue={(amount) => handleSubmitRequest({ sales: amount })}
         onCloseDay={handleCloseDay}
       />
 

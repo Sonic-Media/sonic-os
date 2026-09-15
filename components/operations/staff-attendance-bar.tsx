@@ -5,7 +5,8 @@ import { Button } from "@/components/shared/ui/button";
 import { Card } from "@/components/shared/ui/card";
 import { useActiveBranch } from "@/context/active-branch-context";
 import { useStaffAttendance } from "@/hooks/use-staff-attendance";
-import { clockOutApi } from "@/lib/api/staff-attendance";
+import { clockOutApi, fetchStaffAttendance } from "@/lib/api/staff-attendance";
+import { getTodayISO } from "@/lib/dates";
 import { runOnApi } from "@/lib/data-source/context-api";
 import {
   formatAttendanceHours,
@@ -48,6 +49,22 @@ export function StaffAttendanceBar() {
           module: record.module as never,
         },
       ]);
+
+      const authoritativeRecords = await runOnApi(() =>
+        fetchStaffAttendance(getTodayISO())
+      );
+      mergeStaffAuditRecords(
+        authoritativeRecords.map((entry) => ({
+          id: entry.id,
+          timestamp: entry.timestamp,
+          staffId: entry.userId,
+          staffName: entry.userName,
+          role: entry.role as never,
+          branch: entry.branch as never,
+          action: entry.action,
+          module: entry.module as never,
+        }))
+      );
     } finally {
       setIsClockingOut(false);
     }

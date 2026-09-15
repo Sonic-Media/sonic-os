@@ -27,3 +27,21 @@ export async function clockOutApi(input: {
     action: "clock-out",
   });
 }
+
+export interface BranchStaffOnShiftMember {
+  staffId: string;
+  staffName: string;
+}
+
+export async function fetchBranchStaffOnShiftApi(input: {
+  branch: string;
+  date: string;
+}): Promise<BranchStaffOnShiftMember[]> {
+  const params = new URLSearchParams({
+    branch: input.branch,
+    date: input.date,
+  });
+  return apiGet<BranchStaffOnShiftMember[]>(
+    `/api/staff/attendance/on-shift?${params.toString()}`
+  );
+}

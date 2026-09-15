@@ -23,8 +23,8 @@ export function useBranchState() {
   const { payments } = useStaffPaymentsModule();
   const { sales } = useSales();
   const { metrics: salesMetrics } = useSalesDashboard();
-  const { activeOnShift } = useStaffAttendance(today);
   const {
+    closings,
     getOpenRecord,
     getClosedRecord,
     getActiveOpenRecord,
@@ -33,6 +33,10 @@ export function useBranchState() {
     isBranchDayOpened,
     isLoaded,
   } = useDayClosing();
+
+  const activeRecord = getActiveOpenRecord(activeBranch);
+  const attendanceDate = activeRecord?.date ?? today;
+  const { activeOnShift } = useStaffAttendance(attendanceDate);
 
   return useMemo(() => {
     const activeRecord = getActiveOpenRecord(activeBranch);
@@ -113,6 +117,8 @@ export function useBranchState() {
   }, [
     activeBranch,
     activeOnShift,
+    attendanceDate,
+    closings,
     entries,
     expenses,
     getActiveOpenRecord,
