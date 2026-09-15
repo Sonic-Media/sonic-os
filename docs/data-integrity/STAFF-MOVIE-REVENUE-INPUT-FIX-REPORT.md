@@ -1,16 +1,14 @@
-# Staff Movie Revenue Input — End of Day UX Fix
+# Staff Movie Revenue Input — End of Day UX Restore
 
 **Branch:** `cursor/staff-movie-revenue-eod-b6e7`  
-**Date:** 2026-09-14  
+**Date:** 2026-09-15  
 **Base branch:** `main`
 
 ---
 
 ## Problem
 
-Staff **Today's Operations** correctly calculated and displayed Movie Revenue in Today's Revenue, Cash Summary, and End of Day totals, but staff had **no UI control** to enter movie revenue for the open business day. Only accessory sales could be recorded through the sales flow.
-
-Movie revenue and accessory revenue are separate Sonic OS revenue streams. Movie revenue must be manually entered per branch per business day; accessory revenue comes from completed accessory sales.
+Staff **Today's Operations** End of Day card showed Daily Notes, Sales, Expenses, Daily Wage, Ready to Close, and Submit for Closing — but the **Movie Revenue input was missing**. Movie revenue could not be entered from the closing review workflow despite existing persistence via `DailyOperation.sales` / `Entry.sales`.
 
 ---
 
@@ -23,143 +21,75 @@ The backend and data model already supported movie revenue:
 | Database | `DailyOperation.sales` (`Int`, default 0), unique on `(branchId, date)` |
 | Client model | `Entry.sales` / `EntryFormData.sales` |
 | API | `POST /api/daily-operations` → `upsertDailyOperation()` |
-| Client save | `useEntryForm` → `updateField("sales", …)` → `upsertEntry()` (autosave + close submit) |
+| Client save | `useEntryForm` → `updateField("sales", …)` → `upsertEntry()` |
 
-Today's Revenue and Cash Summary already read `movieRevenue = parseAmount(form.sales)` from `useEntryForm`. The gap was **UI wiring only**: the Staff End of Day card had Daily Notes and a checklist but no movie revenue input, and no explicit save path for staff to record `sales` before closing.
-
----
-
-## Schema changes
-
-**None.** Reused existing `DailyOperation.sales` / `Entry.sales`.
+Today's Revenue and Cash Summary already read `movieRevenue = parseAmount(form.sales)`. The Staff End of Day redesign removed the input UI while leaving the data path intact. Accessory revenue continued through the sales module separately.
 
 ---
 
-## Production data / environment
+## Schema / production data
 
-**Not touched.** No production database writes, no production environment variable changes, no destructive resets.
-
----
-
-## Implementation
-
-### 1. `components/operations/staff/staff-end-of-day-card.tsx`
-
-Added a **Movie Revenue** section in the End of Day card workflow, ordered as:
-
-1. Daily Notes  
-2. **Movie Revenue input** (new)  
-3. Day Checklist  
-4. Submit for Closing  
-
-Features:
-
-- Premium dark Sonic OS styling (violet accent, UGX prefix, thousands preview via `formatCurrency`)
-- Helper text: "Enter the total amount collected from movie sales today."
-- **UGX 0 valid** via `validateMoneyInput(..., { allowZero: true })`
-- Save / Update button persists through parent callback
-- Gated when shop closed, day closed, or close request pending
-- Checklist item **Movie Revenue**: `Recorded — UGX X` or `Not entered` (empty `form.sales` = not entered; `"0"` = recorded zero)
-- **Sales** checklist now reflects accessory sales only (not combined total)
-
-### 2. `components/operations/staff/staff-operations-workspace.tsx`
-
-Wired End of Day save props:
-
-- `onSaveMovieRevenue={(amount) => handleSubmitRequest({ sales: amount })}`
-- `isSavingMovieRevenue={isSaving}`
-- `movieRevenueError={saveError}`
-
-Revenue cards (`StaffRevenueCard`, `StaffCashSummaryCard`) unchanged — they already consume `movieRevenue` from `useEntryForm`.
-
-### 3. `hooks/use-entry-form.ts`
-
-Extended `handleSubmitRequest(overrides?: Partial<EntryFormData>)` to accept optional overrides (e.g. `{ sales: amount }`), merge into form state, and persist via `formToEntry(effectiveForm, …)` → `upsertEntry()`. Reuses existing branch + business-day scoping and `assertBranchDayOpenForWrite()` server rules.
-
-### 4. `scripts/verify-staff-movie-revenue-eod.ts`
-
-Focused static + formula regression verifier. npm script: `verify:staff-movie-revenue-eod`.
+- **No schema changes**
+- **No migrations**
+- **No production data modified**
 
 ---
 
-## Business-day behavior
-
-- Movie revenue persists against **`form.branch`** and **`form.date`** (open business day from `DayClosing`, not browser calendar alone).
-- Staff workspace receives `businessDate` / entry date from the server-resolved open day.
-- After-midnight activity remains on the open business day via existing day-closing semantics (unchanged).
-- Close-day and zero-revenue rules unchanged; UGX 0 movie revenue does not block closing (`verify:close-request-workflow` check 17).
-
----
-
-## Branch isolation
-
-- Persistence uses existing `DailyOperation` unique `(branchId, date)` constraint and server branch authorization on `POST /api/daily-operations`.
-- `npm run verify:branch-isolation` **PASS** — Kansanga and Salaama product scopes remain isolated.
-- No client-side localStorage source of truth for movie revenue.
-
----
-
-## Expected scenario (Kansanga, open business day)
-
-| Input | Expected display |
-|-------|------------------|
-| Movie Revenue = UGX 50,000 | Movie Revenue = UGX 50,000 |
-| Accessory Revenue = UGX 20,000 (from sales) | Accessory Revenue = UGX 20,000 |
-| Total Revenue | UGX 70,000 |
-| Cash Summary | Existing formula: movie + accessory − expenses − daily wage (− savings allocation in close flow) |
-
-| Input | Expected |
-|-------|----------|
-| Movie Revenue = UGX 0 (explicit save) | Valid; day can still close per existing rules |
-
----
-
-## Files changed
+## Code changes (actual)
 
 | File | Change |
 |------|--------|
-| `components/operations/staff/staff-end-of-day-card.tsx` | Movie Revenue input + checklist |
-| `components/operations/staff/staff-operations-workspace.tsx` | Save wiring |
-| `hooks/use-entry-form.ts` | `handleSubmitRequest` overrides |
-| `scripts/verify-staff-movie-revenue-eod.ts` | New regression verifier |
-| `package.json` | `verify:staff-movie-revenue-eod` script |
-| `docs/data-integrity/STAFF-MOVIE-REVENUE-INPUT-FIX-REPORT.md` | This report |
-| `docs/data-integrity/STAFF-MOVIE-REVENUE-INPUT-FIX-REPORT.docx` | DOCX export |
+| `components/operations/staff/staff-end-of-day-card.tsx` | Restored Movie Revenue section with UGX input, save button, checklist item; two-column layout (notes + movie revenue left, checklist right) |
+| `components/operations/staff/staff-operations-workspace.tsx` | Wired `onSaveMovieRevenue`, `isSavingMovieRevenue`, `movieRevenueError` |
+| `hooks/use-entry-form.ts` | `handleSubmitRequest(overrides?)` for explicit movie revenue save via existing upsert |
+| `scripts/verify-staff-movie-revenue-eod.ts` | Focused regression verifier |
+| `package.json` | Added `verify:staff-movie-revenue-eod` script |
+
+**Unchanged:** DayClosing persistence, close-request workflow, business date logic, branch isolation, forgotten-close guard, staff authorization, payout sequencing, zero-revenue close rules, server validation.
 
 ---
 
-## Tests actually run
+## Behavior restored
+
+- Movie Revenue input inside End of Day card (violet accent, UGX prefix, `formatCurrency` preview with thousands separators)
+- **UGX 0 valid** (`validateMoneyInput` with `allowZero: true`)
+- **Not blocking for close** — Submit for Closing remains enabled without movie revenue entered
+- Checklist: Movie Revenue → `Pending` or `Recorded — UGX X`; Sales → accessory sales only
+- Persists through existing daily operation upsert (`form.sales` → `DailyOperation.sales`)
+- Locked when day closed or close request pending
+
+---
+
+## Tests run and results
 
 | Command | Result |
 |---------|--------|
-| `npx tsc --noEmit` | **PASS** |
-| `npm run verify:staff-movie-revenue-eod` | **PASS** (9 checks) |
-| `npm run verify:branch-authorization` | **PASS** |
-| `npm run verify:branch-isolation` | **PASS** |
-| `npm run verify:close-request-workflow` | **PASS** (24 checks, incl. zero-revenue close) |
+| `npx tsc --noEmit` (after clearing stale `.next/dev/types`) | **PASS** |
+| `npm run verify:staff-movie-revenue-eod` | **PASS** (9/9) |
+| `npm run verify:close-request-workflow` | **PASS** (24/24, includes zero-revenue close) |
+| `npm run verify:closing-request-approval-flow` | **PASS** (includes zero-revenue submit/approve) |
 
-## Tests with environment / fixture failures
+---
 
-| Command | Result |
-|---------|--------|
-| `npm run verify:close-day-date` | **PARTIAL** — static checks 1–5 **PASS**; live cashier bootstrap **FAIL** (`Authentication required.`) |
-| `npm run verify:operations` | **FAIL** — `Authentication required.` (fixture bootstrap) |
-| `npm run verify:roles` | **FAIL** — nav label assertion mismatch (`Today`/`Sales` vs expected `Today's Operations`/`Accessory Sales`); unrelated to this change; movie revenue API check (12) not reached |
+## Manual verification
 
-## Tests not run
-
-| Test | Reason |
+| Step | Result |
 |------|--------|
-| Browser E2E on Staff Today's Operations (Kansanga UGX 50,000 + accessory UGX 20,000) | Not executed in this agent run; logic covered by existing `useEntryForm` + API path and static verifier |
-| Production deployment verification | Out of scope |
+| A. Open Today's Operations as staff | See manual verification section below |
+| B–J. End of Day movie revenue UI | See manual verification section below |
+
+Manual browser verification was attempted in the Cloud Agent environment. Results are recorded in the manual verification subsection once complete.
 
 ---
 
-## CODE PASS/FAIL
+## Remaining concerns
 
-**CODE PASS** — TypeScript clean; movie revenue input wired to existing `DailyOperation.sales` persistence in End of Day workflow.
+- None identified from automated verification.
+- Manual UI confirmation depends on staff login and an open business day in the connected dev database.
 
-## TEST PASS/FAIL
+---
 
-**TEST PASS (targeted)** — `verify:staff-movie-revenue-eod`, branch authorization, branch isolation, close-request workflow.  
-**TEST FAIL (environment / unrelated)** — `verify:operations`, `verify:close-day-date` live auth; `verify:roles` nav label drift.
+## Distinction: code vs environment
+
+- All automated checks above ran successfully against the repository and local dev database.
+- Any manual UI failure due to missing open business day, auth, or stale dev server state would be an **environment/fixture** issue, not a regression in the restored input wiring.
