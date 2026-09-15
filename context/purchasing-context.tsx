@@ -47,6 +47,8 @@ import { useAuth } from "@/context/auth-context";
 import { useBranch } from "@/context/branch-context";
 import {
   beginBranchScopedFetch,
+  beginFetchGeneration,
+  isCurrentFetchGeneration,
   resetBranchScopedFetchRefs,
   shouldSkipBranchScopedFetch,
 } from "@/lib/context/branch-scoped-load";
@@ -103,7 +105,7 @@ export function PurchasingProvider({
   children: React.ReactNode;
 }) {
   const { isAuthenticated, isLoaded: authLoaded, session } = useAuth();
-  const { activeBranch } = useBranch();
+  const { activeBranch, isLoaded: branchLoaded } = useBranch();
   const { getProductById, refreshStockFromApi } = useStock();
 
   const [purchases, setPurchases] = useState<Purchase[]>([]);
@@ -112,6 +114,7 @@ export function PurchasingProvider({
   const [loadError, setLoadError] = useState<string | null>(null);
   const hasLoaded = useRef(false);
   const lastFetchedBranch = useRef<Branch | null>(null);
+  const fetchGeneration = useRef(0);
   const purchaseInFlight = useRef(false);
   const purchasesRef = useRef(purchases);
   const suppliersRef = useRef(suppliers);
@@ -140,6 +143,7 @@ export function PurchasingProvider({
     if (!authLoaded) return;
 
     if (!isAuthenticated) {
+      beginFetchGeneration(fetchGeneration);
       purchasesRef.current = [];
       suppliersRef.current = [];
       setPurchases([]);
@@ -147,6 +151,11 @@ export function PurchasingProvider({
       setLoadError(null);
       resetBranchScopedFetchRefs(hasLoaded, lastFetchedBranch);
       setIsLoaded(true);
+      return;
+    }
+
+    if (!branchLoaded) {
+      setIsLoaded(false);
       return;
     }
 
@@ -168,6 +177,8 @@ export function PurchasingProvider({
       setIsLoaded(false);
     }
 
+    const generation = beginFetchGeneration(fetchGeneration);
+
     queueMicrotask(() => {
       void (async () => {
         try {
@@ -183,23 +194,33 @@ export function PurchasingProvider({
             };
           });
 
+          if (!isCurrentFetchGeneration(fetchGeneration, generation)) {
+            return;
+          }
+
           purchasesRef.current = normalizePurchaseList(loaded.purchases);
           suppliersRef.current = normalizeSupplierList(loaded.suppliers);
           setPurchases(purchasesRef.current);
           setSuppliers(suppliersRef.current);
           setLoadError(null);
         } catch (error) {
+          if (!isCurrentFetchGeneration(fetchGeneration, generation)) {
+            return;
+          }
+
           purchasesRef.current = [];
           suppliersRef.current = [];
           setPurchases([]);
           setSuppliers([]);
           setLoadError(getDataSourceErrorMessage(error));
         } finally {
-          setIsLoaded(true);
+          if (isCurrentFetchGeneration(fetchGeneration, generation)) {
+            setIsLoaded(true);
+          }
         }
       })();
     });
-  }, [authLoaded, isAuthenticated, activeBranch]);
+  }, [authLoaded, isAuthenticated, branchLoaded, activeBranch]);
 
   const purchaseLookup = useMemo(
     () => new Map(purchases.map((purchase) => [purchase.id, purchase])),
