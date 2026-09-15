@@ -476,11 +476,21 @@ export function useEntryForm(options: UseEntryFormOptions = {}) {
     }
   }
 
-  async function handleSubmitRequest(): Promise<SubmitRequestResult> {
+  async function handleSubmitRequest(
+    overrides?: Partial<EntryFormData>
+  ): Promise<SubmitRequestResult> {
+    const effectiveForm = overrides ? { ...form, ...overrides } : form;
+
+    if (overrides) {
+      hasInteracted.current = true;
+      setHasStarted(true);
+      setForm(effectiveForm);
+    }
+
     if (
       mode === "today" &&
       closingLoaded &&
-      isBranchDayClosed(form.branch, form.date)
+      isBranchDayClosed(effectiveForm.branch, effectiveForm.date)
     ) {
       const message = "This day is closed. Records cannot be changed.";
       setSaveError(message);
@@ -500,7 +510,13 @@ export function useEntryForm(options: UseEntryFormOptions = {}) {
         const existing = activeDraftId
           ? entriesRef.current.find((entry) => entry.id === activeDraftId)
           : undefined;
-        const entry = buildDraftEntry(activeDraftId, existing);
+        const entry = formToEntry(effectiveForm, {
+          id: activeDraftId ?? undefined,
+          status: "draft",
+          existing,
+          staffName: resolveStaffName(existing),
+          createdBy: resolveCreatedBy(effectiveForm.branch),
+        });
         const persistPromise = upsertEntry(entry);
         trackInFlightSave(saveCoordinatorRef.current, persistPromise);
         let saved: Entry;
