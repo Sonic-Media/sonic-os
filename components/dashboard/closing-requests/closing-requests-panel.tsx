@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { ReviewClosingRequestDialog } from "@/components/dashboard/closing-requests/review-closing-request-dialog";
 import { useBranches } from "@/context/branches-context";
 import { useDayClosing } from "@/context/day-closing-context";
+import { useAppDataRefresh } from "@/hooks/use-app-data-refresh";
 import { useManagementApproveClose } from "@/hooks/use-management-approve-close";
 import { readCloseRequest } from "@/lib/day-closing/close-request";
 import { formatEntryDisplayDate } from "@/lib/dates";
@@ -92,13 +93,14 @@ function CloseRequestCard({
 
 export function ClosingRequestsPanel() {
   const { getBranchName } = useBranches();
-  const { getCloseRequestedRecords } = useDayClosing();
+  const { closings, getCloseRequestedRecords } = useDayClosing();
+  const { refreshAll } = useAppDataRefresh();
   const pendingRequests = useMemo(
     () =>
       getCloseRequestedRecords().sort((left, right) =>
         left.date.localeCompare(right.date)
       ),
-    [getCloseRequestedRecords]
+    [closings, getCloseRequestedRecords]
   );
 
   const [selectedRecord, setSelectedRecord] = useState<DayClosingRecord | null>(null);
@@ -114,7 +116,12 @@ export function ClosingRequestsPanel() {
     const result = await approveClose(selectedRecord.closingNotes);
     if (result.success) {
       setSelectedRecord(null);
+      await refreshAll();
     }
+  }
+
+  if (pendingRequests.length === 0) {
+    return null;
   }
 
   return (
@@ -125,22 +132,16 @@ export function ClosingRequestsPanel() {
           Pending business-day closing requests awaiting approval
         </p>
 
-        {pendingRequests.length === 0 ? (
-          <p className="mt-4 rounded-2xl border border-white/[0.06] bg-black/20 px-4 py-3 text-sm text-zinc-500">
-            No closing requests pending.
-          </p>
-        ) : (
-          <div className="mt-4 space-y-3">
-            {pendingRequests.map((record) => (
-              <CloseRequestCard
-                key={record.id}
-                record={record}
-                branchName={getBranchName(record.branch)}
-                onReview={() => setSelectedRecord(record)}
-              />
-            ))}
-          </div>
-        )}
+        <div className="mt-4 space-y-3">
+          {pendingRequests.map((record) => (
+            <CloseRequestCard
+              key={record.id}
+              record={record}
+              branchName={getBranchName(record.branch)}
+              onReview={() => setSelectedRecord(record)}
+            />
+          ))}
+        </div>
 
         {error ? (
           <p className="mt-4 text-sm text-red-400" role="alert">

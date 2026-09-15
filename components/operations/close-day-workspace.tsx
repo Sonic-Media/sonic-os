@@ -18,6 +18,7 @@ import { useStaffPaymentsModule } from "@/context/staff-payments-context";
 import { usePurchasing } from "@/context/purchasing-context";
 import { useSales } from "@/context/sales-context";
 import { useStaff } from "@/context/staff-context";
+import { useAppDataRefresh } from "@/hooks/use-app-data-refresh";
 import {
   buildStaffPayoutRows,
   computeDayClosingMetrics,
@@ -105,6 +106,7 @@ export function CloseDayWorkspace({
     getClosedRecord,
     getCloseRequestedRecord,
   } = useDayClosing();
+  const { refreshAll } = useAppDataRefresh();
 
   const [step, setStep] = useState(0);
   const [staffPayouts, setStaffPayouts] = useState<DayClosingStaffPayout[]>([]);
@@ -257,6 +259,7 @@ export function CloseDayWorkspace({
     }
 
     if (result.record) {
+      await refreshAll();
       setCloseSuccessRecord(result.record);
     }
   }
