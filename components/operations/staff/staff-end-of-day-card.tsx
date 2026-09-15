@@ -214,11 +214,14 @@ export function StaffEndOfDayCard({
               />
             </div>
 
+            {/* Movie Revenue input is intentionally retained. Removing the closing
+                requirement (UGX 0 allowed) must NOT remove this editable field. */}
             <div
               className={cn(
                 "rounded-2xl border border-violet-500/15 bg-violet-500/[0.04] p-5",
                 "shadow-[inset_0_1px_0_0_rgba(255,255,255,0.04)]"
               )}
+              data-regression-guard="movie-revenue-eod-section"
             >
               <div className="space-y-1">
                 <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-violet-300/90">
@@ -250,6 +253,7 @@ export function StaffEndOfDayCard({
                       inputMode="numeric"
                       autoComplete="off"
                       aria-label="Movie revenue amount"
+                      data-regression-guard="movie-revenue-eod-input"
                       value={amountInput}
                       onChange={(event) => {
                         setAmountInput(event.target.value);

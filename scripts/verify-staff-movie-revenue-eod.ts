@@ -40,7 +40,8 @@ async function main() {
   recordCheck(
     "End of Day card exposes Movie Revenue section",
     eodCard.includes("Movie Revenue") &&
-      eodCard.includes("Enter today&apos;s movie revenue")
+      eodCard.includes("Enter today&apos;s movie revenue") &&
+      eodCard.includes('data-regression-guard="movie-revenue-eod-input"')
   );
 
   recordCheck(
