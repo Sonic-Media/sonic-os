@@ -222,8 +222,33 @@ function buildCloseDayPayload(options: {
   };
 }
 
+function readRepoFile(relativePath: string): string {
+  return fs.readFileSync(path.join(process.cwd(), relativePath), "utf8");
+}
+
+function scanStaffMovieRevenueUi(): void {
+  const workspace = readRepoFile(
+    "components/operations/staff/staff-operations-workspace.tsx"
+  );
+  const movieCard = readRepoFile(
+    "components/operations/staff/staff-movie-revenue-card.tsx"
+  );
+
+  recordCheck(
+    0,
+    "Staff Today page exposes movie revenue entry UI",
+    workspace.includes("StaffMovieRevenueCard") &&
+      workspace.includes('handleSubmitRequest({ sales: amount })') &&
+      movieCard.includes("Record Movie Revenue") &&
+      movieCard.includes("Update Movie Revenue"),
+    "staff-movie-revenue-card.tsx + staff-operations-workspace.tsx"
+  );
+}
+
 async function main() {
   console.log("Roles & Permissions production certification starting...\n");
+
+  scanStaffMovieRevenueUi();
 
   const ownerCertifier = new RolesCertifier();
   const cashierCertifier = new RolesCertifier();
