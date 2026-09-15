@@ -1,6 +1,6 @@
 import type { UserRole } from "@/types/auth";
 
-export const SHOP_OPEN_HOUR = 9;
+export const SHOP_OPEN_HOUR = 7;
 export const SHOP_CLOSE_HOUR = 23;
 
 export type ShopSchedulePhase = "before-open" | "open" | "after-close";
@@ -34,8 +34,14 @@ export function isWithinOpeningHours(date = new Date()): boolean {
   return totalMinutes >= openMinutes && totalMinutes < closeMinutes;
 }
 
+function formatHourLabel(hour: number): string {
+  const period = hour >= 12 ? "PM" : "AM";
+  const displayHour = hour % 12 || 12;
+  return `${displayHour}:00 ${period}`;
+}
+
 export function getOpeningHoursLabel(): string {
-  return "9:00 AM – 11:00 PM";
+  return `${formatHourLabel(SHOP_OPEN_HOUR)} – ${formatHourLabel(SHOP_CLOSE_HOUR)}`;
 }
 
 function atHour(date: Date, hour: number, dayOffset = 0): Date {
@@ -56,7 +62,7 @@ export function getShopScheduleState(now = new Date()): ShopScheduleState {
       canOpen: false,
       countdownLabel: "Shop opens in",
       targetTime: openToday,
-      statusMessage: "Opening begins at 9:00 AM.",
+      statusMessage: `Opening begins at ${formatHourLabel(SHOP_OPEN_HOUR)}.`,
       detailMessage: getOpeningHoursLabel(),
     };
   }
@@ -78,7 +84,7 @@ export function getShopScheduleState(now = new Date()): ShopScheduleState {
     countdownLabel: "Shop opens in",
     targetTime: atHour(now, SHOP_OPEN_HOUR, 1),
     statusMessage: "Today's business has ended.",
-    detailMessage: "Next opening at 9:00 AM.",
+    detailMessage: `Next opening at ${formatHourLabel(SHOP_OPEN_HOUR)}.`,
   };
 }
 
