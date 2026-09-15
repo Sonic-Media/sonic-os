@@ -42,7 +42,8 @@ export interface ShopResetCounts {
   customers: number;
   suppliers: number;
   auditLogEntries: number;
-  productStockReset: number;
+  /** Sum of Product.currentStock for products in the reset scope (inventory units). */
+  branchCurrentStockUnits: number;
 }
 
 export interface ShopResetPreview {
@@ -91,6 +92,27 @@ async function resolveBranchTargets(
   const canonical = resolveCanonicalBranchCode(scope);
   const branchId = await getBranchIdByCode(canonical);
   return [{ id: branchId, code: canonical }];
+}
+
+type ShopResetDbClient = Pick<
+  ReturnType<typeof getAdminPrismaClient>,
+  "product"
+>;
+
+async function sumBranchCurrentStockUnits(
+  client: ShopResetDbClient,
+  branchIds: string[]
+): Promise<number> {
+  if (branchIds.length === 0) {
+    return 0;
+  }
+
+  const aggregate = await client.product.aggregate({
+    where: { branchId: { in: branchIds } },
+    _sum: { currentStock: true },
+  });
+
+  return aggregate._sum.currentStock ?? 0;
 }
 
 function branchCodesForAudit(branchCodes: Branch[]): string[] {
@@ -143,7 +165,7 @@ async function countBranchScopedData(
     stockMovements,
     stockPriceChanges,
     auditLogEntries,
-    products,
+    branchCurrentStockUnits,
   ] = await Promise.all([
     client.sale.count({ where: { branchId: { in: branchIds } } }),
     saleIds.length
@@ -180,7 +202,7 @@ async function countBranchScopedData(
         })
       : Promise.resolve(0),
     client.auditLogEntry.count({ where: { branchCode: { in: auditCodes } } }),
-    client.product.count({ where: { branchId: { in: branchIds } } }),
+    sumBranchCurrentStockUnits(client, branchIds),
   ]);
 
   const customers = saleIds.length
@@ -216,7 +238,7 @@ async function countBranchScopedData(
     customers,
     suppliers,
     auditLogEntries,
-    productStockReset: products,
+    branchCurrentStockUnits,
   };
 }
 
@@ -302,14 +324,25 @@ async function deleteBranchScopedData(
   const auditLogEntries = await tx.auditLogEntry.deleteMany({
     where: { branchCode: { in: auditCodes } },
   });
-  const productStockReset = await tx.product.updateMany({
+  const branchCurrentStockUnits = await sumBranchCurrentStockUnits(tx, branchIds);
+  const productsWithStockReset = await tx.product.updateMany({
     where: { branchId: { in: branchIds } },
     data: {
       currentStock: 0,
-      status: "in-stock",
+      status: "out-of-stock",
       deletedAt: null,
     },
   });
+
+  if (productsWithStockReset.count > 0) {
+    const remainingStock = await sumBranchCurrentStockUnits(tx, branchIds);
+    if (remainingStock !== 0) {
+      throw new ApiError(
+        "Shop reset failed — branch product stock was not zeroed.",
+        { status: 500, code: "shop_reset_stock_remaining" }
+      );
+    }
+  }
 
   return {
     sales: sales.count,
@@ -326,7 +359,7 @@ async function deleteBranchScopedData(
     customers: customers.count,
     suppliers: suppliers.count,
     auditLogEntries: auditLogEntries.count,
-    productStockReset: productStockReset.count,
+    branchCurrentStockUnits,
   };
 }
 
@@ -481,6 +514,13 @@ async function validateShopResetVerification(
       status: 500,
       code: "shop_reset_verification_failed",
     });
+  }
+
+  if (verification.branchCurrentStockUnits > 0) {
+    throw new ApiError(
+      "Shop reset verification failed — branch current stock units remain.",
+      { status: 500, code: "shop_reset_stock_remaining" }
+    );
   }
 
   const remainingDayClosings = await prisma.dayClosing.count({

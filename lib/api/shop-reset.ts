@@ -16,7 +16,7 @@ export interface ShopResetCounts {
   customers: number;
   suppliers: number;
   auditLogEntries: number;
-  productStockReset: number;
+  branchCurrentStockUnits: number;
 }
 
 export interface ShopResetPreviewResponse {
