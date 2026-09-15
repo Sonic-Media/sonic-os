@@ -17,6 +17,8 @@ import {
   EMPTY_CLOSE_PAYLOAD,
   submitCloseRequestApi,
 } from "./verify-close-request-helpers";
+import { getEquivalentBranchCodes } from "@/lib/branch/codes";
+import { SALAAMA_BRANCH_CODE } from "@/lib/constants";
 import { loginWithCredentials, VERIFY_OWNER_CREDENTIALS } from "./verify-session";
 
 const ROOT = process.cwd();
@@ -92,7 +94,7 @@ class ApiClient {
 
 async function closeStaleActiveDays(branchCode: string): Promise<void> {
   const branches = await prisma.branch.findMany({
-    where: { code: { in: [branchCode, branchCode === "branch2" ? "salaama" : branchCode] } },
+    where: { code: { in: getEquivalentBranchCodes(branchCode) } },
     select: { id: true },
   });
   if (branches.length === 0) return;
@@ -111,7 +113,7 @@ async function closeStaleActiveDays(branchCode: string): Promise<void> {
 
 async function deleteDayClosing(branchCode: string, date: string) {
   const branches = await prisma.branch.findMany({
-    where: { code: { in: [branchCode, branchCode === "branch2" ? "salaama" : branchCode] } },
+    where: { code: { in: getEquivalentBranchCodes(branchCode) } },
     select: { id: true },
   });
   if (branches.length === 0) return;
@@ -166,7 +168,7 @@ async function main() {
     salaamaCashier = await createCertificationCashier(
       owner,
       `${TEST_PREFIX}-s`,
-      "branch2"
+      SALAAMA_BRANCH_CODE
     );
     staffCashier = kansangaCashier;
 
@@ -182,9 +184,9 @@ async function main() {
     });
 
     await closeStaleActiveDays("main");
-    await closeStaleActiveDays("branch2");
+    await closeStaleActiveDays(SALAAMA_BRANCH_CODE);
     await deleteDayClosing("main", businessDate);
-    await deleteDayClosing("branch2", businessDate);
+    await deleteDayClosing(SALAAMA_BRANCH_CODE, businessDate);
 
     // E — staff submit
     await openAndSubmit(kansangaStaff, "main", businessDate);
@@ -202,13 +204,13 @@ async function main() {
       approvedMain.status
     );
 
-    await deleteDayClosing("branch2", businessDate);
-    await openAndSubmit(salaamaStaff, "branch2", businessDate);
+    await deleteDayClosing(SALAAMA_BRANCH_CODE, businessDate);
+    await openAndSubmit(salaamaStaff, SALAAMA_BRANCH_CODE, businessDate);
 
     // B — owner approves Salaama
     const approvedSalaama = await approveCloseDayApi<{ status: string }>(
       owner,
-      "branch2",
+      SALAAMA_BRANCH_CODE,
       businessDate
     );
     recordCheck(
@@ -336,13 +338,13 @@ async function main() {
     for (const cashier of [kansangaCashier, salaamaCashier]) {
       if (cashier) {
         await cleanupCertificationCashier(cashier, {
-          branch: cashier === salaamaCashier ? "branch2" : "main",
+          branch: cashier === salaamaCashier ? SALAAMA_BRANCH_CODE : "main",
           date: businessDate,
         }).catch(() => undefined);
       }
     }
     await deleteDayClosing("main", businessDate);
-    await deleteDayClosing("branch2", businessDate);
+    await deleteDayClosing(SALAAMA_BRANCH_CODE, businessDate);
     await prisma.auditLogEntry.deleteMany({
       where: { userName: { contains: TEST_PREFIX } },
     }).catch(() => undefined);

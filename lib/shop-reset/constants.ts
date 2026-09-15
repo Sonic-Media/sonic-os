@@ -112,6 +112,6 @@ export function resolveShopResetLookupCodes(scope: ShopResetScope): Branch[] {
   if (scope === "main") {
     return ["main"];
   }
-  // salaama inventory canonical is branch2; lookups accept either alias.
+  // Authoritative code is salaama; legacy branch2 remains accepted during rollout.
   return [resolveCanonicalBranchCode("salaama")];
 }
