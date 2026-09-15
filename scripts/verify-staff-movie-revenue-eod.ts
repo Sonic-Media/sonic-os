@@ -30,7 +30,7 @@ async function main() {
   recordCheck(
     "End of Day card exposes Movie Revenue section",
     eodCard.includes("Movie Revenue") &&
-      eodCard.includes("Enter the total movie revenue collected today")
+      eodCard.includes("Enter today&apos;s movie revenue")
   );
 
   recordCheck(
@@ -41,16 +41,17 @@ async function main() {
   );
 
   recordCheck(
-    "Checklist tracks movie revenue entered vs not entered",
+    "Checklist tracks movie revenue entered vs pending",
     eodCard.includes('label="Movie Revenue"') &&
-      eodCard.includes("Not entered") &&
+      eodCard.includes("Pending") &&
       eodCard.includes("Recorded —")
   );
 
   recordCheck(
-    "Movie revenue is placed before Day Checklist in End of Day card",
-    eodCard.indexOf("Enter the total movie revenue collected today") <
-      eodCard.indexOf("Day Checklist")
+    "End of Day uses two-column layout with checklist on the right",
+    eodCard.includes("lg:grid-cols-2") &&
+      eodCard.indexOf("Enter today&apos;s movie revenue") <
+        eodCard.indexOf("Day Checklist")
   );
 
   recordCheck(

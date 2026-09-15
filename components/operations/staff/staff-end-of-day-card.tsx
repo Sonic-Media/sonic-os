@@ -196,37 +196,38 @@ export function StaffEndOfDayCard({
           </h2>
         </header>
 
-        <div className="mt-6 space-y-6">
-          <div className="space-y-3">
-            <div>
-              <p className="text-sm font-medium text-white">Daily Notes</p>
-              <p className="mt-1 text-xs text-zinc-500">Optional</p>
+        <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-2 lg:gap-8">
+          <div className="space-y-6">
+            <div className="space-y-3">
+              <div>
+                <p className="text-sm font-medium text-white">Daily Notes</p>
+                <p className="mt-1 text-xs text-zinc-500">Optional</p>
+              </div>
+              <Textarea
+                id="daily-notes"
+                aria-label="Daily notes"
+                placeholder="Add a note about today's operations..."
+                value={form.notes}
+                onChange={(event) => updateField("notes", event.target.value)}
+                className="min-h-[140px]"
+                disabled={dayClosed}
+              />
             </div>
-            <Textarea
-              id="daily-notes"
-              aria-label="Daily notes"
-              placeholder="Add a note about today's operations..."
-              value={form.notes}
-              onChange={(event) => updateField("notes", event.target.value)}
-              className="min-h-[140px]"
-              disabled={dayClosed}
-            />
-          </div>
 
-          <div
-            className={cn(
-              "rounded-2xl border border-violet-500/15 bg-violet-500/[0.04] p-5",
-              "shadow-[inset_0_1px_0_0_rgba(255,255,255,0.04)]"
-            )}
-          >
-            <div className="space-y-1">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-violet-300/90">
-                Movie Revenue
-              </p>
-              <p className="text-sm text-zinc-400">
-                Enter the total movie revenue collected today.
-              </p>
-            </div>
+            <div
+              className={cn(
+                "rounded-2xl border border-violet-500/15 bg-violet-500/[0.04] p-5",
+                "shadow-[inset_0_1px_0_0_rgba(255,255,255,0.04)]"
+              )}
+            >
+              <div className="space-y-1">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-violet-300/90">
+                  Movie Revenue
+                </p>
+                <p className="text-sm text-zinc-400">
+                  Enter today&apos;s movie revenue
+                </p>
+              </div>
 
             {!canRecordMovieRevenue ? (
               <p className="mt-4 rounded-xl border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
@@ -291,6 +292,7 @@ export function StaffEndOfDayCard({
                 {displayMovieRevenueError}
               </p>
             ) : null}
+            </div>
           </div>
 
           <div className="space-y-3">
@@ -302,7 +304,7 @@ export function StaffEndOfDayCard({
               status={
                 movieRevenueEntered
                   ? `Recorded — ${formatCurrency(movieRevenue)}`
-                  : "Not entered"
+                  : "Pending"
               }
               complete={movieRevenueEntered}
             />
