@@ -76,6 +76,7 @@
     "verify:targeted-go-live-ux": "tsx scripts/verify-targeted-go-live-ux-fixes.ts",
     "verify:final-open-day-guard": "tsx scripts/verify-final-open-day-guard.ts",
     "verify:close-time-flexibility": "tsx scripts/verify-close-time-flexibility.ts",
+    "verify:shop-open-time-flexibility": "tsx scripts/verify-shop-open-time-flexibility.ts",
     "verify:close-request-workflow": "tsx scripts/verify-close-request-workflow.ts",
     "verify:closing-request-approval-flow": "tsx scripts/verify-closing-request-approval-flow.ts",
     "verify:close-request-staff-catalog": "tsx scripts/verify-close-request-staff-catalog.ts",

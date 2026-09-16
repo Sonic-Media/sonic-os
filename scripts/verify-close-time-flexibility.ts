@@ -229,10 +229,10 @@ async function main() {
 
   recordCheck(
     3,
-    "Opening-hours module is only used for open-shop (not close-day server path)",
+    "Day-closings service has no opening-hours time gate (schedule is UI-only / non-blocking)",
     closeServiceSource.includes("getStaffOnShiftAtBranch") &&
       !closeServiceSource.includes("opening-hours"),
-    "open-shop-only schedule"
+    "no server clock gate"
   );
 
   recordCheck(

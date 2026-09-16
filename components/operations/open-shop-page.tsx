@@ -10,7 +10,6 @@ import {
 } from "@/components/operations/staff/primitives";
 import {
   ShopScheduleCountdown,
-  useShopCanOpenNow,
   useShopScheduleNow,
 } from "@/components/operations/shop-schedule-countdown";
 import { useAuth } from "@/context/auth-context";
@@ -98,8 +97,6 @@ export function OpenShopPage({
 
   const canStart = session ? canOpenShop(session.role) : false;
   const isStartShift = mode === "start-shift";
-  const canOpenNow = useShopCanOpenNow(now);
-  const scheduleAllowsOpen = isStartShift ? canOpenNow : true;
   const actionLabel = isStartShift ? "Open Shop" : "Clock In";
 
   const finalizeShiftGate = useCallback(async () => {
@@ -144,7 +141,7 @@ export function OpenShopPage({
   }, [finalizeShiftGate, phase]);
 
   async function handleSubmit() {
-    if (!canStart || isSubmitting || !scheduleAllowsOpen || phase === "success") {
+    if (!canStart || isSubmitting || phase === "success") {
       return;
     }
 
@@ -318,10 +315,7 @@ export function OpenShopPage({
                 : ""
             )}
             disabled={
-              !canStart ||
-              isSubmitting ||
-              !scheduleAllowsOpen ||
-              hasStaleOpenBusinessDay
+              !canStart || isSubmitting || hasStaleOpenBusinessDay
             }
             loading={isSubmitting}
             loadingLabel={isStartShift ? "Opening shop..." : "Clocking in..."}

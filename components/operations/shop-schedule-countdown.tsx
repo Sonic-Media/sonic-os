@@ -2,42 +2,30 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { StaffSectionLabel } from "@/components/operations/staff/primitives";
-import {
-  formatCountdownParts,
-  getCountdownParts,
-  getShopScheduleState,
-} from "@/lib/operations/opening-hours";
+import { getShopScheduleState } from "@/lib/operations/opening-hours";
 import { cn } from "@/lib/utils";
 
 interface ShopScheduleCountdownProps {
-  now: Date;
+  /** Kept for layout compatibility; schedule is not time-gated. */
+  now?: Date;
 }
 
 export function ShopScheduleCountdown({ now }: ShopScheduleCountdownProps) {
-  const schedule = useMemo(() => getShopScheduleState(now), [now]);
-  const countdown = useMemo(
-    () => formatCountdownParts(getCountdownParts(now, schedule.targetTime)),
-    [now, schedule.targetTime]
+  const schedule = useMemo(
+    () => getShopScheduleState(now ?? new Date()),
+    [now]
   );
 
   return (
     <div className="rounded-2xl border border-white/[0.05] bg-black/20 px-4 py-4 text-center">
-      <StaffSectionLabel>{schedule.countdownLabel}</StaffSectionLabel>
-      <p
-        key={countdown}
-        className="mt-3 text-3xl font-semibold tabular-nums tracking-tight text-white transition-opacity duration-200 ease-out animate-in fade-in"
-      >
-        {countdown}
-      </p>
+      <StaffSectionLabel>READY TO OPEN</StaffSectionLabel>
       <p
         className={cn(
-          "mt-3 text-sm transition-colors duration-200",
-          schedule.phase === "open" ? "text-emerald-400" : "text-amber-300"
+          "mt-3 text-sm leading-relaxed transition-colors duration-200 text-emerald-400"
         )}
       >
         {schedule.statusMessage}
       </p>
-      <p className="mt-1 text-xs text-zinc-500">{schedule.detailMessage}</p>
     </div>
   );
 }
@@ -53,6 +41,6 @@ export function useShopScheduleNow(): Date {
   return now;
 }
 
-export function useShopCanOpenNow(now: Date): boolean {
-  return useMemo(() => getShopScheduleState(now).canOpen, [now]);
+export function useShopCanOpenNow(_now: Date): boolean {
+  return true;
 }
