@@ -158,7 +158,7 @@ export function MissionControlShopStatus() {
         <DashboardEmptyState
           className="mt-6"
           title="Shop not open yet"
-          description="Staff will open today's shop during operating hours."
+          description="Staff will open today's shop when they begin the business day."
         />
       )}
     </OwnerCard>
