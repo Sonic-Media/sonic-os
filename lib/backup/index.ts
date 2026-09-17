@@ -5,6 +5,18 @@ export type { BackupConfig } from "@/lib/backup/config";
 export { parseDatabaseUrl, sanitizeDatabaseName } from "@/lib/backup/database-url";
 export type { ParsedDatabaseUrl } from "@/lib/backup/database-url";
 export { exportDatabaseJson } from "@/lib/backup/json-export";
+export type { JsonBackupPayload } from "@/lib/backup/json-export";
+export { applyValidatedJsonBackup } from "@/lib/backup/json-import";
+export {
+  decompressBackupBytes,
+  parseAndValidateJsonBackup,
+  parseBackupJsonText,
+} from "@/lib/backup/json-parse";
+export {
+  BackupValidationError,
+  isRestorableJsonBackup,
+  validateJsonBackupPayload,
+} from "@/lib/backup/json-validate";
 export {
   serializeJsonValue,
   stringifyJsonSafe,

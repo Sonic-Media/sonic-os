@@ -50,9 +50,18 @@ async function main(): Promise<void> {
 
   recordCheck(
     "Recent backups limited to successful records",
-    dataProtection.includes("RECENT_SUCCESS_LIMIT = 3") &&
+    dataProtection.includes("RECENT_SUCCESS_LIMIT = 5") &&
       dataProtection.includes("recentSuccessful"),
-    "top 3 completed"
+    "top completed"
+  );
+
+  recordCheck(
+    "Restore and download actions on recent backups",
+    dataProtection.includes("Restore") &&
+      dataProtection.includes("Download") &&
+      dataProtection.includes("RestoreConfirmDialog") &&
+      dataProtection.includes("RestoreFromFileSection"),
+    "restore UX"
   );
 
   recordCheck(

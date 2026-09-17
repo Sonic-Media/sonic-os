@@ -2,10 +2,17 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { BackupHistoryDialog } from "@/components/settings/backup-history-dialog";
+import { RestoreConfirmDialog } from "@/components/settings/restore-confirm-dialog";
+import { RestoreFromFileSection } from "@/components/settings/restore-from-file-section";
 import { Button } from "@/components/shared/ui/button";
 import { Card } from "@/components/shared/ui/card";
+import { useAppDataRefresh } from "@/hooks/use-app-data-refresh";
 import {
+  getBackupDownloadUrl,
+  isBackupRestorableClient,
   listBackupsApi,
+  restoreBackupApi,
+  restoreBackupFromFileApi,
   triggerBackupApi,
   type BackupRecordSummary,
 } from "@/lib/api/backup";
@@ -14,7 +21,7 @@ import { isProductionModeClient } from "@/lib/env/production-mode-client";
 import { PRODUCTION_CONFIRM_DELETE } from "@/lib/data-protection/constants";
 import { cn } from "@/lib/utils";
 
-const RECENT_SUCCESS_LIMIT = 3;
+const RECENT_SUCCESS_LIMIT = 5;
 
 function formatBytes(bytes: number | null): string {
   if (bytes === null || bytes <= 0) {
@@ -85,7 +92,13 @@ function storageLabel(backup: BackupRecordSummary): string {
 }
 
 function triggerLabel(backup: BackupRecordSummary): string {
+  if (backup.trigger === "pre-restore") return "Pre-Restore Safety Backup";
+  if (backup.trigger === "restore") return "Restore";
   return backup.trigger === "manual" ? "Manual" : "Scheduled";
+}
+
+function canDownloadBackup(backup: BackupRecordSummary): boolean {
+  return backup.status === "completed" && backup.trigger !== "restore";
 }
 
 type ProtectionStatus = "protected" | "attention";
@@ -96,7 +109,13 @@ function deriveBackupPresentation(backups: BackupRecordSummary[]) {
   );
   const completed = sorted.filter((backup) => backup.status === "completed");
   const failed = sorted.filter((backup) => backup.status === "failed");
-  const lastSuccessful = completed[0] ?? null;
+  const lastSuccessful =
+    completed.find(
+      (backup) =>
+        backup.trigger === "manual" ||
+        backup.trigger === "scheduled" ||
+        backup.trigger === "pre-restore"
+    ) ?? completed[0] ?? null;
   const mostRecent = sorted[0] ?? null;
   const recentSuccessful = completed.slice(0, RECENT_SUCCESS_LIMIT);
 
@@ -105,14 +124,16 @@ function deriveBackupPresentation(backups: BackupRecordSummary[]) {
 
   if (lastSuccessful) {
     const successIsToday =
-      lastSuccessful.createdAt.slice(0, 10) === new Date().toISOString().slice(0, 10);
+      lastSuccessful.createdAt.slice(0, 10) ===
+      new Date().toISOString().slice(0, 10);
     const latestAttemptFailed =
       mostRecent?.status === "failed" &&
       mostRecent.createdAt > lastSuccessful.createdAt;
 
     if (successIsToday && !latestAttemptFailed) {
       protectionStatus = "protected";
-      protectionMessage = "Your latest restorable backup completed successfully today.";
+      protectionMessage =
+        "Your latest restorable backup completed successfully today.";
     } else if (latestAttemptFailed) {
       protectionStatus = "attention";
       protectionMessage =
@@ -133,16 +154,61 @@ function deriveBackupPresentation(backups: BackupRecordSummary[]) {
   };
 }
 
+type PendingRestore =
+  | { kind: "record"; backup: BackupRecordSummary }
+  | { kind: "file"; file: File; label: string };
+
+function BackupRowMenu({ backup }: { backup: BackupRecordSummary }) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        aria-label="More backup actions"
+        className="rounded-lg px-2 py-1.5 text-zinc-400 hover:bg-white/[0.06] hover:text-white"
+        onClick={() => setOpen((current) => !current)}
+      >
+        ···
+      </button>
+      {open ? (
+        <>
+          <button
+            type="button"
+            aria-label="Close menu"
+            className="fixed inset-0 z-10 cursor-default"
+            onClick={() => setOpen(false)}
+          />
+          <div className="absolute right-0 z-20 mt-1 min-w-[180px] rounded-xl border border-white/[0.08] bg-zinc-950/95 p-1 shadow-xl">
+            <p className="px-3 py-2 text-xs text-zinc-500">
+              {formatBackupLabel(backup)} · {storageLabel(backup)}
+            </p>
+            <p className="px-3 pb-2 text-[11px] text-zinc-600">
+              ID {backup.id.slice(0, 8)}…
+            </p>
+          </div>
+        </>
+      ) : null}
+    </div>
+  );
+}
+
 export function DataProtectionSection() {
+  const { refreshAll } = useAppDataRefresh();
   const [backups, setBackups] = useState<BackupRecordSummary[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isBackingUp, setIsBackingUp] = useState(false);
+  const [isRestoring, setIsRestoring] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [pendingRestore, setPendingRestore] = useState<PendingRestore | null>(
+    null
+  );
   const productionMode = isProductionModeClient();
 
   const presentation = useMemo(() => deriveBackupPresentation(backups), [backups]);
+  const busy = isBackingUp || isRestoring;
 
   const loadBackups = useCallback(async () => {
     setIsLoading(true);
@@ -197,6 +263,73 @@ export function DataProtectionSection() {
     }
   }
 
+  async function handleDownload(backup: BackupRecordSummary) {
+    setError(null);
+    try {
+      const response = await fetch(getBackupDownloadUrl(backup.id), {
+        credentials: "include",
+      });
+      if (!response.ok) {
+        let message = "Could not download backup.";
+        try {
+          const payload = (await response.json()) as {
+            error?: { message?: string };
+          };
+          message = payload.error?.message?.trim() || message;
+        } catch {
+          // keep fallback
+        }
+        throw new Error(message);
+      }
+
+      const blob = await response.blob();
+      const disposition = response.headers.get("Content-Disposition") ?? "";
+      const match = /filename="([^"]+)"/.exec(disposition);
+      const fileName = match?.[1] ?? `sonic-os-backup-${backup.id}.bin`;
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = fileName;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(url);
+    } catch (caught) {
+      setError(resolveErrorMessage(caught, "Could not download backup."));
+    }
+  }
+
+  async function confirmRestore() {
+    if (!pendingRestore) return;
+
+    setIsRestoring(true);
+    setError(null);
+    setSuccess(null);
+
+    try {
+      const result =
+        pendingRestore.kind === "record"
+          ? await restoreBackupApi(pendingRestore.backup.id)
+          : await restoreBackupFromFileApi(pendingRestore.file);
+
+      setPendingRestore(null);
+      setSuccess(
+        `Restore completed. Safety backup saved, and ${result.restoredRows.toLocaleString()} records were restored.`
+      );
+      await loadBackups();
+      await refreshAll();
+    } catch (caught) {
+      setError(
+        resolveErrorMessage(
+          caught,
+          "Restore failed. Your current data was left unchanged."
+        )
+      );
+    } finally {
+      setIsRestoring(false);
+    }
+  }
+
   return (
     <>
       <Card>
@@ -241,7 +374,7 @@ export function DataProtectionSection() {
                 onClick={() => void handleBackupNow()}
                 loading={isBackingUp}
                 loadingLabel="Backing Up..."
-                disabled={isBackingUp}
+                disabled={busy}
               >
                 Backup Now
               </Button>
@@ -249,7 +382,7 @@ export function DataProtectionSection() {
                 type="button"
                 variant="secondary"
                 onClick={() => void loadBackups()}
-                disabled={isLoading || isBackingUp}
+                disabled={isLoading || busy}
               >
                 Refresh
               </Button>
@@ -328,22 +461,64 @@ export function DataProtectionSection() {
                     <th className="px-4 py-2.5 font-medium">Type</th>
                     <th className="px-4 py-2.5 font-medium">Date</th>
                     <th className="px-4 py-2.5 font-medium">Status</th>
+                    <th className="px-4 py-2.5 font-medium text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/[0.06]">
-                  {presentation.recentSuccessful.map((backup) => (
-                    <tr key={backup.id}>
-                      <td className="px-4 py-3 text-emerald-400">✓</td>
-                      <td className="px-4 py-3 text-zinc-300">{triggerLabel(backup)}</td>
-                      <td className="px-4 py-3 text-zinc-400">
-                        {formatBackupTimestamp(backup.createdAt)}
-                        <span className="ml-2 text-xs text-zinc-600">
-                          {formatBytes(backup.fileSizeBytes)}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 font-medium text-emerald-400">Completed</td>
-                    </tr>
-                  ))}
+                  {presentation.recentSuccessful.map((backup) => {
+                    const restorable = isBackupRestorableClient(backup);
+                    const downloadable = canDownloadBackup(backup);
+
+                    return (
+                      <tr key={backup.id}>
+                        <td className="px-4 py-3 text-emerald-400">✓</td>
+                        <td className="px-4 py-3 text-zinc-300">
+                          {triggerLabel(backup)}
+                        </td>
+                        <td className="px-4 py-3 text-zinc-400">
+                          {formatBackupTimestamp(backup.createdAt)}
+                          <span className="ml-2 text-xs text-zinc-600">
+                            {formatBytes(backup.fileSizeBytes)}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 font-medium text-emerald-400">
+                          Completed
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center justify-end gap-1.5">
+                            <Button
+                              type="button"
+                              variant="secondary"
+                              className="h-9 px-3 text-xs"
+                              disabled={!restorable || busy}
+                              title={
+                                restorable
+                                  ? "Restore this backup"
+                                  : backup.format !== "json"
+                                    ? "Only JSON backups can be restored here"
+                                    : "This entry cannot be restored"
+                              }
+                              onClick={() =>
+                                setPendingRestore({ kind: "record", backup })
+                              }
+                            >
+                              Restore
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              className="h-9 px-3 text-xs"
+                              disabled={!downloadable || busy}
+                              onClick={() => void handleDownload(backup)}
+                            >
+                              Download
+                            </Button>
+                            <BackupRowMenu backup={backup} />
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -376,12 +551,42 @@ export function DataProtectionSection() {
             </p>
           ) : null}
         </div>
+
+        <div className="mt-8 border-t border-white/[0.06] pt-6">
+          <RestoreFromFileSection
+            disabled={busy}
+            isRestoring={isRestoring && pendingRestore?.kind === "file"}
+            onFileSelected={(file) => {
+              setError(null);
+              setPendingRestore({
+                kind: "file",
+                file,
+                label: file.name,
+              });
+            }}
+          />
+        </div>
       </Card>
 
       {historyOpen ? (
         <BackupHistoryDialog
           backups={presentation.sorted}
           onClose={() => setHistoryOpen(false)}
+        />
+      ) : null}
+
+      {pendingRestore ? (
+        <RestoreConfirmDialog
+          backupLabel={
+            pendingRestore.kind === "record"
+              ? formatBackupTimestamp(pendingRestore.backup.createdAt)
+              : pendingRestore.label
+          }
+          isRestoring={isRestoring}
+          onCancel={() => {
+            if (!isRestoring) setPendingRestore(null);
+          }}
+          onConfirm={() => void confirmRestore()}
         />
       ) : null}
     </>
