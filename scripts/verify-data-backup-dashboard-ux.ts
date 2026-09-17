@@ -42,9 +42,11 @@ async function main(): Promise<void> {
 
   recordCheck(
     "Backup health card present",
-    dataProtection.includes("Backup Health") &&
+    dataProtection.includes("Data Protection") &&
       dataProtection.includes("Protected") &&
-      dataProtection.includes("Attention Required"),
+      dataProtection.includes("Attention Required") &&
+      dataProtection.includes("Backup Now") &&
+      dataProtection.includes("Restore from File"),
     "data-protection-section"
   );
 
