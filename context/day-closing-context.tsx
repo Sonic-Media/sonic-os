@@ -129,6 +129,7 @@ function createValidationResult(
 export function DayClosingProvider({ children }: { children: React.ReactNode }) {
   const [closings, setClosings] = useState<DayClosingRecord[]>([]);
   const [isLoaded, setIsLoaded] = useState(false);
+  const [hydratedUserId, setHydratedUserId] = useState<string | null>(null);
   const closingsRef = useRef(closings);
   const wasAuthenticated = useRef(false);
   const lastSessionUserId = useRef<string | null>(null);
@@ -156,6 +157,7 @@ export function DayClosingProvider({ children }: { children: React.ReactNode }) 
       closingsRef.current = [];
       setDayClosingsCache([]);
       setClosings([]);
+      setHydratedUserId(null);
       setIsLoaded(true);
       wasAuthenticated.current = false;
       lastSessionUserId.current = null;
@@ -171,11 +173,13 @@ export function DayClosingProvider({ children }: { children: React.ReactNode }) 
     lastSessionUserId.current = sessionUserId;
 
     if (!shouldRefresh) {
+      setHydratedUserId(sessionUserId);
       setIsLoaded(true);
       return;
     }
 
     setIsLoaded(false);
+    setHydratedUserId(null);
 
     queueMicrotask(() => {
       void (async () => {
@@ -184,11 +188,19 @@ export function DayClosingProvider({ children }: { children: React.ReactNode }) 
         } catch (error) {
           console.error(getDataSourceErrorMessage(error));
         } finally {
+          setHydratedUserId(sessionUserId);
           setIsLoaded(true);
         }
       })();
     });
   }, [authLoaded, isAuthenticated, refreshClosingsFromApi, session?.userId]);
+
+  // Derived: after login, never treat empty pre-fetch closings as authoritative.
+  const closingsResolved =
+    authLoaded &&
+    (!isAuthenticated
+      ? isLoaded
+      : isLoaded && hydratedUserId === (session?.userId ?? null));
 
   const isBranchDayClosedFn = useCallback(
     (branch: Branch, date = getTodayISO()) =>
@@ -327,6 +339,7 @@ export function DayClosingProvider({ children }: { children: React.ReactNode }) 
             branch: saved.attendance.branch,
             action: saved.attendance.action,
             module: saved.attendance.module as never,
+            recordId: saved.attendance.recordId,
           },
         ]);
 
@@ -653,7 +666,7 @@ export function DayClosingProvider({ children }: { children: React.ReactNode }) 
   const value = useMemo(
     () => ({
       closings,
-      isLoaded,
+      isLoaded: closingsResolved,
       refreshClosings: refreshClosingsFromApi,
       isBranchDayClosed: isBranchDayClosedFn,
       isBranchDayOpened: isBranchDayOpenedFn,
@@ -673,7 +686,7 @@ export function DayClosingProvider({ children }: { children: React.ReactNode }) 
     }),
     [
       closings,
-      isLoaded,
+      closingsResolved,
       refreshClosingsFromApi,
       isBranchDayClosedFn,
       isBranchDayOpenedFn,

@@ -1,10 +1,11 @@
 import {
   getClosedDayRecord,
   getOpenDayRecord,
+  getCloseRequestedRecord,
   isBranchDayClosed,
   isBranchDayOpened,
 } from "@/lib/day-closing/storage";
-import { getActiveStaffAttendance } from "@/lib/staff/attendance";
+import { getCurrentShopSessionStaff } from "@/lib/staff/attendance";
 import type { Branch } from "@/types";
 import type { DayClosingRecord } from "@/types/day-closing";
 import type { Staff } from "@/types";
@@ -31,6 +32,7 @@ export function computeBranchOperationsSnapshot(
   auditRecords: StaffAuditRecord[]
 ): BranchOperationsSnapshot {
   const openRecord = getOpenDayRecord(branch, dateISO, closings);
+  const closeRequested = getCloseRequestedRecord(branch, dateISO, closings);
   const closedRecord = getClosedDayRecord(branch, dateISO, closings);
   const isClosed = isBranchDayClosed(branch, dateISO, closings);
   const isOpen = isBranchDayOpened(branch, dateISO, closings);
@@ -40,14 +42,27 @@ export function computeBranchOperationsSnapshot(
       ? "open"
       : "waiting";
 
+  const shopSessionOpen = Boolean(openRecord || closeRequested);
+  const sessionRecord = openRecord ?? closeRequested ?? null;
+
   return {
     branch,
     status,
-    openedByName: openRecord?.openedByName ?? null,
-    openedAt: openRecord?.openedAt ?? openRecord?.reopenedAt ?? null,
+    openedByName: sessionRecord?.openedByName ?? null,
+    openedAt:
+      sessionRecord?.openedAt ??
+      sessionRecord?.reopenedAt ??
+      null,
     closedByName: closedRecord?.closedByName ?? null,
     closedAt: closedRecord?.closedAt ?? null,
-    activeStaff: getActiveStaffAttendance(staff, branch, dateISO, auditRecords),
+    activeStaff: getCurrentShopSessionStaff(
+      staff,
+      branch,
+      dateISO,
+      auditRecords,
+      shopSessionOpen,
+      sessionRecord
+    ),
   };
 }
 

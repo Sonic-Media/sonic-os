@@ -92,6 +92,25 @@ async function deleteTestDayClosing(branch: string, date: string) {
   });
 }
 
+async function closeStaleActiveDays(branch: string) {
+  const branchRow = await prisma.branch.findFirst({
+    where: { code: branch },
+    select: { id: true },
+  });
+  if (!branchRow) return;
+  await prisma.dayClosing.updateMany({
+    where: {
+      branchId: branchRow.id,
+      status: { in: ["open", "close_requested"] },
+    },
+    data: {
+      status: "closed",
+      closedAt: new Date(),
+      closedByName: `${TEST_PREFIX} cleanup`,
+    },
+  });
+}
+
 async function main() {
   const owner = new AttendanceVerifier();
   let cashier: CertificationCashier | null = null;
@@ -99,6 +118,7 @@ async function main() {
 
   try {
     await loginWithCredentials(owner, VERIFY_OWNER_CREDENTIALS);
+    await closeStaleActiveDays(BRANCH);
     await deleteTestDayClosing(BRANCH, TODAY);
 
     cashier = await createCertificationCashier(owner, TEST_PREFIX, BRANCH);
@@ -138,6 +158,19 @@ async function main() {
     assert.equal(openResult.dayClosing.branch, BRANCH);
     assert.equal(openResult.attendance.action, "Start Shift");
     assert.equal(openResult.attendance.userId, cashier.staffId);
+    assert.equal(
+      (openResult.attendance as { recordId?: string }).recordId,
+      TODAY,
+      "Start Shift should stamp business-date recordId"
+    );
+
+    const onShiftAfterOpen = await cashierClient.json<
+      Array<{ staffId: string }>
+    >(`/api/staff/attendance/on-shift?branch=${BRANCH}&date=${TODAY}`);
+    assert.ok(
+      onShiftAfterOpen.some((row) => row.staffId === cashier.staffId),
+      "opener should be on shift after Open Shop"
+    );
 
     await cashierClient.expectFailure(
       "duplicate start-shift clock-in blocked",
@@ -167,7 +200,22 @@ async function main() {
       400
     );
 
+    // Close the open-with-shift day and clear the opener's open session so the
+    // subsequent plain-open + clock-in scenario starts clean.
+    await closeStaleActiveDays(BRANCH);
     await deleteTestDayClosing(BRANCH, TODAY);
+    await prisma.auditLogEntry.create({
+      data: {
+        userId: cashier.staffId,
+        userName: cashier.username,
+        role: "cashier",
+        branchCode: BRANCH,
+        action: "End Shift",
+        module: "operations",
+        recordId: TODAY,
+        detail: "Test cleanup between attendance scenarios",
+      },
+    });
 
     manager = await createCertificationCashier(
       owner,

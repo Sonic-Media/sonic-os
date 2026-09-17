@@ -12,6 +12,7 @@ import {
 } from "@/lib/staff-payments/calculations";
 import { getTodayISO } from "@/lib/dates";
 import { useBranch } from "@/context/branch-context";
+import { useDayClosing } from "@/context/day-closing-context";
 import { useExpensesModule } from "@/context/expenses-module-context";
 import { usePurchasing } from "@/context/purchasing-context";
 import { useSales } from "@/context/sales-context";
@@ -47,7 +48,15 @@ export function useStaffManagementPage() {
     getBranchName,
     isLoaded: branchLoaded,
   } = useBranch();
-  const { getAttendanceForStaff, isStaffOnShift } = useStaffAttendance(today);
+  const { getActiveOpenRecord, isLoaded: closingLoaded } = useDayClosing();
+
+  const activeOpenRecord = getActiveOpenRecord(activeBranch);
+  const attendanceDate = activeOpenRecord?.date ?? today;
+  const {
+    getAttendanceForStaff,
+    isStaffOnShift,
+    isLoaded: attendanceLoaded,
+  } = useStaffAttendance(attendanceDate);
 
   const [search, setSearch] = useState("");
   const [shiftFilter, setShiftFilter] = useState<StaffShiftFilter>("all");
@@ -87,8 +96,8 @@ export function useStaffManagementPage() {
         const memberExpenses = filterByBranchField(expenses, member.branch);
         const memberSales = filterByBranchField(sales, member.branch);
         const memberPayments = filterByBranchField(payments, member.branch);
-        const attendance = getAttendanceForStaff(member.id);
-        const onShift = isStaffOnShift(member.id);
+        const attendance = getAttendanceForStaff(member.id, member.branch);
+        const onShift = isStaffOnShift(member.id, member.branch);
 
         return {
           member,
@@ -202,7 +211,9 @@ export function useStaffManagementPage() {
     salesLoaded &&
     purchasesLoaded &&
     paymentsLoaded &&
-    branchLoaded;
+    branchLoaded &&
+    closingLoaded &&
+    attendanceLoaded;
 
   return {
     isLoaded,

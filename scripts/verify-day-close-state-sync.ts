@@ -116,12 +116,13 @@ function verifyStaticChecks(): void {
       !welcomeSource.includes("onClockOutComplete")
   );
 
-  recordCheck(
-    "Closing flow no longer depends on staff clock-out state",
-    !closeServiceSource.includes("getStaffOnShiftAtBranch") &&
-      !closeServiceSource.includes("staff_on_shift") &&
+    recordCheck(
+    "Closing flow no longer blocks on staff clock-out state",
+    !closeServiceSource.includes("staff_on_shift") &&
+      !closeServiceSource.includes("still on shift") &&
       !workspaceSource.includes("useBranchStaffOnShift") &&
-      !workspaceSource.includes("shouldClearStaffOnShiftCloseError")
+      !workspaceSource.includes("shouldClearStaffOnShiftCloseError") &&
+      closeServiceSource.includes("endOpenShiftsAtBranch")
   );
 
   recordCheck(
@@ -256,6 +257,15 @@ async function verifyLiveFlow(): Promise<void> {
       "Owner approve closes day after close request",
       approved.status === "closed",
       approved.status
+    );
+
+    const onShiftAfterClose = await staffClient.json<
+      Array<{ staffName: string }>
+    >(`/api/staff/attendance/on-shift?branch=${mainBranch}&date=${testDate}`);
+    recordCheck(
+      "Approve/close ends open shifts automatically",
+      onShiftAfterClose.length === 0,
+      `count=${onShiftAfterClose.length}`
     );
   } finally {
     if (cashier) {

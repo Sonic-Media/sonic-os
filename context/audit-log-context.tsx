@@ -20,7 +20,6 @@ import {
   loadFromApi,
 } from "@/lib/data-source/context-api";
 import {
-  clearStaffAuditClientCaches,
   setStaffListCache,
   syncStaffAuditCacheFromAuditLog,
 } from "@/lib/staff/audit";
@@ -63,7 +62,9 @@ export function AuditLogProvider({ children }: { children: React.ReactNode }) {
     if (!authLoaded) return;
     if (!isAuthenticated || !canViewAuditLog) {
       setRecords([]);
-      clearStaffAuditClientCaches();
+      // Do NOT clear staff attendance caches here — staff without audit-log
+      // permission still need attendance data from /api/staff/me/attendance.
+      // Logout/login clears via clearClientDerivedCaches().
       setLoadError(null);
       setIsLoaded(true);
       return;

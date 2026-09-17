@@ -17,6 +17,7 @@ import type { StaffAuditRecord } from "@/types/staff-audit";
 
 const ATTENDANCE_ACTIONS = new Set<string>([
   AUDIT_ACTIONS.START_SHIFT,
+  AUDIT_ACTIONS.END_SHIFT,
   AUDIT_ACTIONS.CLOCK_IN,
   AUDIT_ACTIONS.CLOCK_OUT,
   AUDIT_ACTIONS.OPEN_DAY,
@@ -24,6 +25,17 @@ const ATTENDANCE_ACTIONS = new Set<string>([
 
 function isSameDay(timestamp: string, dateISO: string): boolean {
   return timestamp.slice(0, 10) === dateISO;
+}
+
+/** Match by business-day recordId when present; fall back to timestamp day. */
+function matchesBusinessDate(
+  record: Pick<StaffAuditRecord, "timestamp" | "recordId">,
+  dateISO: string
+): boolean {
+  if (record.recordId && /^\d{4}-\d{2}-\d{2}$/.test(record.recordId)) {
+    return record.recordId === dateISO;
+  }
+  return isSameDay(record.timestamp, dateISO);
 }
 
 function matchesBranch(recordBranch: Branch, branch: Branch): boolean {
@@ -39,6 +51,12 @@ function isClockInAction(action: string): boolean {
     action === AUDIT_ACTIONS.START_SHIFT ||
     action === AUDIT_ACTIONS.CLOCK_IN ||
     action === AUDIT_ACTIONS.OPEN_DAY
+  );
+}
+
+function isClockOutAction(action: string): boolean {
+  return (
+    action === AUDIT_ACTIONS.END_SHIFT || action === AUDIT_ACTIONS.CLOCK_OUT
   );
 }
 
@@ -75,7 +93,7 @@ function buildSessionsFromAudit(
       (record) =>
         record.staffId === staffId &&
         matchesBranch(record.branch, branch) &&
-        isSameDay(record.timestamp, dateISO) &&
+        matchesBusinessDate(record, dateISO) &&
         isAttendanceAction(record.action)
     )
     .sort((left, right) => left.timestamp.localeCompare(right.timestamp));
@@ -104,7 +122,7 @@ function buildSessionsFromAudit(
       continue;
     }
 
-    if (event.action === AUDIT_ACTIONS.CLOCK_OUT && openSession) {
+    if (isClockOutAction(event.action) && openSession) {
       openSession.clockOutAt = event.timestamp;
       sessions.push(openSession);
       openSession = null;
@@ -201,6 +219,112 @@ export function getActiveStaffAttendance(
     .sort((left, right) =>
       (left.shiftStartedAt ?? "").localeCompare(right.shiftStartedAt ?? "")
     );
+}
+
+/**
+ * Current on-shift staff for a shop-open session.
+ * Shop session is SoT: when closed, returns [].
+ * When open, attendance sessions apply AND the DayClosing opener is always included.
+ */
+export function getCurrentShopSessionStaff(
+  staff: Staff[],
+  branch: Branch,
+  dateISO: string,
+  auditRecords: StaffAuditRecord[],
+  shopSessionOpen: boolean,
+  openRecord?: {
+    openedBy?: string | null;
+    openedByName?: string | null;
+    openedAt?: string | null;
+    reopenedAt?: string | null;
+    date?: string;
+  } | null
+): StaffAttendanceStatus[] {
+  if (!shopSessionOpen) {
+    return [];
+  }
+
+  const fromAudit = getActiveStaffAttendance(
+    staff,
+    branch,
+    dateISO,
+    auditRecords
+  );
+  const byId = new Map(fromAudit.map((status) => [status.staffId, status]));
+
+  const opener = resolveShopSessionOpener(
+    staff.filter((member) => member.active),
+    openRecord
+  );
+  if (opener && !byId.has(opener.id)) {
+    const status = getStaffAttendanceStatus(
+      opener,
+      dateISO,
+      auditRecords,
+      branch
+    );
+    const startedAt =
+      status.shiftStartedAt ??
+      openRecord?.openedAt ??
+      openRecord?.reopenedAt ??
+      `${dateISO}T00:00:00.000Z`;
+    byId.set(opener.id, {
+      ...status,
+      presence: "on-shift",
+      openedBranchToday: true,
+      lastClockInAt: status.lastClockInAt ?? startedAt,
+      shiftStartedAt: startedAt,
+    });
+  }
+
+  return [...byId.values()].sort((left, right) =>
+    (left.shiftStartedAt ?? "").localeCompare(right.shiftStartedAt ?? "")
+  );
+}
+
+/** Resolve the staff member who owns the open shop session. */
+export function resolveShopSessionOpener(
+  staff: Staff[],
+  openRecord?: {
+    openedBy?: string | null;
+    openedByName?: string | null;
+  } | null
+): Staff | undefined {
+  if (!openRecord) return undefined;
+
+  if (openRecord.openedBy) {
+    const openedBy = openRecord.openedBy;
+    const byLink = staff.find(
+      (member) => member.userId === openedBy || member.id === openedBy
+    );
+    if (byLink) return byLink;
+  }
+
+  const openerName = openRecord.openedByName?.trim().toLowerCase();
+  if (!openerName) return undefined;
+
+  return staff.find(
+    (member) => member.name.trim().toLowerCase() === openerName
+  );
+}
+
+/** True when this staff member is the opener of the current shop session. */
+export function isShopSessionOpener(
+  member: Pick<Staff, "id" | "name" | "userId">,
+  openRecord?: {
+    openedBy?: string | null;
+    openedByName?: string | null;
+  } | null
+): boolean {
+  if (!openRecord) return false;
+  if (openRecord.openedBy) {
+    if (member.userId === openRecord.openedBy || member.id === openRecord.openedBy) {
+      return true;
+    }
+  }
+  const openerName = openRecord.openedByName?.trim().toLowerCase();
+  if (!openerName) return false;
+  return member.name.trim().toLowerCase() === openerName;
 }
 
 export function recordStaffStartShiftAttendance(branch: Branch): StaffAuditRecord | null {

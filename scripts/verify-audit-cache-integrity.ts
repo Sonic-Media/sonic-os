@@ -209,8 +209,9 @@ function scanStaticInventory(): void {
     "Cache invalidation wired on session change",
     derivedCaches.includes("clearClientDerivedCaches") &&
       authContext.includes("clearClientDerivedCaches") &&
-      auditContext.includes("clearStaffAuditClientCaches"),
-    ""
+      derivedCaches.includes("clearStaffAuditClientCaches") &&
+      !auditContext.includes("clearStaffAuditClientCaches()"),
+    "attendance cache is not cleared when staff lack audit-log permission"
   );
 
   recordCheck(

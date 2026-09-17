@@ -20,11 +20,10 @@ import { useActiveBranch } from "@/context/active-branch-context";
 import { useAuth } from "@/context/auth-context";
 import { useDayClosing } from "@/context/day-closing-context";
 import { useEntriesContext } from "@/context/entries-context";
-import { useStaffAttendance } from "@/hooks/use-staff-attendance";
 
 function TodayOperationsContent() {
   const { activeBranch, isLoaded: branchLoaded } = useActiveBranch();
-  const { session } = useAuth();
+  const { session, isLoaded: authLoaded } = useAuth();
   const today = useTodayISO();
   const { entries, isLoaded } = useEntriesContext();
   const {
@@ -34,7 +33,6 @@ function TodayOperationsContent() {
     getActiveOpenRecord,
     isLoaded: closingLoaded,
   } = useDayClosing();
-  const { currentAttendance } = useStaffAttendance(today);
   const [shiftGateCleared, setShiftGateCleared] = useState(false);
 
   const isOwner = session?.role === "owner";
@@ -70,7 +68,8 @@ function TodayOperationsContent() {
     };
   }, [entries, activeBranch, businessDate, isLoaded]);
 
-  if (!isLoaded || !closingLoaded || !branchLoaded) {
+  // Wait for auth + authoritative shop-session state before Open/Closed UI.
+  if (!authLoaded || !isLoaded || !closingLoaded || !branchLoaded) {
     return <PageSkeleton />;
   }
 
@@ -80,10 +79,7 @@ function TodayOperationsContent() {
     !hasActiveBusinessDay && isBranchDayClosed(activeBranch, today);
   const shopNeedsOpening =
     !hasActiveBusinessDay && needsShopOpening(activeBranch, today);
-  const staffOnShift = currentAttendance?.presence === "on-shift";
   const showStartShiftGate = shopNeedsOpening && !shiftGateCleared;
-  const showClockInGate =
-    !shopNeedsOpening && !hasActiveBusinessDay && !staffOnShift && !shiftGateCleared;
 
   if (isOwner) {
     return (
@@ -137,14 +133,6 @@ function TodayOperationsContent() {
     return (
       <PageContainer className="lg:max-w-5xl">
         <OpenShopPage mode="start-shift" onComplete={handleShiftGateComplete} />
-      </PageContainer>
-    );
-  }
-
-  if (showClockInGate) {
-    return (
-      <PageContainer className="lg:max-w-5xl">
-        <OpenShopPage mode="clock-in" onComplete={handleShiftGateComplete} />
       </PageContainer>
     );
   }

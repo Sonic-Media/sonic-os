@@ -117,6 +117,7 @@ export async function listAuditLogEntriesForUser(
 
 const ATTENDANCE_ACTIONS = [
   "Start Shift",
+  "End Shift",
   "Clock In",
   "Clock Out",
   "Open Shop",
@@ -133,10 +134,15 @@ export async function listStaffAttendanceEntries(
     where: {
       userId: staffId,
       action: { in: [...ATTENDANCE_ACTIONS] },
-      timestamp: {
-        gte: dayStart,
-        lte: dayEnd,
-      },
+      OR: [
+        { recordId: date },
+        {
+          timestamp: {
+            gte: dayStart,
+            lte: dayEnd,
+          },
+        },
+      ],
     },
     orderBy: { timestamp: "asc" },
   });

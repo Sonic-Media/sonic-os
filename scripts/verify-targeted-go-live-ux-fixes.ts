@@ -55,10 +55,12 @@ async function main() {
   );
 
   recordCheck(
-    "Open shop page clarifies separate open vs clock-in steps",
-    readRepo("components/operations/open-shop-page.tsx").includes(
+    "Open Shop starts shift — no separate Clock In gate",
+    !readRepo("components/operations/open-shop-page.tsx").includes(
       "Opening the shop and clocking in are separate steps"
-    )
+    ) &&
+      !readRepo("app/operations/today/page.tsx").includes("showClockInGate") &&
+      !readRepo("app/operations/today/page.tsx").includes('mode="clock-in"')
   );
 
   const reportsPage = readRepo("app/reports/page.tsx");

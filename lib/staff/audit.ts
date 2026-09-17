@@ -34,6 +34,7 @@ function mapAuditLogToStaffAudit(record: AuditLogRecord): StaffAuditRecord {
     branch: record.branch,
     action: record.action,
     module: record.module,
+    recordId: record.recordId,
   };
 }
 

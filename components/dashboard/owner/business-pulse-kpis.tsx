@@ -65,6 +65,21 @@ export function BusinessPulseKpis() {
   const branchState = useBranchState();
   const totalRevenue = branchState.movieRevenue + branchState.accessoryRevenue;
 
+  if (!branchState.isLoaded) {
+    return (
+      <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
+        {Array.from({ length: 5 }).map((_, index) => (
+          <OwnerCard key={index} className="p-5">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-zinc-500">
+              Loading
+            </p>
+            <p className="mt-3 text-2xl font-semibold text-zinc-600">…</p>
+          </OwnerCard>
+        ))}
+      </section>
+    );
+  }
+
   const statusLabel =
     branchState.status === "open"
       ? "Open"

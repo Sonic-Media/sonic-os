@@ -24,7 +24,10 @@ import {
   assertCanSubmitCloseRequest,
   assertStaffOperationalRole,
 } from "@/lib/server/day-closing-guards";
-import { createStartShiftAudit } from "@/lib/server/services/attendance-service";
+import {
+  createStartShiftAudit,
+  endOpenShiftsAtBranch,
+} from "@/lib/server/services/attendance-service";
 import { getLinkedStaffForUser } from "@/lib/server/services/staff-service";
 import type { AuditLogRecord } from "@/types/audit-log";
 import type { Branch } from "@/types";
@@ -728,6 +731,14 @@ export async function approveAndCloseDay(input: unknown): Promise<DayClosingReco
     closingNotes: parsed.closingNotes,
     createdBy: createdBy || undefined,
   });
+
+  // End open shifts while shop session is still conceptually open for this close.
+  // Never blocks the close itself.
+  try {
+    await endOpenShiftsAtBranch(branch, businessDate);
+  } catch (error) {
+    console.error("Failed to end open shifts before day close:", error);
+  }
 
   const record = await prisma.dayClosing.update({
     where: { id: existing.id },
