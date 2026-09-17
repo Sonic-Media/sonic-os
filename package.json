@@ -43,6 +43,7 @@
     "verify:safe-transactional-reset": "tsx scripts/verify-safe-transactional-reset-state.ts",
     "verify:owner-shop-reset": "tsx scripts/verify-owner-shop-reset.ts",
     "verify:shop-reset-target-guard": "tsx scripts/verify-shop-reset-target-guard.ts",
+    "verify:shop-reset-current-stock": "tsx scripts/verify-shop-reset-current-stock.ts",
     "verify:backup-bigint": "tsx scripts/verify-backup-bigint-serialization.ts",
     "verify:shop-reset-blocker": "tsx scripts/verify-shop-reset-blocker.ts",
     "db:postgres:start": "sh scripts/start-postgres.sh",
