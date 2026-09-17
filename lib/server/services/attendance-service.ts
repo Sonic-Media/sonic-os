@@ -33,7 +33,7 @@ const ATTENDANCE_ACTIONS = [
 ] as const;
 
 const attendanceActionSchema = z.object({
-  action: z.enum(["clock-in", "clock-out"]),
+  action: z.enum(["clock-in"]),
   branch: z.string().trim().min(1),
   date: z.string().trim().min(1).optional(),
 });
@@ -255,19 +255,8 @@ export async function recordAttendanceAction(
     });
   }
 
-  if (!isStaffOnShift(linkedStaff.id, branch, date, auditRecords)) {
-    throw new ApiError("You are not on shift.", {
-      status: 400,
-      code: "not_on_shift",
-    });
-  }
-
-  return createAuditLogEntry({
-    userId: linkedStaff.id,
-    userName: staffName,
-    role: linkedStaff.role,
-    branch,
-    action: AUDIT_ACTIONS.CLOCK_OUT,
-    module: "operations",
+  throw new ApiError("Unsupported attendance action.", {
+    status: 400,
+    code: "invalid_attendance_action",
   });
 }

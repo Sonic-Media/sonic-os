@@ -131,14 +131,6 @@ async function openAndSubmit(
     method: "POST",
     body: JSON.stringify({ action: "open-with-shift", branch, date }),
   });
-  try {
-    await client.json("/api/staff/attendance", {
-      method: "POST",
-      body: JSON.stringify({ action: "clock-out", branch, date }),
-    });
-  } catch {
-    // Historical business dates may not align with attendance audit timestamps.
-  }
   await submitCloseRequestApi(client, branch, date);
 }
 

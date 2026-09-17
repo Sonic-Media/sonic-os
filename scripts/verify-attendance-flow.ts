@@ -154,55 +154,7 @@ async function main() {
     );
 
     await cashierClient.expectFailure(
-      "close day blocked while staff on shift",
-      () =>
-        cashierClient.json("/api/day-closings", {
-          method: "POST",
-          body: JSON.stringify({
-            branch: BRANCH,
-            date: TODAY,
-            metrics: {
-              todaySales: 0,
-              todayPurchases: 0,
-              todayOperatingExpenses: 0,
-              todayInventoryInvestment: 0,
-              todayStaffPaymentsRecorded: 0,
-              cashBeforeClosing: 0,
-            },
-            staffPayouts: [],
-            expectedCash: 0,
-            actualCashCounted: 0,
-            cashDifference: 0,
-            cashStatus: "balanced",
-            summary: {
-              sales: 0,
-              expenses: 0,
-              inventoryInvestment: 0,
-              staffPayments: 0,
-              remainingCash: 0,
-              inventoryFund: 0,
-              operatingFund: 0,
-            },
-          }),
-        }),
-      409
-    );
-
-    const clockOut = await cashierClient.json<{ action: string }>(
-      "/api/staff/attendance",
-      {
-        method: "POST",
-        body: JSON.stringify({
-          action: "clock-out",
-          branch: BRANCH,
-          date: TODAY,
-        }),
-      }
-    );
-    assert.equal(clockOut.action, "Clock Out");
-
-    await cashierClient.expectFailure(
-      "clock-out when not on shift blocked",
+      "clock-out action is no longer supported",
       () =>
         cashierClient.json("/api/staff/attendance", {
           method: "POST",
@@ -256,18 +208,19 @@ async function main() {
     );
     assert.equal(clockIn.action, "Clock In");
 
-    const clockOutAfterClockIn = await cashierClient.json<{ action: string }>(
-      "/api/staff/attendance",
-      {
-        method: "POST",
-        body: JSON.stringify({
-          action: "clock-out",
-          branch: BRANCH,
-          date: TODAY,
+    await cashierClient.expectFailure(
+      "clock-out remains unsupported after clock-in",
+      () =>
+        cashierClient.json("/api/staff/attendance", {
+          method: "POST",
+          body: JSON.stringify({
+            action: "clock-out",
+            branch: BRANCH,
+            date: TODAY,
+          }),
         }),
-      }
+      400
     );
-    assert.equal(clockOutAfterClockIn.action, "Clock Out");
 
     console.log("PASS attendance server flow verification");
   } finally {
