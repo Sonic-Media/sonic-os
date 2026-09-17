@@ -88,7 +88,12 @@
     "verify:owner-closing-approval-auth": "tsx scripts/verify-owner-closing-approval-auth.ts",
     "verify:closing-confirm-auto-refresh": "tsx scripts/verify-closing-confirm-auto-refresh.ts",
     "verify:data-backup-dashboard-ux": "tsx scripts/verify-data-backup-dashboard-ux.ts",
-    "verify:day-close-state-sync": "tsx scripts/verify-day-close-state-sync.ts"
+    "verify:day-close-state-sync": "tsx scripts/verify-day-close-state-sync.ts",
+    "verify:staff-movie-revenue-eod": "tsx scripts/verify-staff-movie-revenue-eod.ts",
+    "verify:movie-revenue-regression-guard": "tsx scripts/verify-movie-revenue-regression-guard.ts",
+    "audit:delete-empty-s2-branch": "tsx scripts/delete-empty-s2-branch-production.ts",
+    "delete:empty-s2-branch": "tsx scripts/delete-empty-s2-branch-production.ts --execute",
+    "verify:delete-empty-s2-branch": "tsx scripts/verify-delete-empty-s2-branch.ts"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.9.1",

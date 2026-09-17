@@ -1,6 +1,9 @@
 "use client";
 
+import { useMemo } from "react";
 import { Button } from "@/components/shared/ui/button";
+import { useEntriesContext } from "@/context/entries-context";
+import { branchCodesReferToSameInventory } from "@/lib/branch/codes";
 import { readCloseRequest } from "@/lib/day-closing/close-request";
 import { formatEntryDisplayDate } from "@/lib/dates";
 import { formatCurrency } from "@/lib/format";
@@ -45,8 +48,17 @@ export function ReviewClosingRequestDialog({
   onApprove,
   onCancel,
 }: ReviewClosingRequestDialogProps) {
+  const { entries } = useEntriesContext();
   const closeRequest = readCloseRequest(record.summary);
   const sales = record.summary?.sales ?? record.metrics.todaySales ?? 0;
+  const movieRevenue = useMemo(() => {
+    const operation = entries.find(
+      (entry) =>
+        entry.date === record.date &&
+        branchCodesReferToSameInventory(entry.branch, record.branch)
+    );
+    return operation?.sales ?? 0;
+  }, [entries, record.branch, record.date]);
   const expenses = record.summary?.expenses ?? record.metrics.todayOperatingExpenses ?? 0;
   const wages =
     record.summary?.staffPayments ?? record.metrics.todayStaffPaymentsRecorded ?? 0;
@@ -93,6 +105,7 @@ export function ReviewClosingRequestDialog({
             value={formatSubmittedAt(closeRequest?.submittedAt)}
           />
           <div className="my-2 h-px bg-white/[0.06]" />
+          <SummaryRow label="Movie revenue" value={formatCurrency(movieRevenue)} />
           <SummaryRow label="Total sales" value={formatCurrency(sales)} />
           <SummaryRow label="Expenses" value={formatCurrency(expenses)} />
           <SummaryRow label="Daily wage" value={formatCurrency(wages)} />
