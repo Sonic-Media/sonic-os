@@ -88,7 +88,8 @@
     "verify:owner-closing-approval-auth": "tsx scripts/verify-owner-closing-approval-auth.ts",
     "verify:closing-confirm-auto-refresh": "tsx scripts/verify-closing-confirm-auto-refresh.ts",
     "verify:data-backup-dashboard-ux": "tsx scripts/verify-data-backup-dashboard-ux.ts",
-    "verify:day-close-state-sync": "tsx scripts/verify-day-close-state-sync.ts"
+    "verify:day-close-state-sync": "tsx scripts/verify-day-close-state-sync.ts",
+    "verify:staff-today-movie-revenue": "tsx scripts/verify-staff-today-movie-revenue.ts"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.9.1",
