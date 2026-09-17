@@ -75,13 +75,13 @@ async function main(): Promise<void> {
   recordCheck(
     "Staff submit close request refreshes after success",
     staffWorkspaceSource.includes("refreshStaffOperations()") &&
-      staffWorkspaceSource.includes("refreshBranchStaffOnShift()") &&
-      staffWorkspaceSource.includes("if (result.success)"),
+      staffWorkspaceSource.includes("if (result.success)") &&
+      !staffWorkspaceSource.includes("refreshBranchStaffOnShift()"),
     "handleCloseDay"
   );
 
   recordCheck(
-    "Clock-out cache merge notifies attendance listeners",
+    "Staff audit cache merge notifies attendance listeners",
     auditSource.includes("mergeStaffAuditRecords") &&
       auditSource.includes("AUDIT_LOG_UPDATED_EVENT"),
     "lib/staff/audit.ts"
@@ -128,13 +128,13 @@ async function main(): Promise<void> {
 
   mergeStaffAuditRecords([
     {
-      id: "refresh-test-clock-out",
+      id: "refresh-test-clock-in",
       timestamp: new Date().toISOString(),
       staffId: "staff-test",
       staffName: "Test Staff",
       role: "cashier",
       branch: "main",
-      action: "Clock Out",
+      action: "Clock In",
       module: "attendance",
     },
   ]);
@@ -143,7 +143,7 @@ async function main(): Promise<void> {
 
   recordCheck(
     "mergeStaffAuditRecords dispatches audit update event",
-    eventFired && getStaffAuditRecords().some((r) => r.id === "refresh-test-clock-out"),
+    eventFired && getStaffAuditRecords().some((r) => r.id === "refresh-test-clock-in"),
     "runtime event dispatch"
   );
 

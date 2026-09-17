@@ -220,14 +220,6 @@ export function recordStaffClockIn(branch: Branch): StaffAuditRecord | null {
   });
 }
 
-export function recordStaffClockOut(branch: Branch): StaffAuditRecord | null {
-  return recordStaffAction({
-    branch,
-    action: AUDIT_ACTIONS.CLOCK_OUT,
-    module: "operations",
-  });
-}
-
 export function resolveCurrentStaffAttendance(
   branch: Branch,
   dateISO: string = getTodayISO(),

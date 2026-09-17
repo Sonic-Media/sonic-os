@@ -1,25 +1,17 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { Button } from "@/components/shared/ui/button";
+import { useMemo } from "react";
 import { Card } from "@/components/shared/ui/card";
-import { useActiveBranch } from "@/context/active-branch-context";
 import { useStaffAttendance } from "@/hooks/use-staff-attendance";
-import { clockOutApi, fetchStaffAttendance } from "@/lib/api/staff-attendance";
-import { getTodayISO } from "@/lib/dates";
-import { runOnApi } from "@/lib/data-source/context-api";
 import {
   formatAttendanceHours,
   formatClockTime,
 } from "@/lib/staff/attendance";
-import { mergeStaffAuditRecords } from "@/lib/staff/audit";
 import { formatRelativeTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 export function StaffAttendanceBar() {
-  const { activeBranch } = useActiveBranch();
   const { currentAttendance } = useStaffAttendance();
-  const [isClockingOut, setIsClockingOut] = useState(false);
 
   const presence = currentAttendance?.presence ?? "off-shift";
   const onShift = presence === "on-shift";
@@ -30,45 +22,6 @@ export function StaffAttendanceBar() {
       currentAttendance.currentSessionDurationMinutes / 60
     );
   }, [currentAttendance?.currentSessionDurationMinutes]);
-
-  async function handleClockOut() {
-    setIsClockingOut(true);
-    try {
-      const record = await runOnApi(() =>
-        clockOutApi({ branch: activeBranch })
-      );
-      mergeStaffAuditRecords([
-        {
-          id: record.id,
-          timestamp: record.timestamp,
-          staffId: record.userId,
-          staffName: record.userName,
-          role: record.role as never,
-          branch: record.branch,
-          action: record.action,
-          module: record.module as never,
-        },
-      ]);
-
-      const authoritativeRecords = await runOnApi(() =>
-        fetchStaffAttendance(getTodayISO())
-      );
-      mergeStaffAuditRecords(
-        authoritativeRecords.map((entry) => ({
-          id: entry.id,
-          timestamp: entry.timestamp,
-          staffId: entry.userId,
-          staffName: entry.userName,
-          role: entry.role as never,
-          branch: entry.branch as never,
-          action: entry.action,
-          module: entry.module as never,
-        }))
-      );
-    } finally {
-      setIsClockingOut(false);
-    }
-  }
 
   if (!currentAttendance) return null;
 
@@ -99,21 +52,13 @@ export function StaffAttendanceBar() {
           ) : null}
         </div>
 
-        <div className="mt-3 grid gap-3 text-sm sm:grid-cols-3">
+        <div className="mt-3 grid gap-3 text-sm sm:grid-cols-2">
           <div>
             <p className="text-xs uppercase tracking-wide text-zinc-500">
               Last Clock In
             </p>
             <p className="mt-1 text-white tabular-nums">
               {formatClockTime(currentAttendance.lastClockInAt)}
-            </p>
-          </div>
-          <div>
-            <p className="text-xs uppercase tracking-wide text-zinc-500">
-              Last Clock Out
-            </p>
-            <p className="mt-1 text-white tabular-nums">
-              {formatClockTime(currentAttendance.lastClockOutAt)}
             </p>
           </div>
           <div>
@@ -133,18 +78,6 @@ export function StaffAttendanceBar() {
           </p>
         ) : null}
       </div>
-
-      {onShift ? (
-        <Button
-          type="button"
-          variant="secondary"
-          disabled={isClockingOut}
-          onClick={() => void handleClockOut()}
-          className="shrink-0"
-        >
-          {isClockingOut ? "Clocking Out..." : "Clock Out"}
-        </Button>
-      ) : null}
     </Card>
   );
 }

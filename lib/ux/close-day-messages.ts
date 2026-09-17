@@ -92,13 +92,6 @@ export function mapCloseDayError(message: string, code?: string): string {
   }
 
   if (
-    normalizedCode === "staff_on_shift" ||
-    normalized.includes("staff are still on shift")
-  ) {
-    return message.trim();
-  }
-
-  if (
     normalizedCode === "validation_error" ||
     normalized.includes("validation failed")
   ) {
