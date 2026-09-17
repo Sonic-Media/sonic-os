@@ -6,6 +6,7 @@ import { StaffDailyWageCard } from "@/components/operations/staff/staff-daily-wa
 import { StaffEndOfDayCard } from "@/components/operations/staff/staff-end-of-day-card";
 import { StaffExpensesCard } from "@/components/operations/staff/staff-expenses-card";
 import { StaffRecentTransactionsCard } from "@/components/operations/staff/staff-recent-transactions-card";
+import { StaffMovieRevenueCard } from "@/components/operations/staff/staff-movie-revenue-card";
 import { StaffRevenueCard } from "@/components/operations/staff/staff-revenue-card";
 import { StaffTodayActivityCard } from "@/components/operations/staff/staff-today-activity-card";
 import { StaffActiveBusinessDayBanner } from "@/components/operations/staff/staff-active-business-day-banner";
@@ -209,6 +210,22 @@ export function StaffOperationsWorkspace({
     setExpandedSection(section);
   }
 
+  const canRecordMovieRevenue =
+    shopOpen || closeRequestPending || activeBusinessDayStatus === "close_requested";
+
+  const movieRevenueBlockedReason = dayClosed
+    ? "This business day is closed. Movie revenue cannot be changed."
+    : !canRecordMovieRevenue
+      ? "The shop must be open for this branch before recording movie revenue."
+      : undefined;
+
+  const handleRecordMovieRevenue = useCallback(
+    async (amount: string) => {
+      return handleSubmitRequest({ sales: amount });
+    },
+    [handleSubmitRequest]
+  );
+
   const handleCloseDay = useCallback(async (): Promise<boolean> => {
     setCloseFlowError(null);
     clearCloseError();
@@ -263,6 +280,17 @@ export function StaffOperationsWorkspace({
       <StaffRevenueCard
         movieRevenue={movieRevenue}
         accessorySales={accessorySales}
+      />
+
+      <StaffMovieRevenueCard
+        salesValue={form.sales}
+        movieRevenue={movieRevenue}
+        businessDate={resolvedBusinessDate}
+        canRecord={canRecordMovieRevenue && !dayClosed}
+        blockedReason={movieRevenueBlockedReason}
+        isSaving={isSaving}
+        saveError={saveError}
+        onRecord={handleRecordMovieRevenue}
       />
 
       <StaffTodayActivityCard
