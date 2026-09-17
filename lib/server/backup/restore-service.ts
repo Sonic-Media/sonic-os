@@ -207,18 +207,8 @@ async function runValidatedRestore(options: {
   session: AuthSession;
   request?: Request;
 }): Promise<RestoreBackupResult> {
-  // Validate BEFORE creating the safety backup? User said:
-  // 1. Create safety backup
-  // 2. Retrieve selected backup
-  // 3. Decompress...
-  // But also: if validation fails, keep current data untouched.
-  // Safety backup creation is fine even if restore fails — it protects current data.
-  // However validating first avoids unnecessary safety backups on bad files.
-  // Spec order: safety first, then retrieve/validate. I'll validate bytes first
-  // in memory (no DB mutation), then safety backup, then apply — so bad uploads
-  // never create safety backups OR mutate data. For recorded backups, create
-  // safety backup then re-validate then apply.
-
+  // Validate in memory first so invalid files never mutate data or create
+  // unnecessary safety backups. For valid payloads: safety backup → apply.
   const payload = await parseAndValidateJsonBackup(
     options.bytes,
     options.fileName
@@ -374,12 +364,4 @@ export async function downloadBackupById(backupId: string): Promise<{
         ? "application/json"
         : "application/octet-stream",
   };
-}
-
-export function isBackupRestorable(backup: BackupRecordSummary): boolean {
-  return (
-    backup.status === "completed" &&
-    backup.format === "json" &&
-    backup.trigger !== "restore"
-  );
 }

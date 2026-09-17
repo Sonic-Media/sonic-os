@@ -14,7 +14,6 @@ export {
 } from "@/lib/backup/json-parse";
 export {
   BackupValidationError,
-  isRestorableJsonBackup,
   validateJsonBackupPayload,
 } from "@/lib/backup/json-validate";
 export {

@@ -149,12 +149,3 @@ export function validateJsonBackupPayload(value: unknown): JsonBackupPayload {
 
   return value as unknown as JsonBackupPayload;
 }
-
-export function isRestorableJsonBackup(value: unknown): value is JsonBackupPayload {
-  try {
-    validateJsonBackupPayload(value);
-    return true;
-  } catch {
-    return false;
-  }
-}

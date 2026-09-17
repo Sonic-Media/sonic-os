@@ -1,4 +1,4 @@
-import { gunzipSync, gunzip } from "node:zlib";
+import { gunzip } from "node:zlib";
 import { promisify } from "node:util";
 import type { JsonBackupPayload } from "@/lib/backup/json-export";
 import {
@@ -34,30 +34,6 @@ export async function decompressBackupBytes(
   try {
     const result = await gunzipAsync(Buffer.from(bytes));
     return new Uint8Array(result);
-  } catch (error) {
-    throw new BackupValidationError(
-      error instanceof Error
-        ? `Could not decompress backup (corrupted gzip): ${error.message}`
-        : "Could not decompress backup (corrupted gzip).",
-      "corrupted_gzip"
-    );
-  }
-}
-
-export function decompressBackupBytesSync(
-  bytes: Uint8Array,
-  fileNameHint?: string
-): Uint8Array {
-  const lower = (fileNameHint ?? "").toLowerCase();
-  const shouldGunzip =
-    lower.endsWith(".gz") || lower.endsWith(".json.gz") || looksLikeGzip(bytes);
-
-  if (!shouldGunzip) {
-    return bytes;
-  }
-
-  try {
-    return new Uint8Array(gunzipSync(Buffer.from(bytes)));
   } catch (error) {
     throw new BackupValidationError(
       error instanceof Error
