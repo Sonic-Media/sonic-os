@@ -6,6 +6,7 @@ import { StaffDailyWageCard } from "@/components/operations/staff/staff-daily-wa
 import { StaffEndOfDayCard } from "@/components/operations/staff/staff-end-of-day-card";
 import { StaffExpensesCard } from "@/components/operations/staff/staff-expenses-card";
 import { StaffRecentTransactionsCard } from "@/components/operations/staff/staff-recent-transactions-card";
+import { StaffMovieRevenueCard } from "@/components/operations/staff/staff-movie-revenue-card";
 import { StaffRevenueCard } from "@/components/operations/staff/staff-revenue-card";
 import { StaffTodayActivityCard } from "@/components/operations/staff/staff-today-activity-card";
 import { StaffActiveBusinessDayBanner } from "@/components/operations/staff/staff-active-business-day-banner";
@@ -258,6 +259,17 @@ export function StaffOperationsWorkspace({
       <StaffWelcomeCard
         businessDate={resolvedBusinessDate}
         onClockOutComplete={() => void handleClockOutComplete()}
+      />
+
+      <StaffMovieRevenueCard
+        form={form}
+        movieRevenue={movieRevenue}
+        shopOpen={shopOpen}
+        dayClosed={dayClosed}
+        closeRequestPending={closeRequestPending}
+        isSaving={isSaving}
+        saveError={saveError}
+        onSaveMovieRevenue={(amount) => handleSubmitRequest({ sales: amount })}
       />
 
       <StaffRevenueCard
