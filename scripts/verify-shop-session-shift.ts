@@ -15,6 +15,10 @@ import {
   type CertificationCashier,
 } from "./verify-bootstrap";
 import {
+  approveCloseDayApi,
+  submitCloseRequestApi,
+} from "./verify-close-request-helpers";
+import {
   loginWithCredentials,
   VERIFY_OWNER_CREDENTIALS,
 } from "./verify-session";
@@ -154,74 +158,6 @@ function verifyStaticGuards() {
   );
 }
 
-async function submitCloseRequest(
-  client: ApiClient,
-  branch: string,
-  date: string
-) {
-  return client.json<{ status: string }>("/api/day-closings", {
-    method: "POST",
-    body: JSON.stringify({
-      action: "submit-close-request",
-      branch,
-      date,
-      metrics: {
-        movieRevenue: 0,
-        accessorySales: 0,
-        totalSales: 0,
-        totalExpenses: 0,
-        staffPayouts: 0,
-      },
-      staffPayouts: [],
-      expectedCash: 0,
-      actualCashCounted: 0,
-      cashDifference: 0,
-      cashStatus: "balanced",
-      summary: {
-        sales: 0,
-        expenses: 0,
-        net: 0,
-        movieRevenue: 0,
-        accessorySales: 0,
-      },
-    }),
-  });
-}
-
-async function approveClose(
-  client: ApiClient,
-  branch: string,
-  date: string
-) {
-  return client.json<{ status: string }>("/api/day-closings", {
-    method: "POST",
-    body: JSON.stringify({
-      action: "approve-and-close",
-      branch,
-      date,
-      metrics: {
-        movieRevenue: 0,
-        accessorySales: 0,
-        totalSales: 0,
-        totalExpenses: 0,
-        staffPayouts: 0,
-      },
-      staffPayouts: [],
-      expectedCash: 0,
-      actualCashCounted: 0,
-      cashDifference: 0,
-      cashStatus: "balanced",
-      summary: {
-        sales: 0,
-        expenses: 0,
-        net: 0,
-        movieRevenue: 0,
-        accessorySales: 0,
-      },
-    }),
-  });
-}
-
 async function verifyLiveScenarios() {
   const owner = new ApiClient();
   await loginWithCredentials(owner, VERIFY_OWNER_CREDENTIALS);
@@ -346,8 +282,8 @@ async function verifyLiveScenarios() {
     );
 
     // D. Close while on shift succeeds; ends shift
-    await submitCloseRequest(tonyClient, mainBranch, TODAY);
-    const approved = await approveClose(owner, mainBranch, TODAY);
+    await submitCloseRequestApi(tonyClient, mainBranch, TODAY);
+    const approved = await approveCloseDayApi(owner, mainBranch, TODAY);
     recordCheck("D. Close succeeds while staff were on shift", approved.status === "closed");
 
     const afterClose = await owner.json<Array<{ staffId: string }>>(
