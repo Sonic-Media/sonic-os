@@ -29,7 +29,7 @@ function logBackupRouteError(
 
 export async function GET() {
   try {
-    const backups = await withDatabase(async () => listBackupRecords(20), {
+    const backups = await withDatabase(async () => listBackupRecords(50), {
       ownerOnly: true,
     });
     return jsonOk(backups);

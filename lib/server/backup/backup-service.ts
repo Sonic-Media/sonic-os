@@ -29,8 +29,14 @@ export interface BackupRecordSummary {
   error?: string;
 }
 
+export type BackupTrigger =
+  | "manual"
+  | "scheduled"
+  | "pre-restore"
+  | "restore";
+
 export interface TriggerBackupOptions {
-  trigger: "manual" | "scheduled";
+  trigger: Exclude<BackupTrigger, "restore">;
   createdById?: string;
   createdByName?: string;
 }
@@ -159,7 +165,12 @@ export async function triggerDatabaseBackup(
   let persisted: PersistedBackupPayload | null = null;
 
   try {
-    result = await createDatabaseBackup();
+    // In-app backups must be JSON so Data & Backup restore/download works
+    // consistently (including serverless). CLI `npm run db:backup` still uses
+    // resolveBackupEngine() and may produce pg_dump SQL archives.
+    result = await createDatabaseBackup({
+      engine: options.trigger === "scheduled" ? undefined : "json",
+    });
     const resolved = resolveBackupFileSize(result);
     filePath = resolved.filePath;
     fileSizeBytes = resolved.fileSizeBytes;
@@ -231,7 +242,7 @@ export async function triggerDatabaseBackup(
 }
 
 export async function listBackupRecords(
-  limit = 20
+  limit = 50
 ): Promise<BackupRecordSummary[]> {
   try {
     const records = await prisma.backupRecord.findMany({

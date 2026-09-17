@@ -42,17 +42,28 @@ async function main(): Promise<void> {
 
   recordCheck(
     "Backup health card present",
-    dataProtection.includes("Backup Health") &&
+    dataProtection.includes("Data Protection") &&
       dataProtection.includes("Protected") &&
-      dataProtection.includes("Attention Required"),
+      dataProtection.includes("Attention Required") &&
+      dataProtection.includes("Backup Now") &&
+      dataProtection.includes("Restore from File"),
     "data-protection-section"
   );
 
   recordCheck(
     "Recent backups limited to successful records",
-    dataProtection.includes("RECENT_SUCCESS_LIMIT = 3") &&
+    dataProtection.includes("RECENT_SUCCESS_LIMIT = 5") &&
       dataProtection.includes("recentSuccessful"),
-    "top 3 completed"
+    "top completed"
+  );
+
+  recordCheck(
+    "Restore and download actions on recent backups",
+    dataProtection.includes("Restore") &&
+      dataProtection.includes("Download") &&
+      dataProtection.includes("RestoreConfirmDialog") &&
+      dataProtection.includes("RestoreFromFileSection"),
+    "restore UX"
   );
 
   recordCheck(

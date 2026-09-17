@@ -30,6 +30,8 @@ function formatBackupLabel(backup: BackupRecordSummary): string {
 }
 
 function triggerLabel(backup: BackupRecordSummary): string {
+  if (backup.trigger === "pre-restore") return "Pre-Restore Safety Backup";
+  if (backup.trigger === "restore") return "Restore";
   return backup.trigger === "manual" ? "Manual" : "Scheduled";
 }
 
@@ -73,7 +75,11 @@ export function BackupHistoryDialog({
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                     <div className="min-w-0">
                       <p className="text-sm font-medium text-white">
-                        {triggerLabel(backup)} backup
+                        {triggerLabel(backup)}
+                        {backup.trigger !== "restore" &&
+                        backup.trigger !== "pre-restore"
+                          ? " backup"
+                          : ""}
                         {backup.createdByName ? ` · ${backup.createdByName}` : ""}
                       </p>
                       <p className="mt-0.5 text-xs text-zinc-500">

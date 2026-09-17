@@ -26,7 +26,7 @@ export function SettingsDataBackupPanel() {
     <div className="space-y-6">
       <SettingsPanelShell
         title="Data & Backup"
-        description="Create backups and access owner-only data protection tools."
+        description="Protect your business data with backups you can restore anytime."
         bare
       >
         <DataProtectionSection />
