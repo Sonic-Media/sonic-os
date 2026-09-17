@@ -93,8 +93,8 @@ export function StaffManagementFilters({
               Kansanga
             </FilterChip>
             <FilterChip
-              active={branchFilter === "branch2"}
-              onClick={() => onBranchFilterChange("branch2")}
+              active={branchFilter === "salaama"}
+              onClick={() => onBranchFilterChange("salaama")}
             >
               Salaama
             </FilterChip>

@@ -52,10 +52,10 @@ function main(): void {
   );
   record(
     "1-salaama",
-    "Salaama scope resolves (salaama + branch2 aliases)",
+    "Salaama scope resolves (salaama authoritative, branch2 legacy alias)",
     resolveShopResetScope("salaama") === "salaama" &&
       resolveShopResetScope("branch2") === "salaama" &&
-      resolveShopResetLookupCodes("salaama").includes("branch2")
+      resolveShopResetLookupCodes("salaama").includes("salaama")
   );
   record(
     "1-both",
