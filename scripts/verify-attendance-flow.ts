@@ -138,6 +138,19 @@ async function main() {
     assert.equal(openResult.dayClosing.branch, BRANCH);
     assert.equal(openResult.attendance.action, "Start Shift");
     assert.equal(openResult.attendance.userId, cashier.staffId);
+    assert.equal(
+      (openResult.attendance as { recordId?: string }).recordId,
+      TODAY,
+      "Start Shift should stamp business-date recordId"
+    );
+
+    const onShiftAfterOpen = await cashierClient.json<
+      Array<{ staffId: string }>
+    >(`/api/staff/attendance/on-shift?branch=${BRANCH}&date=${TODAY}`);
+    assert.ok(
+      onShiftAfterOpen.some((row) => row.staffId === cashier.staffId),
+      "opener should be on shift after Open Shop"
+    );
 
     await cashierClient.expectFailure(
       "duplicate start-shift clock-in blocked",

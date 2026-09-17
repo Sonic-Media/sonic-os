@@ -17,6 +17,7 @@ import type { StaffAuditRecord } from "@/types/staff-audit";
 
 const ATTENDANCE_ACTIONS = new Set<string>([
   AUDIT_ACTIONS.START_SHIFT,
+  AUDIT_ACTIONS.END_SHIFT,
   AUDIT_ACTIONS.CLOCK_IN,
   AUDIT_ACTIONS.CLOCK_OUT,
   AUDIT_ACTIONS.OPEN_DAY,
@@ -24,6 +25,17 @@ const ATTENDANCE_ACTIONS = new Set<string>([
 
 function isSameDay(timestamp: string, dateISO: string): boolean {
   return timestamp.slice(0, 10) === dateISO;
+}
+
+/** Match by business-day recordId when present; fall back to timestamp day. */
+function matchesBusinessDate(
+  record: Pick<StaffAuditRecord, "timestamp" | "recordId">,
+  dateISO: string
+): boolean {
+  if (record.recordId && /^\d{4}-\d{2}-\d{2}$/.test(record.recordId)) {
+    return record.recordId === dateISO;
+  }
+  return isSameDay(record.timestamp, dateISO);
 }
 
 function matchesBranch(recordBranch: Branch, branch: Branch): boolean {
@@ -39,6 +51,12 @@ function isClockInAction(action: string): boolean {
     action === AUDIT_ACTIONS.START_SHIFT ||
     action === AUDIT_ACTIONS.CLOCK_IN ||
     action === AUDIT_ACTIONS.OPEN_DAY
+  );
+}
+
+function isClockOutAction(action: string): boolean {
+  return (
+    action === AUDIT_ACTIONS.END_SHIFT || action === AUDIT_ACTIONS.CLOCK_OUT
   );
 }
 
@@ -75,7 +93,7 @@ function buildSessionsFromAudit(
       (record) =>
         record.staffId === staffId &&
         matchesBranch(record.branch, branch) &&
-        isSameDay(record.timestamp, dateISO) &&
+        matchesBusinessDate(record, dateISO) &&
         isAttendanceAction(record.action)
     )
     .sort((left, right) => left.timestamp.localeCompare(right.timestamp));
@@ -104,7 +122,7 @@ function buildSessionsFromAudit(
       continue;
     }
 
-    if (event.action === AUDIT_ACTIONS.CLOCK_OUT && openSession) {
+    if (isClockOutAction(event.action) && openSession) {
       openSession.clockOutAt = event.timestamp;
       sessions.push(openSession);
       openSession = null;
@@ -201,6 +219,23 @@ export function getActiveStaffAttendance(
     .sort((left, right) =>
       (left.shiftStartedAt ?? "").localeCompare(right.shiftStartedAt ?? "")
     );
+}
+
+/**
+ * Current on-shift staff for a shop-open session.
+ * When the shop session is not open for `dateISO`, returns [] — shop session is SoT.
+ */
+export function getCurrentShopSessionStaff(
+  staff: Staff[],
+  branch: Branch,
+  dateISO: string,
+  auditRecords: StaffAuditRecord[],
+  shopSessionOpen: boolean
+): StaffAttendanceStatus[] {
+  if (!shopSessionOpen) {
+    return [];
+  }
+  return getActiveStaffAttendance(staff, branch, dateISO, auditRecords);
 }
 
 export function recordStaffStartShiftAttendance(branch: Branch): StaffAuditRecord | null {

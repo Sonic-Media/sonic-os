@@ -34,7 +34,8 @@ export function StaffWelcomeCard({
     isBranchDayClosed,
     isCloseRequestPending,
   } = useDayClosing();
-  const { currentAttendance } = useStaffAttendance(resolvedDate);
+  const { currentAttendance, isLoaded: attendanceLoaded } =
+    useStaffAttendance(resolvedDate);
   const [now, setNow] = useState(() => new Date());
 
   useEffect(() => {
@@ -47,7 +48,9 @@ export function StaffWelcomeCard({
     [session, staff]
   );
   const firstName = staffName.split(" ")[0] ?? staffName;
-  const onShift = currentAttendance?.presence === "on-shift";
+  const onShift = attendanceLoaded
+    ? currentAttendance?.presence === "on-shift"
+    : null;
   const activeOpenRecord = getActiveOpenRecord(activeBranch);
   const closeRequestPending = isCloseRequestPending(activeBranch, resolvedDate);
   const shopOpen = activeOpenRecord?.status === "open";
@@ -97,7 +100,7 @@ export function StaffWelcomeCard({
         <div>
           <StaffSectionLabel>On Shift</StaffSectionLabel>
           <p className="mt-2 text-lg font-semibold text-white">
-            {onShift ? "Yes" : "No"}
+            {onShift === null ? "…" : onShift ? "Yes" : "No"}
           </p>
         </div>
         <div>
@@ -123,7 +126,7 @@ export function StaffWelcomeCard({
             </StaffStatusBadge>
             {shopOpen && openedAt ? (
               <p className="mt-2 text-xs text-zinc-500">{sessionLabel}</p>
-            ) : onShift && !shopOpen ? (
+            ) : onShift === true && !shopOpen ? (
               <p className="mt-2 text-xs text-zinc-500">
                 You are on shift; branch not opened
               </p>

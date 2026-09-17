@@ -24,7 +24,10 @@ import {
   assertCanSubmitCloseRequest,
   assertStaffOperationalRole,
 } from "@/lib/server/day-closing-guards";
-import { createStartShiftAudit } from "@/lib/server/services/attendance-service";
+import {
+  createStartShiftAudit,
+  endOpenShiftsAtBranch,
+} from "@/lib/server/services/attendance-service";
 import { getLinkedStaffForUser } from "@/lib/server/services/staff-service";
 import type { AuditLogRecord } from "@/types/audit-log";
 import type { Branch } from "@/types";
@@ -750,6 +753,13 @@ export async function approveAndCloseDay(input: unknown): Promise<DayClosingReco
       reopenedAt: null,
     },
   });
+
+  // Shop session ends → end open shifts. Never blocks the close itself.
+  try {
+    await endOpenShiftsAtBranch(branch, businessDate);
+  } catch (error) {
+    console.error("Failed to end open shifts after day close:", error);
+  }
 
   return mapDayClosingRecord(record);
 }

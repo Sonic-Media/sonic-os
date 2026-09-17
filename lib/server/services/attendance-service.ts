@@ -27,6 +27,7 @@ import type { StaffAuditRecord } from "@/types/staff-audit";
 
 const ATTENDANCE_ACTIONS = [
   AUDIT_ACTIONS.START_SHIFT,
+  AUDIT_ACTIONS.END_SHIFT,
   AUDIT_ACTIONS.CLOCK_IN,
   AUDIT_ACTIONS.CLOCK_OUT,
   AUDIT_ACTIONS.OPEN_DAY,
@@ -57,6 +58,7 @@ function mapAuditToStaffRecord(record: AuditLogRecord): StaffAuditRecord {
     branch: record.branch,
     action: record.action,
     module: record.module,
+    recordId: record.recordId,
   };
 }
 
@@ -86,10 +88,15 @@ async function fetchBranchAttendanceAudit(
     where: {
       branchCode: branch,
       action: { in: [...ATTENDANCE_ACTIONS] },
-      timestamp: {
-        gte: dayStart,
-        lte: dayEnd,
-      },
+      OR: [
+        { recordId: date },
+        {
+          timestamp: {
+            gte: dayStart,
+            lte: dayEnd,
+          },
+        },
+      ],
     },
     orderBy: { timestamp: "asc" },
   });
@@ -184,6 +191,7 @@ export async function createStartShiftAudit(
     branchCode: parsed.branch,
     action: AUDIT_ACTIONS.START_SHIFT,
     module: "operations",
+    recordId: parsed.date,
     detail: parsed.detail?.trim() || "Branch opened for the day",
   };
 
@@ -198,6 +206,7 @@ export async function createStartShiftAudit(
       branch: record.branchCode as Branch,
       action: record.action,
       module: record.module as AuditLogRecord["module"],
+      recordId: record.recordId ?? undefined,
     };
   }
 
@@ -208,8 +217,107 @@ export async function createStartShiftAudit(
     branch: parsed.branch,
     action: AUDIT_ACTIONS.START_SHIFT,
     module: "operations",
+    recordId: parsed.date,
     detail: parsed.detail?.trim() || "Branch opened for the day",
   });
+}
+
+const endShiftInputSchema = z.object({
+  branch: z.string().trim().min(1),
+  date: z.string().trim().min(1),
+  staffId: z.string().trim().min(1),
+  staffName: z.string().trim().min(1),
+  role: z.string().trim().min(1),
+  detail: z.string().trim().optional(),
+});
+
+export async function createEndShiftAudit(
+  input: z.infer<typeof endShiftInputSchema>,
+  tx?: Prisma.TransactionClient
+): Promise<AuditLogRecord> {
+  const parsed = endShiftInputSchema.parse(input);
+  const data = {
+    userId: parsed.staffId,
+    userName: parsed.staffName,
+    role: parsed.role,
+    branchCode: parsed.branch,
+    action: AUDIT_ACTIONS.END_SHIFT,
+    module: "operations",
+    recordId: parsed.date,
+    detail: parsed.detail?.trim() || "Branch closed for the day",
+  };
+
+  if (tx) {
+    const record = await tx.auditLogEntry.create({ data });
+    return {
+      id: record.id,
+      timestamp: record.timestamp.toISOString(),
+      userId: record.userId,
+      userName: record.userName,
+      role: record.role,
+      branch: record.branchCode as Branch,
+      action: record.action,
+      module: record.module as AuditLogRecord["module"],
+      recordId: record.recordId ?? undefined,
+    };
+  }
+
+  return createAuditLogEntry({
+    userId: parsed.staffId,
+    userName: parsed.staffName,
+    role: parsed.role,
+    branch: parsed.branch,
+    action: AUDIT_ACTIONS.END_SHIFT,
+    module: "operations",
+    recordId: parsed.date,
+    detail: parsed.detail?.trim() || "Branch closed for the day",
+  });
+}
+
+/**
+ * End every open shift at the branch for the business day (shop-session SoT).
+ * Never blocks closing — best-effort attendance completion.
+ */
+export async function endOpenShiftsAtBranch(
+  branch: Branch,
+  date: string,
+  tx?: Prisma.TransactionClient
+): Promise<AuditLogRecord[]> {
+  const onShift = await getStaffOnShiftAtBranch(branch, date);
+  if (onShift.length === 0) {
+    return [];
+  }
+
+  const staffRows = await (tx ?? prisma).staff.findMany({
+    where: {
+      id: { in: onShift.map((member) => member.staffId) },
+    },
+    include: {
+      role: true,
+      branch: true,
+      user: true,
+    },
+  });
+  const byId = new Map(staffRows.map((row) => [row.id, mapStaffToEntity(row)]));
+
+  const ended: AuditLogRecord[] = [];
+  for (const member of onShift) {
+    const staffEntity = byId.get(member.staffId);
+    const record = await createEndShiftAudit(
+      {
+        branch,
+        date,
+        staffId: member.staffId,
+        staffName: member.staffName,
+        role: staffEntity?.role ?? "cashier",
+        detail: "Branch closed for the day",
+      },
+      tx
+    );
+    ended.push(record);
+  }
+
+  return ended;
 }
 
 export async function recordAttendanceAction(

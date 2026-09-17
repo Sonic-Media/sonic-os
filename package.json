@@ -89,6 +89,7 @@
     "verify:closing-confirm-auto-refresh": "tsx scripts/verify-closing-confirm-auto-refresh.ts",
     "verify:data-backup-dashboard-ux": "tsx scripts/verify-data-backup-dashboard-ux.ts",
     "verify:day-close-state-sync": "tsx scripts/verify-day-close-state-sync.ts",
+    "verify:shop-session-shift": "tsx scripts/verify-shop-session-shift.ts",
     "verify:staff-today-movie-revenue": "tsx scripts/verify-staff-today-movie-revenue.ts"
   },
   "dependencies": {

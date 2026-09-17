@@ -24,6 +24,7 @@ export const AUDIT_ACTIONS = {
   REOPEN_DAY: "Reopen Day",
   OPEN_DAY: "Open Shop",
   START_SHIFT: "Start Shift",
+  END_SHIFT: "End Shift",
   CLOCK_IN: "Clock In",
   CLOCK_OUT: "Clock Out",
 } as const satisfies Record<string, AuditAction>;

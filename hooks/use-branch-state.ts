@@ -36,7 +36,8 @@ export function useBranchState() {
 
   const activeRecord = getActiveOpenRecord(activeBranch);
   const attendanceDate = activeRecord?.date ?? today;
-  const { activeOnShift } = useStaffAttendance(attendanceDate);
+  const { activeOnShift, isLoaded: attendanceLoaded } =
+    useStaffAttendance(attendanceDate);
 
   return useMemo(() => {
     const activeRecord = getActiveOpenRecord(activeBranch);
@@ -112,12 +113,13 @@ export function useBranchState() {
       purchases: totalPurchases,
       netCash,
       netCashFlow,
-      isLoaded,
+      isLoaded: isLoaded && attendanceLoaded,
     };
   }, [
     activeBranch,
     activeOnShift,
     attendanceDate,
+    attendanceLoaded,
     closings,
     entries,
     expenses,

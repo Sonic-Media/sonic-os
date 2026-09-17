@@ -25,6 +25,7 @@ export type AuditAction =
   | "Reopen Day"
   | "Open Shop"
   | "Start Shift"
+  | "End Shift"
   | "Clock In"
   | "Clock Out";
 

@@ -18,15 +18,10 @@ import { useDayClosing } from "@/context/day-closing-context";
 import { getActiveOpenDayRecord } from "@/lib/day-closing/business-date";
 import { useSettings } from "@/context/settings-context";
 import { useStaff } from "@/context/staff-context";
-import { useStaffAttendance } from "@/hooks/use-staff-attendance";
 import { useTodayISO } from "@/hooks/use-today-iso";
 import { useToast } from "@/context/toast-context";
-import { clockInApi } from "@/lib/api/staff-attendance";
-import { runOnApi } from "@/lib/data-source/context-api";
 import { canOpenShop } from "@/lib/day-closing/permissions";
 import { formatEntryDisplayDate } from "@/lib/dates";
-import { mergeStaffAuditRecords } from "@/lib/staff/audit";
-import { formatClockTime } from "@/lib/staff/attendance";
 import {
   formatGreetingTime,
   getDaysSinceLastShift,
@@ -36,13 +31,13 @@ import { toStaffFacingError } from "@/lib/ux/staff-messages";
 import { resolveStaffDisplayName } from "@/lib/ux/user-display";
 import { cn } from "@/lib/utils";
 
-type ShiftGateMode = "start-shift" | "clock-in";
 type ShiftGatePhase = "form" | "success";
 
 const SUCCESS_DISPLAY_MS = 1000;
 
 interface OpenShopPageProps {
-  mode?: ShiftGateMode;
+  /** @deprecated Clock-in mode removed — Open Shop starts the shift. */
+  mode?: "start-shift" | "clock-in";
   onComplete?: () => void | Promise<void>;
 }
 
@@ -51,7 +46,7 @@ function formatCurrentTime(date: Date): string {
 }
 
 export function OpenShopPage({
-  mode = "start-shift",
+  mode: _mode = "start-shift",
   onComplete,
 }: OpenShopPageProps) {
   const router = useRouter();
@@ -77,11 +72,8 @@ export function OpenShopPage({
     [closings, activeBranch, today]
   );
   const successLine = useMemo(
-    () =>
-      mode === "start-shift"
-        ? getStartShiftSuccessLine(staffName, today)
-        : `${staffName}, you are now on shift.`,
-    [mode, staffName, today]
+    () => getStartShiftSuccessLine(staffName, today),
+    [staffName, today]
   );
 
   const activeOpenRecord = useMemo(
@@ -96,8 +88,6 @@ export function OpenShopPage({
   );
 
   const canStart = session ? canOpenShop(session.role) : false;
-  const isStartShift = mode === "start-shift";
-  const actionLabel = isStartShift ? "Open Shop" : "Clock In";
 
   const finalizeShiftGate = useCallback(async () => {
     if (completionStarted.current) {
@@ -149,53 +139,27 @@ export function OpenShopPage({
     setError(undefined);
 
     try {
-      if (isStartShift) {
-        const result = await openDay(activeBranch, today);
+      const result = await openDay(activeBranch, today);
 
-        if (!result.success) {
-          setError(
-            toStaffFacingError(result.errors.form ?? "", {
-              ownerName: settings.ownerName,
-              context: "start-shift",
-            })
-          );
-          return;
-        }
-
-        toastSuccess("Shop Opened");
-        setPhase("success");
+      if (!result.success) {
+        setError(
+          toStaffFacingError(result.errors.form ?? "", {
+            ownerName: settings.ownerName,
+            context: "start-shift",
+          })
+        );
         return;
       }
 
-      const clockInRecord = await runOnApi(() =>
-        clockInApi({ branch: activeBranch, date: today })
-      );
-      mergeStaffAuditRecords([
-        {
-          id: clockInRecord.id,
-          timestamp: clockInRecord.timestamp,
-          staffId: clockInRecord.userId,
-          staffName: clockInRecord.userName,
-          role: clockInRecord.role as never,
-          branch: clockInRecord.branch,
-          action: clockInRecord.action,
-          module: clockInRecord.module as never,
-        },
-      ]);
-
-      toastSuccess("Clocked In");
+      toastSuccess("Shop Opened");
       setPhase("success");
     } catch (caught) {
       const message =
-        caught instanceof Error
-          ? caught.message
-          : isStartShift
-            ? "Could not open the shop."
-            : "Could not record your clock-in.";
+        caught instanceof Error ? caught.message : "Could not open the shop.";
       setError(
         toStaffFacingError(message, {
           ownerName: settings.ownerName,
-          context: isStartShift ? "start-shift" : "general",
+          context: "start-shift",
         })
       );
     } finally {
@@ -210,9 +174,7 @@ export function OpenShopPage({
           <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full border border-emerald-500/30 bg-emerald-500/10">
             <span className="text-2xl text-emerald-400">✓</span>
           </div>
-          <h2 className="mt-6 text-2xl font-semibold text-white">
-            {isStartShift ? "Shop Opened" : "Clocked In"}
-          </h2>
+          <h2 className="mt-6 text-2xl font-semibold text-white">Shop Opened</h2>
           <p className="mt-3 text-sm text-zinc-400">{successLine}</p>
           <p className="mt-6 text-sm text-zinc-500">
             Opening Today&apos;s Operations...
@@ -235,8 +197,8 @@ export function OpenShopPage({
             displayName={staffName}
             date={now}
             dateKey={today}
-            daysSinceLastShift={isStartShift ? daysSinceLastShift : undefined}
-            context={isStartShift ? "start-shift" : "clock-in"}
+            daysSinceLastShift={daysSinceLastShift}
+            context="start-shift"
             align="center"
           />
         </div>
@@ -258,21 +220,7 @@ export function OpenShopPage({
         </div>
 
         <div className="mt-5">
-          {!isStartShift ? (
-            <div className="rounded-2xl border border-emerald-500/10 bg-emerald-500/[0.04] px-4 py-4 text-center">
-              <p className="text-sm text-emerald-300">
-                The branch is already open for business today. Clock in to
-                record that you are on shift.
-              </p>
-              <p className="mt-1 text-xs text-zinc-500">
-                Opening the shop and clocking in are separate steps. If you
-                opened the shop earlier, you may still need to clock in after
-                returning or after clocking out.
-              </p>
-            </div>
-          ) : (
-            <ShopScheduleCountdown now={now} />
-          )}
+          <ShopScheduleCountdown now={now} />
         </div>
 
         {hasStaleOpenBusinessDay ? (
@@ -310,18 +258,14 @@ export function OpenShopPage({
             size="lg"
             className={cn(
               "h-14 w-full rounded-2xl text-base font-semibold",
-              isStartShift
-                ? "bg-gradient-to-r from-emerald-600 to-teal-600 shadow-[0_16px_40px_-16px_rgba(16,185,129,0.7)] hover:from-emerald-500 hover:to-teal-500"
-                : ""
+              "bg-gradient-to-r from-emerald-600 to-teal-600 shadow-[0_16px_40px_-16px_rgba(16,185,129,0.7)] hover:from-emerald-500 hover:to-teal-500"
             )}
-            disabled={
-              !canStart || isSubmitting || hasStaleOpenBusinessDay
-            }
+            disabled={!canStart || isSubmitting || hasStaleOpenBusinessDay}
             loading={isSubmitting}
-            loadingLabel={isStartShift ? "Opening shop..." : "Clocking in..."}
+            loadingLabel="Opening shop..."
             onClick={() => void handleSubmit()}
           >
-            {actionLabel}
+            Open Shop
           </Button>
         </div>
       </StaffCard>

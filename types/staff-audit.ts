@@ -22,6 +22,8 @@ export interface StaffAuditRecord {
   action: string;
   module: StaffActionModule;
   detail?: string;
+  /** Business-day ISO date for shift/attendance events tied to a shop session. */
+  recordId?: string;
 }
 
 export interface StaffAuditInput {
