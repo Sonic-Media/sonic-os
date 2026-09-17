@@ -24,10 +24,7 @@ import {
   assertCanSubmitCloseRequest,
   assertStaffOperationalRole,
 } from "@/lib/server/day-closing-guards";
-import {
-  createStartShiftAudit,
-  getStaffOnShiftAtBranch,
-} from "@/lib/server/services/attendance-service";
+import { createStartShiftAudit } from "@/lib/server/services/attendance-service";
 import { getLinkedStaffForUser } from "@/lib/server/services/staff-service";
 import type { AuditLogRecord } from "@/types/audit-log";
 import type { Branch } from "@/types";
@@ -631,19 +628,6 @@ export async function submitCloseRequest(input: unknown): Promise<DayClosingReco
     });
   }
 
-  const staffOnShift = await getStaffOnShiftAtBranch(branch, businessDate);
-  if (staffOnShift.length > 0) {
-    const names = staffOnShift.map((member) => member.staffName).join(", ");
-    throw new ApiError(
-      `Cannot submit closing while staff are still on shift: ${names}`,
-      {
-        status: 409,
-        code: "staff_on_shift",
-        details: { staffOnShift },
-      }
-    );
-  }
-
   const now = new Date();
   const actor = await prisma.user.findUnique({
     where: { id: session.userId },
@@ -713,19 +697,6 @@ export async function approveAndCloseDay(input: unknown): Promise<DayClosingReco
       status: 400,
       code: "shop_not_opened",
     });
-  }
-
-  const staffOnShift = await getStaffOnShiftAtBranch(branch, businessDate);
-  if (staffOnShift.length > 0) {
-    const names = staffOnShift.map((member) => member.staffName).join(", ");
-    throw new ApiError(
-      `Cannot close the day while staff are still on shift: ${names}`,
-      {
-        status: 409,
-        code: "staff_on_shift",
-        details: { staffOnShift },
-      }
-    );
   }
 
   const now = new Date();

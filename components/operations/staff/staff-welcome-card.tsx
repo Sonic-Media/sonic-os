@@ -1,18 +1,14 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Button } from "@/components/shared/ui/button";
 import { useAuth } from "@/context/auth-context";
 import { useActiveBranch } from "@/context/active-branch-context";
 import { useDayClosing } from "@/context/day-closing-context";
 import { useSettings } from "@/context/settings-context";
 import { useStaff } from "@/context/staff-context";
 import { useStaffAttendance } from "@/hooks/use-staff-attendance";
-import { clockOutApi, fetchStaffAttendance } from "@/lib/api/staff-attendance";
-import { runOnApi } from "@/lib/data-source/context-api";
 import { getTodayISO } from "@/lib/dates";
 import { formatRelativeTime, getGreeting } from "@/lib/format";
-import { mergeStaffAuditRecords } from "@/lib/staff/audit";
 import { formatClockTime } from "@/lib/staff/attendance";
 import { resolveStaffDisplayName } from "@/lib/ux/user-display";
 import {
@@ -21,34 +17,10 @@ import {
   StaffStatusBadge,
 } from "@/components/operations/staff/primitives";
 
-function mapAttendanceRecord(record: {
-  id: string;
-  timestamp: string;
-  userId: string;
-  userName: string;
-  role: string;
-  branch: string;
-  action: string;
-  module: string;
-}) {
-  return {
-    id: record.id,
-    timestamp: record.timestamp,
-    staffId: record.userId,
-    staffName: record.userName,
-    role: record.role as never,
-    branch: record.branch as never,
-    action: record.action,
-    module: record.module as never,
-  };
-}
-
 export function StaffWelcomeCard({
   businessDate,
-  onClockOutComplete,
 }: {
   businessDate?: string;
-  onClockOutComplete?: () => void | Promise<void>;
 } = {}) {
   const today = getTodayISO();
   const resolvedDate = businessDate ?? today;
@@ -64,7 +36,6 @@ export function StaffWelcomeCard({
   } = useDayClosing();
   const { currentAttendance } = useStaffAttendance(resolvedDate);
   const [now, setNow] = useState(() => new Date());
-  const [isClockingOut, setIsClockingOut] = useState(false);
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(new Date()), 30_000);
@@ -105,25 +76,6 @@ export function StaffWelcomeCard({
         ? "success"
         : "warning";
 
-  async function handleClockOut() {
-    setIsClockingOut(true);
-    try {
-      const record = await runOnApi(() =>
-        clockOutApi({ branch: activeBranch, date: resolvedDate })
-      );
-      mergeStaffAuditRecords([mapAttendanceRecord(record)]);
-
-      const authoritativeRecords = await runOnApi(() =>
-        fetchStaffAttendance(resolvedDate)
-      );
-      mergeStaffAuditRecords(authoritativeRecords.map(mapAttendanceRecord));
-
-      await onClockOutComplete?.();
-    } finally {
-      setIsClockingOut(false);
-    }
-  }
-
   return (
     <StaffCard accent="hero" hero>
       <div className="relative flex flex-col gap-8 lg:flex-row lg:items-start lg:justify-between">
@@ -133,20 +85,6 @@ export function StaffWelcomeCard({
             {getGreeting(firstName)} 👋
           </h2>
         </div>
-
-        {onShift ? (
-          <Button
-            type="button"
-            variant="secondary"
-            disabled={isClockingOut}
-            loading={isClockingOut}
-            loadingLabel="Clocking Out..."
-            onClick={() => void handleClockOut()}
-            className="relative shrink-0 rounded-2xl border-white/[0.08] bg-white/[0.04] px-5 transition-all duration-200 hover:-translate-y-0.5 hover:bg-white/[0.08] hover:shadow-[0_0_20px_-6px_rgba(255,255,255,0.2)]"
-          >
-            {isClockingOut ? "Clocking Out..." : "Clock Out"}
-          </Button>
-        ) : null}
       </div>
 
       <div className="relative mt-8 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">

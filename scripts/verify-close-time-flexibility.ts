@@ -8,7 +8,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { prisma } from "@/lib/db";
 import { getActiveOpenDayRecord } from "@/lib/day-closing/business-date";
-import { mapCloseDayError, toCloseDayFacingError } from "@/lib/ux/close-day-messages";
+import { toCloseDayFacingError } from "@/lib/ux/close-day-messages";
 import { ApiError } from "@/lib/api/errors";
 import { getBranchDayState } from "@/lib/server/services/day-closings-service";
 import type { Branch } from "@/types";
@@ -230,9 +230,9 @@ async function main() {
   recordCheck(
     3,
     "Day-closings service has no opening-hours time gate (schedule is UI-only / non-blocking)",
-    closeServiceSource.includes("getStaffOnShiftAtBranch") &&
+    !closeServiceSource.includes("getStaffOnShiftAtBranch") &&
       !closeServiceSource.includes("opening-hours"),
-    "no server clock gate"
+    "no staff-on-shift or clock gate"
   );
 
   recordCheck(
@@ -244,10 +244,11 @@ async function main() {
 
   recordCheck(
     5,
-    "Staff-on-shift check uses resolved businessDate (not raw client hint)",
-    closeServiceSource.includes("getStaffOnShiftAtBranch") &&
-      /getStaffOnShiftAtBranch\([\s\S]*businessDate/.test(closeServiceSource),
-    "businessDate passed to attendance guard"
+    "Closing flow no longer depends on staff clock-out / on-shift gate",
+    !closeServiceSource.includes("getStaffOnShiftAtBranch") &&
+      !closeServiceSource.includes("staff_on_shift") &&
+      !closeServiceSource.includes("still on shift"),
+    "staff-on-shift closing gate removed"
   );
 
   for (const slot of SIMULATED_CLOSE_HOURS) {
@@ -261,15 +262,12 @@ async function main() {
 
   recordCheck(
     10,
-    "staff_on_shift ApiError maps to server message (not connection fallback)",
-    mapCloseDayError(
-      "Cannot close the day while staff are still on shift: Pat",
-      "staff_on_shift"
-    ).includes("Pat"),
-    mapCloseDayError(
-      "Cannot close the day while staff are still on shift: Pat",
-      "staff_on_shift"
-    )
+    "Removed staff_on_shift close-day message mapping",
+    !readRepoFile("lib/ux/close-day-messages.ts").includes("staff_on_shift") &&
+      !readRepoFile("lib/ux/close-day-messages.ts").includes(
+        "staff are still on shift"
+      ),
+    "close-day-messages.ts"
   );
 
   recordCheck(

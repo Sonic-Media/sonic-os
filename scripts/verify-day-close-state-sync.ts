@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * Day Close / Clock Out state synchronization verification.
+ * Day Close state synchronization verification.
  */
 import "dotenv/config";
 import assert from "node:assert/strict";
@@ -110,26 +110,22 @@ function verifyStaticChecks(): void {
   const welcomeSource = readRepo("components/operations/staff/staff-welcome-card.tsx");
   const workspaceSource = readRepo("components/operations/staff/staff-operations-workspace.tsx");
   const branchStateSource = readRepo("hooks/use-branch-state.ts");
-  const onShiftRoute = readRepo("app/api/staff/attendance/on-shift/route.ts");
+  const closeServiceSource = readRepo("lib/server/services/day-closings-service.ts");
   const closingPanel = readRepo("components/dashboard/closing-requests/closing-requests-panel.tsx");
 
   recordCheck(
-    "Authoritative on-shift API uses getStaffOnShiftAtBranch",
-    onShiftRoute.includes("getStaffOnShiftAtBranch") &&
-      onShiftRoute.includes("getBranchIdForSession")
+    "Clock Out action removed from staff welcome card",
+    !welcomeSource.includes("Clock Out") &&
+      !welcomeSource.includes("clockOutApi") &&
+      !welcomeSource.includes("onClockOutComplete")
   );
 
   recordCheck(
-    "Clock Out re-fetches server attendance after success",
-    welcomeSource.includes("fetchStaffAttendance(resolvedDate)") &&
-      welcomeSource.includes("onClockOutComplete")
-  );
-
-  recordCheck(
-    "Staff workspace revalidates branch on-shift and clears stale close errors",
-    workspaceSource.includes("useBranchStaffOnShift") &&
-      workspaceSource.includes("handleClockOutComplete") &&
-      workspaceSource.includes("shouldClearStaffOnShiftCloseError")
+    "Closing flow no longer depends on staff clock-out state",
+    !closeServiceSource.includes("getStaffOnShiftAtBranch") &&
+      !closeServiceSource.includes("staff_on_shift") &&
+      !workspaceSource.includes("useBranchStaffOnShift") &&
+      !workspaceSource.includes("shouldClearStaffOnShiftCloseError")
   );
 
   recordCheck(
@@ -179,36 +175,18 @@ async function verifyLiveFlow(): Promise<void> {
       }),
     });
 
-    const onShiftBefore = await staffClient.json<Array<{ staffName: string }>>(
-      `/api/staff/attendance/on-shift?branch=${mainBranch}&date=${testDate}`
-    );
+    const onShiftDuringDay = await staffClient.json<
+      Array<{ staffName: string }>
+    >(`/api/staff/attendance/on-shift?branch=${mainBranch}&date=${testDate}`);
     recordCheck(
-      "On-shift API reports cashier before clock out",
-      onShiftBefore.length >= 1,
-      `count=${onShiftBefore.length}`
-    );
-
-    await staffClient.json("/api/staff/attendance", {
-      method: "POST",
-      body: JSON.stringify({
-        action: "clock-out",
-        branch: mainBranch,
-        date: testDate,
-      }),
-    });
-
-    const onShiftAfter = await staffClient.json<Array<{ staffName: string }>>(
-      `/api/staff/attendance/on-shift?branch=${mainBranch}&date=${testDate}`
-    );
-    recordCheck(
-      "On-shift API clears cashier after clock out",
-      onShiftAfter.length === 0,
-      `count=${onShiftAfter.length}`
+      "On-shift API still reports active staff during the day",
+      onShiftDuringDay.length >= 1,
+      `count=${onShiftDuringDay.length}`
     );
 
     const submitted = await submitCloseRequestApi(staffClient, mainBranch, testDate);
     recordCheck(
-      "Close request succeeds after authoritative on-shift clear",
+      "Close request succeeds without requiring clock out",
       submitted.status === "close_requested",
       submitted.status
     );
@@ -228,7 +206,7 @@ async function verifyLiveFlow(): Promise<void> {
 }
 
 async function main(): Promise<void> {
-  console.log("Day Close / Clock Out state synchronization verification\n");
+  console.log("Day Close state synchronization verification\n");
   verifyStaticChecks();
 
   try {
