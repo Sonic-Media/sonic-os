@@ -334,8 +334,11 @@ export function StaffOperationsWorkspace({
         closeRequestPending={closeRequestPending}
         dayClosed={dayClosed}
         isClosing={isClosing || isSaving}
+        isSavingMovieRevenue={isSaving}
+        movieRevenueError={saveError}
         closeError={closeFlowError}
         updateField={updateField}
+        onSaveMovieRevenue={(amount) => handleSubmitRequest({ sales: amount })}
         onCloseDay={handleCloseDay}
       />
 
