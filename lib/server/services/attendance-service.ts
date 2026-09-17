@@ -6,6 +6,7 @@ import { getTodayISO } from "@/lib/dates";
 import { prisma } from "@/lib/db";
 import {
   getActiveStaffAttendance,
+  getCurrentShopSessionStaff,
   isStaffOnShift,
 } from "@/lib/staff/attendance";
 import {
@@ -146,11 +147,33 @@ async function assertBranchDayOpen(
   }
 }
 
-export async function getStaffOnShiftAtBranch(
+async function listOpenShiftStaffForBusinessDay(
   branch: Branch,
-  date: string
+  date: string,
+  options: { requireShopSessionOpen: boolean }
 ): Promise<Array<{ staffId: string; staffName: string }>> {
   const branchId = await getBranchIdByCode(branch);
+
+  const dayClosing = await prisma.dayClosing.findUnique({
+    where: {
+      branchId_date: {
+        branchId,
+        date,
+      },
+    },
+  });
+
+  const shopSessionOpen = Boolean(
+    dayClosing &&
+      (dayClosing.status === "open" || dayClosing.status === "close_requested") &&
+      (dayClosing.openedAt || dayClosing.reopenedAt)
+  );
+
+  // Current UI/API SoT: closed shop ⇒ nobody on shift.
+  if (options.requireShopSessionOpen && !shopSessionOpen) {
+    return [];
+  }
+
   const auditRecords = await fetchBranchAttendanceAudit(branch, date);
 
   const staffRows = await prisma.staff.findMany({
@@ -166,17 +189,47 @@ export async function getStaffOnShiftAtBranch(
   });
 
   const staff = staffRows.map(mapStaffToEntity);
-  const activeOnShift = getActiveStaffAttendance(
+
+  if (!options.requireShopSessionOpen) {
+    // Closing path: end whatever attendance sessions are still open (audit SoT).
+    return getActiveStaffAttendance(staff, branch, date, auditRecords).map(
+      (status) => ({
+        staffId: status.staffId,
+        staffName: status.staffName,
+      })
+    );
+  }
+
+  const activeOnShift = getCurrentShopSessionStaff(
     staff,
     branch,
     date,
-    auditRecords
+    auditRecords,
+    true,
+    dayClosing
+      ? {
+          openedBy: dayClosing.openedBy,
+          openedByName: dayClosing.openedByName,
+          openedAt: dayClosing.openedAt?.toISOString() ?? null,
+          reopenedAt: dayClosing.reopenedAt?.toISOString() ?? null,
+          date: dayClosing.date,
+        }
+      : null
   );
 
   return activeOnShift.map((status) => ({
     staffId: status.staffId,
     staffName: status.staffName,
   }));
+}
+
+export async function getStaffOnShiftAtBranch(
+  branch: Branch,
+  date: string
+): Promise<Array<{ staffId: string; staffName: string }>> {
+  return listOpenShiftStaffForBusinessDay(branch, date, {
+    requireShopSessionOpen: true,
+  });
 }
 
 export async function createStartShiftAudit(
@@ -283,7 +336,10 @@ export async function endOpenShiftsAtBranch(
   date: string,
   tx?: Prisma.TransactionClient
 ): Promise<AuditLogRecord[]> {
-  const onShift = await getStaffOnShiftAtBranch(branch, date);
+  // Do not require shop session still open — close may have already flipped status.
+  const onShift = await listOpenShiftStaffForBusinessDay(branch, date, {
+    requireShopSessionOpen: false,
+  });
   if (onShift.length === 0) {
     return [];
   }

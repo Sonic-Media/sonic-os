@@ -732,6 +732,14 @@ export async function approveAndCloseDay(input: unknown): Promise<DayClosingReco
     createdBy: createdBy || undefined,
   });
 
+  // End open shifts while shop session is still conceptually open for this close.
+  // Never blocks the close itself.
+  try {
+    await endOpenShiftsAtBranch(branch, businessDate);
+  } catch (error) {
+    console.error("Failed to end open shifts before day close:", error);
+  }
+
   const record = await prisma.dayClosing.update({
     where: { id: existing.id },
     data: {
@@ -753,13 +761,6 @@ export async function approveAndCloseDay(input: unknown): Promise<DayClosingReco
       reopenedAt: null,
     },
   });
-
-  // Shop session ends → end open shifts. Never blocks the close itself.
-  try {
-    await endOpenShiftsAtBranch(branch, businessDate);
-  } catch (error) {
-    console.error("Failed to end open shifts after day close:", error);
-  }
 
   return mapDayClosingRecord(record);
 }

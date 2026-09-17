@@ -23,7 +23,7 @@ import { useEntriesContext } from "@/context/entries-context";
 
 function TodayOperationsContent() {
   const { activeBranch, isLoaded: branchLoaded } = useActiveBranch();
-  const { session } = useAuth();
+  const { session, isLoaded: authLoaded } = useAuth();
   const today = useTodayISO();
   const { entries, isLoaded } = useEntriesContext();
   const {
@@ -68,8 +68,8 @@ function TodayOperationsContent() {
     };
   }, [entries, activeBranch, businessDate, isLoaded]);
 
-  // Wait for authoritative shop-session state before rendering Open/Closed UI.
-  if (!isLoaded || !closingLoaded || !branchLoaded) {
+  // Wait for auth + authoritative shop-session state before Open/Closed UI.
+  if (!authLoaded || !isLoaded || !closingLoaded || !branchLoaded) {
     return <PageSkeleton />;
   }
 

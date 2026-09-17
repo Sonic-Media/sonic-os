@@ -11,6 +11,7 @@ import { getTodayISO } from "@/lib/dates";
 import {
   getCurrentShopSessionStaff,
   getStaffAttendanceStatus,
+  isShopSessionOpener,
   isStaffOnShift,
   resolveCurrentStaffAttendance,
 } from "@/lib/staff/attendance";
@@ -66,7 +67,7 @@ export function useStaffAttendance(dateISO: string = getTodayISO()) {
         activeOpenRecord.status === "close_requested")
   );
 
-  function resolveSessionDate(branch: typeof activeBranch): string | null {
+  function resolveOpenRecord(branch: typeof activeBranch) {
     if (!closingLoaded) return null;
     const record = getActiveOpenRecord(branch);
     if (
@@ -75,11 +76,11 @@ export function useStaffAttendance(dateISO: string = getTodayISO()) {
     ) {
       return null;
     }
-    return record.date;
+    return record;
   }
 
-  function isShopSessionOpenFor(branch: typeof activeBranch): boolean {
-    return resolveSessionDate(branch) !== null;
+  function resolveSessionDate(branch: typeof activeBranch): string | null {
+    return resolveOpenRecord(branch)?.date ?? null;
   }
 
   useEffect(() => {
@@ -119,7 +120,7 @@ export function useStaffAttendance(dateISO: string = getTodayISO()) {
         if (cancelled) return;
         setServerOnShiftIds(new Set(onShift.map((member) => member.staffId)));
       } catch {
-        // Attendance can still work from in-session cache if the fetch fails.
+        // Attendance can still work from shop-session + in-session cache.
       } finally {
         if (!cancelled) {
           setAttendanceLoaded(true);
@@ -138,24 +139,24 @@ export function useStaffAttendance(dateISO: string = getTodayISO()) {
   );
 
   const activeOnShift = useMemo(() => {
-    if (!shopSessionOpen) {
+    if (!shopSessionOpen || !activeOpenRecord) {
       return [];
     }
 
-    const fromAudit = getCurrentShopSessionStaff(
+    const fromSession = getCurrentShopSessionStaff(
       activeStaff,
       activeBranch,
       dateISO,
       auditRecords,
-      true
+      true,
+      activeOpenRecord
     );
 
-    if (fromAudit.length > 0 || serverOnShiftIds.size === 0) {
-      return fromAudit;
+    if (fromSession.length > 0 || serverOnShiftIds.size === 0) {
+      return fromSession;
     }
 
-    // Server on-shift is authoritative when local audit cache is incomplete
-    // (e.g. owner without personal attendance feed yet).
+    // Server on-shift is authoritative when local caches are incomplete.
     return activeStaff
       .filter((member) => serverOnShiftIds.has(member.id))
       .map((member) =>
@@ -177,6 +178,7 @@ export function useStaffAttendance(dateISO: string = getTodayISO()) {
       );
   }, [
     activeBranch,
+    activeOpenRecord,
     activeStaff,
     auditRecords,
     dateISO,
@@ -190,24 +192,38 @@ export function useStaffAttendance(dateISO: string = getTodayISO()) {
       dateISO,
       auditRecords
     );
+
+    const member =
+      (session?.staffId
+        ? activeStaff.find((item) => item.id === session.staffId)
+        : undefined) ?? null;
+
+    const isOpener =
+      shopSessionOpen &&
+      Boolean(
+        activeOpenRecord &&
+          ((session?.userId &&
+            (activeOpenRecord.openedBy === session.userId ||
+              activeOpenRecord.openedBy === session.staffId)) ||
+            (member && isShopSessionOpener(member, activeOpenRecord)))
+      );
+
     if (!status) {
       if (
         shopSessionOpen &&
-        session?.staffId &&
-        serverOnShiftIds.has(session.staffId)
+        (isOpener ||
+          (session?.staffId && serverOnShiftIds.has(session.staffId))) &&
+        member
       ) {
-        const member = activeStaff.find((item) => item.id === session.staffId);
-        if (member) {
-          return {
-            ...getStaffAttendanceStatus(
-              member,
-              dateISO,
-              auditRecords,
-              activeBranch
-            ),
-            presence: "on-shift" as const,
-          };
-        }
+        return {
+          ...getStaffAttendanceStatus(
+            member,
+            dateISO,
+            auditRecords,
+            activeBranch
+          ),
+          presence: "on-shift" as const,
+        };
       }
       return null;
     }
@@ -218,8 +234,8 @@ export function useStaffAttendance(dateISO: string = getTodayISO()) {
 
     if (
       status.presence === "off-shift" &&
-      session?.staffId &&
-      serverOnShiftIds.has(session.staffId)
+      (isOpener ||
+        (session?.staffId && serverOnShiftIds.has(session.staffId)))
     ) {
       return { ...status, presence: "on-shift" as const };
     }
@@ -227,11 +243,13 @@ export function useStaffAttendance(dateISO: string = getTodayISO()) {
     return status;
   }, [
     activeBranch,
+    activeOpenRecord,
     activeStaff,
     auditRecords,
     dateISO,
     serverOnShiftIds,
     session?.staffId,
+    session?.userId,
     shopSessionOpen,
   ]);
 
@@ -241,21 +259,23 @@ export function useStaffAttendance(dateISO: string = getTodayISO()) {
   ): StaffAttendanceStatus | undefined {
     const member = activeStaff.find((item) => item.id === staffId);
     if (!member) return undefined;
-    const sessionDate = resolveSessionDate(branch) ?? dateISO;
+    const openRecord = resolveOpenRecord(branch);
+    const sessionDate = openRecord?.date ?? dateISO;
     const status = getStaffAttendanceStatus(
       member,
       sessionDate,
       auditRecords,
       branch
     );
-    if (!isShopSessionOpenFor(branch)) {
+    if (!openRecord) {
       return { ...status, presence: "off-shift" };
     }
     if (
       status.presence === "off-shift" &&
-      serverOnShiftIds.has(staffId) &&
-      branch === activeBranch &&
-      sessionDate === dateISO
+      (isShopSessionOpener(member, openRecord) ||
+        (serverOnShiftIds.has(staffId) &&
+          branch === activeBranch &&
+          sessionDate === dateISO))
     ) {
       return { ...status, presence: "on-shift" };
     }
@@ -263,8 +283,11 @@ export function useStaffAttendance(dateISO: string = getTodayISO()) {
   }
 
   function checkStaffOnShift(staffId: string, branch = activeBranch): boolean {
-    const sessionDate = resolveSessionDate(branch);
-    if (!sessionDate) return false;
+    const openRecord = resolveOpenRecord(branch);
+    if (!openRecord) return false;
+    const sessionDate = openRecord.date;
+    const member = activeStaff.find((item) => item.id === staffId);
+    if (member && isShopSessionOpener(member, openRecord)) return true;
     if (isStaffOnShift(staffId, branch, sessionDate, auditRecords)) return true;
     return (
       branch === activeBranch &&

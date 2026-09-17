@@ -22,6 +22,12 @@ import {
   loginWithCredentials,
   VERIFY_OWNER_CREDENTIALS,
 } from "./verify-session";
+import {
+  getCurrentShopSessionStaff,
+  resolveShopSessionOpener,
+} from "@/lib/staff/attendance";
+import type { Staff } from "@/types";
+import type { StaffAuditRecord } from "@/types/staff-audit";
 
 loadEnvFiles();
 
@@ -41,6 +47,66 @@ function readRepo(relativePath: string): string {
 function recordCheck(label: string, pass: boolean, detail = "") {
   assert.ok(pass, detail ? `${label}: ${detail}` : label);
   console.log(`PASS ${label}${detail ? ` — ${detail}` : ""}`);
+}
+
+function verifyShopSessionOpenerUnit() {
+  const staff = [
+    {
+      id: "staff-tony",
+      name: "Tony",
+      branch: "main",
+      role: "cashier",
+      status: "active",
+      active: true,
+      loginEnabled: true,
+      userId: "user-tony",
+      dateJoined: TODAY,
+    },
+  ] as Staff[];
+
+  const opener = resolveShopSessionOpener(staff, {
+    openedBy: "user-tony",
+    openedByName: "Tony",
+  });
+  recordCheck(
+    "Unit: resolveShopSessionOpener matches openedBy userId",
+    opener?.id === "staff-tony"
+  );
+
+  const onShift = getCurrentShopSessionStaff(
+    staff,
+    "main",
+    TODAY,
+    [] as StaffAuditRecord[],
+    true,
+    {
+      openedBy: "user-tony",
+      openedByName: "Tony",
+      openedAt: `${TODAY}T08:00:00.000Z`,
+      date: TODAY,
+    }
+  );
+  recordCheck(
+    "Unit: open shop session includes opener even without attendance audit cache",
+    onShift.length === 1 && onShift[0]?.staffId === "staff-tony"
+  );
+
+  const closed = getCurrentShopSessionStaff(
+    staff,
+    "main",
+    TODAY,
+    [] as StaffAuditRecord[],
+    false,
+    {
+      openedBy: "user-tony",
+      openedByName: "Tony",
+      date: TODAY,
+    }
+  );
+  recordCheck(
+    "Unit: closed shop session yields zero on-shift staff",
+    closed.length === 0
+  );
 }
 
 class ApiClient {
@@ -124,7 +190,8 @@ function verifyStaticGuards() {
     "Today page has no Clock In gate",
     !todayPage.includes("showClockInGate") &&
       !todayPage.includes('mode="clock-in"') &&
-      todayPage.includes("closingLoaded")
+      todayPage.includes("closingLoaded") &&
+      todayPage.includes("authLoaded")
   );
 
   recordCheck(
@@ -141,9 +208,10 @@ function verifyStaticGuards() {
   );
 
   recordCheck(
-    "Start Shift stamps business-date recordId",
-    attendanceSvc.includes("recordId: parsed.date") &&
-      attendanceSvc.includes("END_SHIFT")
+    "On-shift API and helpers gate current shift on open shop session",
+    attendanceSvc.includes("requireShopSessionOpen") &&
+      attendanceSvc.includes("getCurrentShopSessionStaff") &&
+      readRepo("lib/staff/attendance.ts").includes("resolveShopSessionOpener")
   );
 
   recordCheck(
@@ -336,6 +404,7 @@ async function verifyLiveScenarios() {
 
 async function main() {
   console.log("Shop-session shift source-of-truth verification\n");
+  verifyShopSessionOpenerUnit();
   verifyStaticGuards();
   await verifyLiveScenarios();
   console.log("\nPASS shop-session shift verification");

@@ -43,16 +43,15 @@ export function computeBranchOperationsSnapshot(
       : "waiting";
 
   const shopSessionOpen = Boolean(openRecord || closeRequested);
+  const sessionRecord = openRecord ?? closeRequested ?? null;
 
   return {
     branch,
     status,
-    openedByName: openRecord?.openedByName ?? closeRequested?.openedByName ?? null,
+    openedByName: sessionRecord?.openedByName ?? null,
     openedAt:
-      openRecord?.openedAt ??
-      openRecord?.reopenedAt ??
-      closeRequested?.openedAt ??
-      closeRequested?.reopenedAt ??
+      sessionRecord?.openedAt ??
+      sessionRecord?.reopenedAt ??
       null,
     closedByName: closedRecord?.closedByName ?? null,
     closedAt: closedRecord?.closedAt ?? null,
@@ -61,7 +60,8 @@ export function computeBranchOperationsSnapshot(
       branch,
       dateISO,
       auditRecords,
-      shopSessionOpen
+      shopSessionOpen,
+      sessionRecord
     ),
   };
 }
