@@ -1,5 +1,6 @@
 import { branchCodesReferToSameInventory } from "@/lib/branch/codes";
 import { getTodayISO } from "@/lib/dates";
+import { getServiceSalesTotalFromNotes } from "@/lib/staff-home/revenue";
 import type { BranchEntity, BranchDashboardMetrics } from "@/types/branch";
 import type { Entry } from "@/types";
 import type { Purchase } from "@/types/purchasing";
@@ -37,7 +38,11 @@ export function computeTodayRevenueByBranch(
         (entry.status === "completed" || entry.status === "draft") &&
         branchCodesReferToSameInventory(entry.branch, branch.code)
     )
-    .reduce((sum, entry) => sum + entry.sales, 0);
+    .reduce(
+      (sum, entry) =>
+        sum + entry.sales + getServiceSalesTotalFromNotes(entry.notes),
+      0
+    );
 
   return moduleRevenue + entryRevenue;
 }

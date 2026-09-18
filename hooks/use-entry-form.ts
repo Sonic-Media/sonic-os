@@ -43,6 +43,7 @@ import {
   shouldApplySaveResult,
   trackInFlightSave,
 } from "@/lib/entry-form/save-coordination";
+import { getServiceSalesTotalFromNotes } from "@/lib/staff-home/revenue";
 import {
   computeStaffPayoutTotalForBranchDate,
   computeStaffPayoutTotalForStaffBranchDate,
@@ -133,6 +134,10 @@ export function useEntryForm(options: UseEntryFormOptions = {}) {
         .reduce((sum, sale) => sum + sale.total, 0),
     [sales, form.branch, form.date]
   );
+  const serviceSalesTotal = useMemo(
+    () => getServiceSalesTotalFromNotes(form.notes),
+    [form.notes]
+  );
   const savingsAllocation = parseAmount(form.savingsAllocation);
   const totalExpenses = calculateExpenses(form);
   const staffPayouts = useMemo(() => {
@@ -151,7 +156,8 @@ export function useEntryForm(options: UseEntryFormOptions = {}) {
       form.date
     );
   }, [options.scopedStaffId, payments, form.branch, form.date]);
-  const balance = movieRevenue + accessorySales - totalExpenses - staffPayouts;
+  const balance =
+    movieRevenue + accessorySales + serviceSalesTotal - totalExpenses - staffPayouts;
   const remainingCash = balance - savingsAllocation;
   const mode = options.mode ?? "today";
   const status = isEdit ? options.entry!.status : "draft";
@@ -576,6 +582,7 @@ export function useEntryForm(options: UseEntryFormOptions = {}) {
     sales: movieRevenue,
     movieRevenue,
     accessorySales,
+    serviceSalesTotal,
     totalExpenses,
     staffPayouts,
     balance,

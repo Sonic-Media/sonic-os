@@ -125,52 +125,50 @@ function buildDailyOperationPayload(options: {
 function runStaticRegressionGuard(): void {
   console.log("\nStatic regression guard (must fail if Staff Today input is removed)\n");
 
-  const movieCard = readRepo("components/operations/staff/staff-movie-revenue-card.tsx");
-  const revenueSummary = readRepo("components/operations/staff/staff-revenue-card.tsx");
+  const movieDialog = readRepo("components/staff-home/movie-revenue-dialog.tsx");
+  const staffHome = readRepo("components/staff-home/staff-home-dashboard.tsx");
+  const revenueSummary = readRepo("components/staff-home/revenue-summary.tsx");
   const workspace = readRepo("components/operations/staff/staff-operations-workspace.tsx");
   const cashSummary = readRepo("components/operations/staff/staff-cash-summary-card.tsx");
   const eodCard = readRepo("components/operations/staff/staff-end-of-day-card.tsx");
   const entryForm = readRepo("hooks/use-entry-form.ts");
   const openShop = readRepo("components/operations/open-shop-page.tsx");
-
-  const welcomeIdx = workspace.indexOf("<StaffWelcomeCard");
-  const movieIdx = workspace.indexOf("<StaffMovieRevenueCard");
-  const revenueIdx = workspace.indexOf("<StaffRevenueCard");
+  const serviceConfig = readRepo("lib/staff-home/services.ts");
 
   recordCheck(
     1,
-    "REGRESSION GUARD: Staff Today renders Movie Revenue input/action near top",
-    movieCard.includes('data-regression-guard="staff-today-movie-revenue-input"') &&
-      movieCard.includes('data-regression-guard="staff-today-movie-revenue-action"') &&
-      movieCard.includes('aria-label="Movie revenue amount"') &&
-      movieCard.includes("Enter Movie Revenue") &&
-      movieCard.includes("Update Movie Revenue") &&
-      movieCard.includes("Save Movie Revenue"),
-    "editable flow + primary action required at top of Today"
+    "REGRESSION GUARD: Staff Today renders Movie Revenue input/action",
+    movieDialog.includes('data-regression-guard="staff-today-movie-revenue-input"') &&
+      movieDialog.includes('data-regression-guard="staff-today-movie-revenue-action"') &&
+      movieDialog.includes('aria-label="Movie revenue amount"') &&
+      movieDialog.includes("Enter Movie Revenue") &&
+      movieDialog.includes("Update Movie Revenue") &&
+      movieDialog.includes("Save Movie Revenue"),
+    "editable flow + primary action required on Staff Home"
   );
 
   recordCheck(
     2,
-    "Staff Today layout: Movie Revenue card after header, before Today's Revenue",
-    welcomeIdx >= 0 &&
-      movieIdx > welcomeIdx &&
-      revenueIdx > movieIdx &&
-      workspace.includes("StaffMovieRevenueCard"),
-    `welcome=${welcomeIdx}, movie=${movieIdx}, revenue=${revenueIdx}`
+    "Staff Today layout: Movies service card opens movie revenue dialog",
+    workspace.includes("<StaffHomeDashboard") &&
+      staffHome.includes("MovieRevenueDialog") &&
+      serviceConfig.includes('id: "movies"') &&
+      staffHome.includes('case "movie-revenue"'),
+    "Staff Home dashboard owns movie revenue entry"
   );
 
   recordCheck(
     3,
-    "Staff can open Movie Revenue entry flow (editor toggle + save handler)",
-    movieCard.includes("setEditing(true)") &&
-      movieCard.includes("onSaveMovieRevenue") &&
+    "Staff can open Movie Revenue entry flow (dialog + save handler)",
+    staffHome.includes("setMovieDialogOpen(true)") &&
+      staffHome.includes("onSaveMovieRevenue") &&
       workspace.includes("onSaveMovieRevenue={(amount) => handleSubmitRequest({ sales: amount })}")
   );
 
   recordCheck(
     4,
     "Movie Revenue accepts UGX 0",
-    movieCard.includes("allowZero: true") && parseAmount("0") === 0
+    movieDialog.includes("allowZero: true") && parseAmount("0") === 0
   );
 
   recordCheck(
@@ -186,8 +184,9 @@ function runStaticRegressionGuard(): void {
 
   recordCheck(
     6,
-    "Today's Revenue summary reflects movieRevenue prop (not a second save path)",
-    revenueSummary.includes("movieRevenue") &&
+    "Today's Revenue summary reflects movie revenue (not a second save path)",
+    revenueSummary.includes("Today") &&
+      revenueSummary.includes('key: "movies"') &&
       !revenueSummary.includes('aria-label="Movie revenue amount"') &&
       workspace.includes("movieRevenue={movieRevenue}")
   );
@@ -196,14 +195,14 @@ function runStaticRegressionGuard(): void {
     7,
     "Cash Summary displays Movie Revenue in net cash math",
     cashSummary.includes('label="Movie Revenue"') &&
-      workspace.includes("movieRevenue + accessorySales - totalExpenses")
+      workspace.includes("movieRevenue + accessorySales + serviceSalesTotal")
   );
 
   recordCheck(
     8,
-    "Movie revenue scoped to entry form branch/date (no duplicate card save API)",
-    movieCard.includes("form: EntryFormData") &&
-      !movieCard.includes("/api/") &&
+    "Movie Revenue scoped to entry form branch/date (no duplicate card save API)",
+    movieDialog.includes("currentAmount") &&
+      !movieDialog.includes("/api/") &&
       entryForm.includes("effectiveForm.branch")
   );
 
@@ -225,17 +224,18 @@ function runStaticRegressionGuard(): void {
 
   recordCheck(
     11,
-    "Display-only Today's Revenue cannot replace the editable Movie Revenue card",
-    revenueSummary.includes("Pending") &&
-      movieCard.includes('data-regression-guard="staff-today-movie-revenue-section"') &&
+    "Editable Movie Revenue dialog cannot be replaced by display-only summary",
+    movieDialog.includes('data-regression-guard="staff-today-movie-revenue-section"') &&
+      revenueSummary.includes("Total Revenue") &&
       resolveInventoryBranchCode(SALAAMA_BRANCH_CODE) === SALAAMA_BRANCH_CODE
   );
 
   recordCheck(
     12,
-    "Future refactor guard: StaffMovieRevenueCard wired in workspace (not orphaned component)",
-    workspace.includes('from "@/components/operations/staff/staff-movie-revenue-card"') &&
-      workspace.includes("<StaffMovieRevenueCard")
+    "Future refactor guard: Movie revenue dialog wired in Staff Home (not orphaned)",
+    workspace.includes('from "@/components/staff-home/staff-home-dashboard"') &&
+      staffHome.includes('from "@/components/staff-home/movie-revenue-dialog"') &&
+      staffHome.includes("<MovieRevenueDialog")
   );
 }
 
