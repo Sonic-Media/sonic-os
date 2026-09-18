@@ -1,8 +1,7 @@
 "use client";
 
-import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useMemo } from "react";
 import { DayClosedBanner } from "@/components/operations/day-closed-banner";
-import { OpenShopPage } from "@/components/operations/open-shop-page";
 import { OperationsReadOnlyView } from "@/components/operations/operations-read-only-view";
 import { OperationsSubnav } from "@/components/operations/operations-subnav";
 import { StaffDayClosedView } from "@/components/operations/staff/staff-day-closed-view";
@@ -33,16 +32,11 @@ function TodayOperationsContent() {
     getActiveOpenRecord,
     isLoaded: closingLoaded,
   } = useDayClosing();
-  const [shiftGateCleared, setShiftGateCleared] = useState(false);
 
   const isOwner = session?.role === "owner";
 
-  useEffect(() => {
-    setShiftGateCleared(false);
-  }, [activeBranch, today]);
-
-  const handleShiftGateComplete = useCallback(async () => {
-    setShiftGateCleared(true);
+  const handleOpenShopComplete = useCallback(async () => {
+    // Shop open refreshes day-closing state; workspace updates from context.
   }, []);
 
   const activeOpenRecord = getActiveOpenRecord(activeBranch);
@@ -79,7 +73,6 @@ function TodayOperationsContent() {
     !hasActiveBusinessDay && isBranchDayClosed(activeBranch, today);
   const shopNeedsOpening =
     !hasActiveBusinessDay && needsShopOpening(activeBranch, today);
-  const showStartShiftGate = shopNeedsOpening && !shiftGateCleared;
 
   if (isOwner) {
     return (
@@ -123,22 +116,16 @@ function TodayOperationsContent() {
 
   if (isDayClosed) {
     return (
-      <PageContainer className="lg:max-w-5xl">
+      <PageContainer className="lg:max-w-6xl">
         <StaffDayClosedView branch={activeBranch} date={businessDate} />
       </PageContainer>
     );
   }
 
-  if (showStartShiftGate) {
-    return (
-      <PageContainer className="lg:max-w-5xl">
-        <OpenShopPage mode="start-shift" onComplete={handleShiftGateComplete} />
-      </PageContainer>
-    );
-  }
-
+  // Staff home covers closed (Open Shop) and open states. Opening the shop
+  // starts the shift automatically — there is no separate clock-in.
   return (
-    <PageContainer className="lg:max-w-5xl">
+    <PageContainer className="lg:max-w-6xl">
       <StaffOperationsWorkspace
         branch={activeBranch}
         entry={activeEntry}
@@ -146,6 +133,7 @@ function TodayOperationsContent() {
         activeBusinessDayStatus={
           hasActiveBusinessDay ? activeOpenRecord!.status : undefined
         }
+        onOpenShopComplete={handleOpenShopComplete}
       />
     </PageContainer>
   );

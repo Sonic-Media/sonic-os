@@ -1,17 +1,12 @@
 "use client";
 
-import { useMemo, useState, useCallback } from "react";
+import { useMemo, useState, useCallback, useRef } from "react";
 import { DuplicateEntryDialog } from "@/components/entry/duplicate-entry-dialog";
 import { StaffDailyWageCard } from "@/components/operations/staff/staff-daily-wage-card";
 import { StaffEndOfDayCard } from "@/components/operations/staff/staff-end-of-day-card";
 import { StaffExpensesCard } from "@/components/operations/staff/staff-expenses-card";
-import { StaffRecentTransactionsCard } from "@/components/operations/staff/staff-recent-transactions-card";
-import { StaffMovieRevenueCard } from "@/components/operations/staff/staff-movie-revenue-card";
-import { StaffRevenueCard } from "@/components/operations/staff/staff-revenue-card";
-import { StaffTodayActivityCard } from "@/components/operations/staff/staff-today-activity-card";
-import { StaffActiveBusinessDayBanner } from "@/components/operations/staff/staff-active-business-day-banner";
-import { StaffWelcomeCard } from "@/components/operations/staff/staff-welcome-card";
 import { StaffCashSummaryCard } from "@/components/operations/staff/staff-cash-summary-card";
+import { StaffHomeDashboard } from "@/components/staff-home/staff-home-dashboard";
 import { useToast } from "@/context/toast-context";
 import { useEntryForm } from "@/hooks/use-entry-form";
 import { useLinkedStaff } from "@/hooks/use-linked-staff";
@@ -22,14 +17,12 @@ import {
   computeStaffPayoutTotalForStaffBranchDate,
   findStaffDailyWagePayment,
 } from "@/lib/staff-payments/calculations";
-import { useSales } from "@/context/sales-context";
+import { useDayClosing } from "@/context/day-closing-context";
 import { useActiveBranch } from "@/context/active-branch-context";
 import { useBranches } from "@/context/branches-context";
-import { filterByBranchField } from "@/lib/active-branch/filters";
 import { parseAmount } from "@/lib/amounts";
 import { isPayrollEntryExpense } from "@/lib/expenses";
 import { mapCloseDayError } from "@/lib/ux/close-day-messages";
-import { getTodayISO } from "@/lib/dates";
 import { uiSpacing } from "@/lib/ui/design-tokens";
 import { cn } from "@/lib/utils";
 import type { Branch, Entry } from "@/types";
@@ -42,6 +35,7 @@ interface StaffOperationsWorkspaceProps {
   entry?: Entry;
   businessDate?: string;
   activeBusinessDayStatus?: DayClosingStatus;
+  onOpenShopComplete?: () => void | Promise<void>;
 }
 
 function resolveInitialSection({
@@ -61,26 +55,25 @@ export function StaffOperationsWorkspace({
   entry,
   businessDate: businessDateProp,
   activeBusinessDayStatus,
+  onOpenShopComplete,
 }: StaffOperationsWorkspaceProps) {
-  const calendarDate = getTodayISO();
-  const { sales } = useSales();
   const { activeBranch } = useActiveBranch();
   const { getBranchName } = useBranches();
   const { payments } = useStaffPaymentsModule();
   const { linkedStaff } = useLinkedStaff(branch);
+  const { getOpenRecord, getActiveOpenRecord } = useDayClosing();
   const { success: toastSuccess } = useToast();
   const [closeFlowError, setCloseFlowError] = useState<string | null>(null);
+  const closeSectionRef = useRef<HTMLDivElement | null>(null);
 
   const {
     form,
     isSaving,
-    saveError,
     movieRevenue,
     accessorySales,
+    serviceSalesTotal,
     totalExpenses,
     staffPayouts,
-    balance,
-    remainingCash,
     duplicateEntry,
     updateField,
     handleSubmitRequest,
@@ -107,19 +100,14 @@ export function StaffOperationsWorkspace({
   } = useStaffCloseDay(businessDateProp ?? form.date);
 
   const resolvedBusinessDate = businessDateProp ?? businessDate;
+  const openRecord =
+    getOpenRecord(activeBranch, resolvedBusinessDate) ??
+    getActiveOpenRecord(activeBranch);
 
   const { refreshAll: refreshStaffOperations } = useStaffOperationsRefresh({
     closeRequestPending,
     watchForClose: closeRequestPending || Boolean(activeBusinessDayStatus),
   });
-
-  const accessorySalesCount = useMemo(
-    () =>
-      filterByBranchField(sales, activeBranch).filter(
-        (sale) => sale.date === form.date && sale.status === "completed"
-      ).length,
-    [sales, activeBranch, form.date]
-  );
 
   const expenseCount = useMemo(
     () =>
@@ -172,7 +160,6 @@ export function StaffOperationsWorkspace({
     })
   );
 
-  const moviesSold = movieRevenue > 0 ? 1 : 0;
   const movieTransactionMeta = useMemo(() => {
     if (movieRevenue <= 0) {
       return { time: undefined, sortKey: 0 };
@@ -223,111 +210,108 @@ export function StaffOperationsWorkspace({
     toastSuccess,
   ]);
 
+  const handleRequestCloseShop = useCallback(() => {
+    expandSection("end-of-day");
+    window.setTimeout(() => {
+      closeSectionRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    }, 50);
+  }, []);
+
+  const totalSalesRevenue = movieRevenue + accessorySales + serviceSalesTotal;
+
   return (
-    <div className={cn("mx-auto max-w-3xl", uiSpacing.page, uiSpacing.section)}>
-      {activeBusinessDayStatus ? (
-        <StaffActiveBusinessDayBanner
-          businessDate={resolvedBusinessDate}
-          calendarDate={calendarDate}
-          status={
-            activeBusinessDayStatus === "close_requested"
-              ? "close_requested"
-              : "open"
-          }
-        />
-      ) : null}
-
-      <StaffWelcomeCard businessDate={resolvedBusinessDate} />
-
-      <StaffMovieRevenueCard
+    <div className={cn("mx-auto max-w-6xl", uiSpacing.page, uiSpacing.section)}>
+      <StaffHomeDashboard
+        branch={branch}
         form={form}
-        movieRevenue={movieRevenue}
-        shopOpen={shopOpen}
-        dayClosed={dayClosed}
-        closeRequestPending={closeRequestPending}
-        isSaving={isSaving}
-        saveError={saveError}
-        onSaveMovieRevenue={(amount) => handleSubmitRequest({ sales: amount })}
-      />
-
-      <StaffRevenueCard
-        movieRevenue={movieRevenue}
-        accessorySales={accessorySales}
-      />
-
-      <StaffTodayActivityCard
-        moviesSold={moviesSold}
-        accessoriesSold={accessorySalesCount}
-        date={form.date}
-        onSaleComplete={() => {
-          if (expenseCount === 0) {
-            expandSection("expenses");
-          }
-        }}
-      />
-
-      <StaffRecentTransactionsCard
-        date={form.date}
         movieRevenue={movieRevenue}
         movieTime={movieTransactionMeta.time}
         movieSortKey={movieTransactionMeta.sortKey}
-      />
-
-      <StaffExpensesCard
-        form={form}
-        seedCommonExpenses={seedCommonExpenses}
-        updateField={updateField}
-        expanded={expandedSection === "expenses"}
-        onExpandedChange={(open) => expandSection(open ? "expenses" : null)}
-      />
-
-      <StaffDailyWageCard
-        branch={form.branch}
-        date={form.date}
-        expanded={expandedSection === "daily-wage"}
-        onExpandedChange={(open) => expandSection(open ? "daily-wage" : null)}
-        onRecorded={() => {
-          expandSection("end-of-day");
-          void refreshStaffOperations();
-        }}
-      />
-
-      <StaffCashSummaryCard
-        movieRevenue={movieRevenue}
-        accessorySales={accessorySales}
-        totalExpenses={totalExpenses}
-        staffPayouts={displayedStaffPayouts}
-        netCash={
-          movieRevenue + accessorySales - totalExpenses - displayedStaffPayouts
-        }
-        savingsAllocation={parseAmount(form.savingsAllocation)}
-        collapsible={false}
-      />
-
-      <StaffEndOfDayCard
-        form={form}
-        branchName={getBranchName(form.branch)}
-        businessDate={businessDate}
-        movieRevenue={movieRevenue}
-        accessorySales={accessorySales}
-        totalExpenses={totalExpenses}
-        staffPayouts={displayedStaffPayouts}
-        cashToHandIn={
-          movieRevenue +
-          accessorySales -
-          totalExpenses -
-          displayedStaffPayouts -
-          parseAmount(form.savingsAllocation)
-        }
-        wageRecorded={wageRecorded}
         shopOpen={shopOpen}
-        closeRequestPending={closeRequestPending}
         dayClosed={dayClosed}
-        isClosing={isClosing || isSaving}
+        closeRequestPending={closeRequestPending}
+        activeBusinessDayStatus={activeBusinessDayStatus}
+        openRecord={openRecord}
+        isSaving={isSaving}
+        isClosing={isClosing}
         closeError={closeFlowError}
-        updateField={updateField}
-        onCloseDay={handleCloseDay}
+        onSaveMovieRevenue={(amount) => handleSubmitRequest({ sales: amount })}
+        onPersistNotes={(notes) => handleSubmitRequest({ notes })}
+        onCloseShop={handleRequestCloseShop}
+        onAddExpense={() => {
+          expandSection("expenses");
+          window.setTimeout(() => {
+            document
+              .getElementById("staff-home-operations")
+              ?.scrollIntoView({ behavior: "smooth", block: "start" });
+          }, 50);
+        }}
+        onOpenShopComplete={onOpenShopComplete}
       />
+
+      <div id="staff-home-operations" className="space-y-6 pt-2">
+        <StaffExpensesCard
+          form={form}
+          seedCommonExpenses={seedCommonExpenses}
+          updateField={updateField}
+          expanded={expandedSection === "expenses"}
+          onExpandedChange={(open) => expandSection(open ? "expenses" : null)}
+        />
+
+        <StaffDailyWageCard
+          branch={form.branch}
+          date={form.date}
+          expanded={expandedSection === "daily-wage"}
+          onExpandedChange={(open) =>
+            expandSection(open ? "daily-wage" : null)
+          }
+          onRecorded={() => {
+            expandSection("end-of-day");
+            void refreshStaffOperations();
+          }}
+        />
+
+        <StaffCashSummaryCard
+          movieRevenue={movieRevenue}
+          accessorySales={accessorySales + serviceSalesTotal}
+          totalExpenses={totalExpenses}
+          staffPayouts={displayedStaffPayouts}
+          netCash={
+            totalSalesRevenue - totalExpenses - displayedStaffPayouts
+          }
+          savingsAllocation={parseAmount(form.savingsAllocation)}
+          collapsible={false}
+        />
+
+        <div ref={closeSectionRef}>
+          <StaffEndOfDayCard
+            form={form}
+            branchName={getBranchName(form.branch)}
+            businessDate={businessDate}
+            movieRevenue={movieRevenue}
+            accessorySales={accessorySales + serviceSalesTotal}
+            totalExpenses={totalExpenses}
+            staffPayouts={displayedStaffPayouts}
+            cashToHandIn={
+              totalSalesRevenue -
+              totalExpenses -
+              displayedStaffPayouts -
+              parseAmount(form.savingsAllocation)
+            }
+            wageRecorded={wageRecorded}
+            shopOpen={shopOpen}
+            closeRequestPending={closeRequestPending}
+            dayClosed={dayClosed}
+            isClosing={isClosing || isSaving}
+            closeError={closeFlowError}
+            updateField={updateField}
+            onCloseDay={handleCloseDay}
+          />
+        </div>
+      </div>
 
       {duplicateEntry ? (
         <DuplicateEntryDialog
