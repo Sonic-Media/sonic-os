@@ -213,7 +213,11 @@ export function StaffHomeDashboard({
       }
 
       toastSuccess("Shop Opened");
-      await refreshClosings();
+      try {
+        await refreshClosings();
+      } catch {
+        // Shop is already open; refresh is best-effort.
+      }
       if (onOpenShopComplete) {
         await onOpenShopComplete();
       }
@@ -338,6 +342,11 @@ export function StaffHomeDashboard({
             ) : null}
           </section>
 
+          <div className="space-y-4 xl:hidden">
+            <RevenueSummary revenue={revenue} />
+            <ActivityFeed items={activity} viewAllHref="/sales" />
+          </div>
+
           <QuickActions
             onAddExpense={onAddExpense}
             showStock={Boolean(
@@ -363,11 +372,6 @@ export function StaffHomeDashboard({
           <RevenueSummary revenue={revenue} />
           <ActivityFeed items={activity} viewAllHref="/sales" />
         </aside>
-
-        <div className="space-y-4 xl:hidden">
-          <RevenueSummary revenue={revenue} />
-          <ActivityFeed items={activity} viewAllHref="/sales" />
-        </div>
       </div>
 
       <MovieRevenueDialog

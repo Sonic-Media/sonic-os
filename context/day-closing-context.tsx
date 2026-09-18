@@ -343,7 +343,11 @@ export function DayClosingProvider({ children }: { children: React.ReactNode }) 
           },
         ]);
 
-        await refreshEntries();
+        try {
+          await refreshEntries();
+        } catch {
+          // Shop open already succeeded; entry refresh is best-effort.
+        }
 
         return createValidationResult({}, saved.dayClosing);
       } catch (error) {
