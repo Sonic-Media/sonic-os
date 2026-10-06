@@ -103,7 +103,7 @@ export function OwnerFinancialDetail() {
   const { session } = useAuth();
   const { activeBranch } = useActiveBranch();
   const { isBranchDayClosed } = useDayClosing();
-  const date = getTodayISO();
+  const [date, setDate] = useState(getTodayISO);
   const isOwner = session?.role === "owner";
   const closed = isBranchDayClosed(activeBranch, date);
 
@@ -127,10 +127,8 @@ export function OwnerFinancialDetail() {
   }, [activeBranch, date, isOwner]);
 
   useEffect(() => {
-    if (open) {
-      void load();
-    }
-  }, [load, open]);
+    void load();
+  }, [load]);
 
   if (!isOwner) return null;
 
@@ -169,9 +167,17 @@ export function OwnerFinancialDetail() {
             Totals first. Drill into income, expenditure, and staff attribution.
           </p>
         </div>
-        <Button type="button" variant="secondary" onClick={() => setOpen((value) => !value)}>
-          {open ? "Hide detail" : "Inspect totals"}
-        </Button>
+        <div className="flex flex-col gap-2 sm:items-end">
+          <Input
+            type="date"
+            label="Business date"
+            value={date}
+            onChange={(event) => setDate(event.target.value)}
+          />
+          <Button type="button" variant="secondary" onClick={() => setOpen((value) => !value)}>
+            {open ? "Hide detail" : "Inspect totals"}
+          </Button>
+        </div>
       </div>
 
       {detail ? (
