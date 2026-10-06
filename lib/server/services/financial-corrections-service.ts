@@ -278,6 +278,38 @@ export async function correctClosedDayExpenditure(
       },
     });
 
+    const branchRow = await tx.branch.findFirst({
+      where: { code: branchCode },
+      select: { id: true },
+    });
+    if (branchRow) {
+      const operatingTotal = await tx.expenseRecord.aggregate({
+        where: {
+          branchId: branchRow.id,
+          date: businessDate,
+          staffPaymentId: null,
+          deletedAt: null,
+          NOT: { categoryId: "staff-payment" },
+        },
+        _sum: { amount: true },
+      });
+      const operation = await tx.dailyOperation.findUnique({
+        where: {
+          branchId_date: { branchId: branchRow.id, date: businessDate },
+        },
+        include: { expenses: true },
+      });
+      const summaryLine = operation?.expenses.find(
+        (line) => line.name.trim().toLowerCase() === "operating expenses"
+      );
+      if (summaryLine && operatingTotal._sum.amount !== null) {
+        await tx.dailyOperationExpense.update({
+          where: { id: summaryLine.id },
+          data: { amount: operatingTotal._sum.amount },
+        });
+      }
+    }
+
     const created = await tx.financialCorrection.create({
       data: {
         kind: "expense_correction",

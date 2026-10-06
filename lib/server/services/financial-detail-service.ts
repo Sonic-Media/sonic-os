@@ -104,36 +104,31 @@ export async function getFinancialDetail(input: {
   }
 
   const expenditureLines: FinancialDetailLine[] = [];
-  const expenseRecordKeys = new Set<string>();
+  const operatingExpenseRecords = expenses.filter(
+    (expense) =>
+      !expense.staffPaymentId && !isStaffPaymentCategory(expense.categoryId)
+  );
 
-  for (const expense of expenses) {
-    if (expense.staffPaymentId || isStaffPaymentCategory(expense.categoryId)) {
-      continue;
+  if (operatingExpenseRecords.length > 0) {
+    for (const expense of operatingExpenseRecords) {
+      expenditureLines.push({
+        id: expense.id,
+        sourceType: "expense_record",
+        serviceOrCategory: expense.categoryName,
+        description: expense.description,
+        amount: expense.amount,
+        timestamp: expense.createdAt.toISOString(),
+        staffName: expense.staffName,
+        branch: branch.code as Branch,
+        branchName: branch.name,
+        businessDate: date,
+        category: expense.categoryName,
+        status: "recorded",
+      });
     }
-    expenseRecordKeys.add(
-      `${expense.description.trim().toLowerCase()}|${expense.amount}`
-    );
-    expenditureLines.push({
-      id: expense.id,
-      sourceType: "expense_record",
-      serviceOrCategory: expense.categoryName,
-      description: expense.description,
-      amount: expense.amount,
-      timestamp: expense.createdAt.toISOString(),
-      staffName: expense.staffName,
-      branch: branch.code as Branch,
-      branchName: branch.name,
-      businessDate: date,
-      category: expense.categoryName,
-      status: "recorded",
-    });
-  }
-
-  if (operation) {
+  } else if (operation) {
     for (const line of operation.expenses) {
       if (line.amount <= 0) continue;
-      const key = `${line.name.trim().toLowerCase()}|${line.amount}`;
-      if (expenseRecordKeys.has(key)) continue;
       if (isPayrollEntryExpense({ id: line.id, name: line.name, amount: line.amount })) {
         continue;
       }
