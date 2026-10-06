@@ -7,6 +7,7 @@ import {
   listDayClosings,
   openDay,
   openWithShift,
+  rejectCloseRequest,
   reopenDay,
   submitCloseRequest,
 } from "@/lib/server/services/day-closings-service";
@@ -58,6 +59,14 @@ export async function POST(request: Request) {
         module: "operations",
       });
       return jsonCreated(record);
+    }
+
+    if (action === "reject-close-request") {
+      const record = await withDatabase(() => rejectCloseRequest(body), {
+        request,
+        module: "operations",
+      });
+      return jsonOk(record);
     }
 
     if (action === "approve-close") {

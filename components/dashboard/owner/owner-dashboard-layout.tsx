@@ -2,6 +2,7 @@
 
 import { BusinessIntelligenceCard } from "@/components/dashboard/owner/business-intelligence-card";
 import { BusinessPulseKpis } from "@/components/dashboard/owner/business-pulse-kpis";
+import { OwnerFinancialDetail } from "@/components/dashboard/owner/owner-financial-detail";
 import { MissionControlBranchStrip } from "@/components/dashboard/owner/mission-control-branch-strip";
 import { MissionControlCloseRequests } from "@/components/dashboard/owner/mission-control-close-requests";
 import { MissionControlClosedSummary } from "@/components/dashboard/owner/mission-control-closed-summary";
@@ -35,6 +36,8 @@ export function OwnerDashboardLayout({ displayName }: OwnerDashboardLayoutProps)
       {isClosed ? <MissionControlClosedSummary /> : null}
 
       <BusinessPulseKpis />
+
+      <OwnerFinancialDetail />
 
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1.4fr)_minmax(280px,0.65fr)] xl:items-start">
         <TodayTimeline />

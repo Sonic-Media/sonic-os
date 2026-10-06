@@ -26,7 +26,10 @@ export type AuditAction =
   | "Open Shop"
   | "Start Shift"
   | "Clock In"
-  | "Clock Out";
+  | "Clock Out"
+  | "Expense Corrected"
+  | "Close Request Rejected"
+  | "Business Day Wipe";
 
 export interface AuditLogRecord {
   id: string;

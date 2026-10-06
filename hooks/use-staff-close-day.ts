@@ -56,7 +56,9 @@ export function useStaffCloseDay(date?: string) {
       resolveBranchEntityForMetrics(activeBranch, getBranchByCode, getBranchName),
     [activeBranch, getBranchByCode, getBranchName]
   );
-  const shopOpen = Boolean(activeRecord?.status === "open");
+  const shopOpen = Boolean(
+    activeRecord?.status === "open" || activeRecord?.status === "needs_correction"
+  );
 
   const metrics = useMemo(() => {
     return computeDayClosingMetrics(

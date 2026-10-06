@@ -10,6 +10,8 @@ import { PageContainer } from "@/components/shared/layout/page-container";
 import { PageHeader } from "@/components/shared/layout/page-header";
 import { PageSkeleton } from "@/components/shared/page-skeleton";
 import { useCalendarPage } from "@/hooks/use-calendar-page";
+import { useAuth } from "@/context/auth-context";
+import { useActiveBranch } from "@/context/active-branch-context";
 
 export function CalendarWorkspace() {
   const {
@@ -31,6 +33,9 @@ export function CalendarWorkspace() {
     branchFilter,
     setBranchFilter,
   } = useCalendarPage();
+  const { session } = useAuth();
+  const { activeBranch } = useActiveBranch();
+  const isOwner = session?.role === "owner";
 
   if (!isLoaded) {
     return <PageSkeleton />;
@@ -86,6 +91,9 @@ export function CalendarWorkspace() {
             <CalendarDayDetail
               date={selectedDate}
               transactions={selectedTransactions}
+              isOwner={isOwner}
+              branch={activeBranch}
+              branchName={getBranchName(activeBranch)}
             />
           ) : null}
         </div>
@@ -94,6 +102,9 @@ export function CalendarWorkspace() {
           <CalendarDayDetail
             date={selectedDate}
             transactions={selectedTransactions}
+            isOwner={isOwner}
+            branch={activeBranch}
+            branchName={getBranchName(activeBranch)}
           />
         ) : null}
       </div>

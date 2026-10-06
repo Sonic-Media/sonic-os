@@ -89,6 +89,16 @@ export function ExpenseDetailCard({ expense }: ExpenseDetailCardProps) {
           />
         )}
         <TotalsField
+          label="Recorded at"
+          value={new Date(expense.createdAt).toLocaleString("en-UG", {
+            day: "numeric",
+            month: "short",
+            year: "numeric",
+            hour: "numeric",
+            minute: "2-digit",
+          })}
+        />
+        <TotalsField
           label="Notes"
           value={linkedPayment?.notes ?? expense.notes ?? EXPENSES_PLACEHOLDER}
           valueClassName={

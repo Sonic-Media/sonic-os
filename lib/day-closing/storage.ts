@@ -1,5 +1,9 @@
 import { getActiveOpenDayRecord as resolveActiveOpenDayRecord } from "@/lib/day-closing/business-date";
 import { branchCodesReferToSameInventory } from "@/lib/branch/codes";
+import {
+  DAY_CLOSING_STATUS,
+  isActiveBusinessDayStatus,
+} from "@/lib/day-closing/status";
 import type { Branch } from "@/types";
 import type { DayClosingRecord, DayClosingStatus } from "@/types/day-closing";
 
@@ -34,9 +38,14 @@ function normalizeBranchCode(value: unknown): Branch {
 }
 
 function normalizeStatus(value: unknown): DayClosingStatus {
-  if (value === "closed") return "closed";
-  if (value === "close_requested") return "close_requested";
-  return "open";
+  if (value === DAY_CLOSING_STATUS.CLOSED) return DAY_CLOSING_STATUS.CLOSED;
+  if (value === DAY_CLOSING_STATUS.CLOSE_REQUESTED) {
+    return DAY_CLOSING_STATUS.CLOSE_REQUESTED;
+  }
+  if (value === DAY_CLOSING_STATUS.NEEDS_CORRECTION) {
+    return DAY_CLOSING_STATUS.NEEDS_CORRECTION;
+  }
+  return DAY_CLOSING_STATUS.OPEN;
 }
 
 export function normalizeDayClosingRecord(value: unknown): DayClosingRecord | null {
@@ -85,8 +94,33 @@ export function getOpenDayRecord(
     (record) =>
       matchesBranch(record.branch, branch) &&
       record.date === date &&
-      record.status === "open" &&
+      record.status === DAY_CLOSING_STATUS.OPEN &&
       !!(record.openedAt || record.reopenedAt)
+  );
+}
+
+export function getNeedsCorrectionRecord(
+  branch: Branch,
+  date: string,
+  records: DayClosingRecord[] = uiDayClosingsCache
+): DayClosingRecord | undefined {
+  return records.find(
+    (record) =>
+      matchesBranch(record.branch, branch) &&
+      record.date === date &&
+      record.status === DAY_CLOSING_STATUS.NEEDS_CORRECTION &&
+      !!(record.openedAt || record.reopenedAt)
+  );
+}
+
+export function getWritableDayRecord(
+  branch: Branch,
+  date: string,
+  records: DayClosingRecord[] = uiDayClosingsCache
+): DayClosingRecord | undefined {
+  return (
+    getOpenDayRecord(branch, date, records) ??
+    getNeedsCorrectionRecord(branch, date, records)
   );
 }
 
@@ -128,7 +162,7 @@ export function isBranchDayOpened(
   date: string,
   records: DayClosingRecord[] = uiDayClosingsCache
 ): boolean {
-  const record = getOpenDayRecord(branch, date, records);
+  const record = getWritableDayRecord(branch, date, records);
   if (!record) return false;
   return !!(record.openedAt || record.reopenedAt);
 }
@@ -158,7 +192,7 @@ export function canRecordTodaysActivity(
   const activeRecord = resolveActiveOpenDayRecord(branch, records);
   return (
     !!activeRecord &&
-    (activeRecord.status === "open" || activeRecord.status === "close_requested")
+    isActiveBusinessDayStatus(activeRecord.status)
   );
 }
 

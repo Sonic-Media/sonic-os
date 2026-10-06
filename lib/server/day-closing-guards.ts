@@ -3,6 +3,7 @@ import { getTodayISO } from "@/lib/dates";
 import {
   canApproveAndClose,
   canOpenShop,
+  canRejectCloseRequest,
   canSubmitCloseRequest,
 } from "@/lib/day-closing/permissions";
 import { getBranchDayState } from "@/lib/server/services/day-closings-service";
@@ -39,6 +40,15 @@ export function assertCanSubmitCloseRequest(session: AuthSession): void {
 export function assertCanApproveAndClose(session: AuthSession): void {
   if (!canApproveAndClose(session.role)) {
     throw new ApiError("You do not have permission to approve and close the day.", {
+      status: 403,
+      code: "forbidden",
+    });
+  }
+}
+
+export function assertCanRejectCloseRequest(session: AuthSession): void {
+  if (!canRejectCloseRequest(session.role)) {
+    throw new ApiError("You do not have permission to reject a closing request.", {
       status: 403,
       code: "forbidden",
     });
@@ -82,7 +92,8 @@ export async function assertBranchDayOpenForWrite(
   if (
     date === getTodayISO() &&
     state !== "open" &&
-    state !== "close_requested"
+    state !== "close_requested" &&
+    state !== "needs_correction"
   ) {
     throw new ApiError("Start today's shift before recording today's activity.", {
       status: 409,

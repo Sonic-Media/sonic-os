@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { formatEntryDisplayDate } from "@/lib/dates";
 import type {
@@ -8,10 +9,22 @@ import type {
 } from "@/lib/transactions/types";
 import { uiSurface } from "@/lib/ui/design-tokens";
 import { cn } from "@/lib/utils";
+import { formatCurrency } from "@/lib/format";
+import { Button } from "@/components/shared/ui/button";
+import { Input } from "@/components/shared/ui/input";
+import {
+  previewBusinessDayWipeApi,
+  wipeBusinessDayApi,
+} from "@/lib/api/financial-corrections";
+import type { BusinessDayWipePreview } from "@/types/financial-correction";
+import type { Branch } from "@/types";
 
 interface CalendarDayDetailProps {
   date: string;
   transactions: BusinessTransaction[];
+  isOwner?: boolean;
+  branch?: Branch;
+  branchName?: string;
 }
 
 const typeAccent: Partial<Record<BusinessTransactionType, string>> = {
@@ -31,7 +44,51 @@ function resolveAccent(type: BusinessTransactionType): string {
   );
 }
 
-export function CalendarDayDetail({ date, transactions }: CalendarDayDetailProps) {
+export function CalendarDayDetail({
+  date,
+  transactions,
+  isOwner = false,
+  branch,
+  branchName,
+}: CalendarDayDetailProps) {
+  const [wipeOpen, setWipeOpen] = useState(false);
+  const [preview, setPreview] = useState<BusinessDayWipePreview | null>(null);
+  const [confirmation, setConfirmation] = useState("");
+  const [wipeError, setWipeError] = useState<string | null>(null);
+  const [wiping, setWiping] = useState(false);
+
+  async function openWipe() {
+    if (!branch) return;
+    setWipeError(null);
+    try {
+      const next = await previewBusinessDayWipeApi({ branch, date });
+      setPreview(next);
+      setWipeOpen(true);
+    } catch (error) {
+      setWipeError(error instanceof Error ? error.message : "Could not load wipe preview.");
+    }
+  }
+
+  async function confirmWipe() {
+    if (!branch || !preview) return;
+    setWiping(true);
+    setWipeError(null);
+    try {
+      await wipeBusinessDayApi({
+        branch,
+        date,
+        confirmation,
+      });
+      setWipeOpen(false);
+      setConfirmation("");
+      window.location.reload();
+    } catch (error) {
+      setWipeError(error instanceof Error ? error.message : "Wipe failed.");
+    } finally {
+      setWiping(false);
+    }
+  }
+
   return (
     <aside className={cn(uiSurface.card, "overflow-hidden p-0")}>
       <div className="border-b border-white/[0.06] px-5 py-4">
@@ -47,6 +104,16 @@ export function CalendarDayDetail({ date, transactions }: CalendarDayDetailProps
         >
           Open operations for this date
         </Link>
+        {isOwner && branch ? (
+          <div className="mt-4">
+            <Button type="button" variant="secondary" onClick={() => void openWipe()}>
+              Wipe business day
+            </Button>
+          </div>
+        ) : null}
+        {wipeError && !wipeOpen ? (
+          <p className="mt-2 text-xs text-red-400">{wipeError}</p>
+        ) : null}
       </div>
 
       {transactions.length === 0 ? (
@@ -87,6 +154,16 @@ export function CalendarDayDetail({ date, transactions }: CalendarDayDetailProps
                     {transaction.detail}
                   </p>
                 ) : null}
+                {transaction.amount !== undefined ? (
+                  <p className="mt-0.5 text-xs tabular-nums text-zinc-400">
+                    {formatCurrency(transaction.amount)}
+                  </p>
+                ) : null}
+                {transaction.actorName ? (
+                  <p className="mt-0.5 text-xs text-zinc-500">
+                    Recorded by {transaction.actorName}
+                  </p>
+                ) : null}
                 {transaction.source ? (
                   <p className="mt-1 text-[10px] uppercase tracking-[0.14em] text-zinc-600">
                     {transaction.source}
@@ -97,6 +174,39 @@ export function CalendarDayDetail({ date, transactions }: CalendarDayDetailProps
           ))}
         </div>
       )}
+
+      {wipeOpen && preview ? (
+        <div className="border-t border-red-500/20 bg-red-500/[0.06] px-5 py-4">
+          <p className="text-sm font-semibold text-white">WIPE BUSINESS DAY</p>
+          <p className="mt-2 text-sm leading-relaxed text-zinc-300">
+            This will remove the operational records for {branchName ?? preview.branchName}{" "}
+            {formatEntryDisplayDate(date)}. This cannot be undone.
+          </p>
+          <p className="mt-3 text-xs text-zinc-500">
+            Type {preview.confirmationPhrase} to confirm.
+          </p>
+          <Input
+            className="mt-2"
+            value={confirmation}
+            onChange={(event) => setConfirmation(event.target.value)}
+          />
+          {wipeError ? <p className="mt-2 text-xs text-red-400">{wipeError}</p> : null}
+          <div className="mt-3 flex gap-3">
+            <Button type="button" variant="secondary" onClick={() => setWipeOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              loading={wiping}
+              disabled={confirmation !== preview.confirmationPhrase}
+              onClick={() => void confirmWipe()}
+              className="bg-red-600 hover:bg-red-500"
+            >
+              Wipe this day
+            </Button>
+          </div>
+        </div>
+      ) : null}
     </aside>
   );
 }

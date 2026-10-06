@@ -1,6 +1,7 @@
 "use client";
 
 import { useParams } from "next/navigation";
+import { ExpenseCorrectionHistory } from "@/components/expenses/expense-correction-history";
 import { ExpenseDetailCard } from "@/components/expenses/expense-detail-card";
 import { ExpenseNotFound } from "@/components/expenses/expense-not-found";
 import { ExpensesSubnav } from "@/components/expenses/expenses-subnav";
@@ -45,6 +46,7 @@ export default function ExpenseDetailPage() {
       <ExpensesSubnav />
 
       <ExpenseDetailCard expense={expense} />
+      <ExpenseCorrectionHistory expenseId={expense.id} />
 
       {renderDialogs()}
     </PageContainer>

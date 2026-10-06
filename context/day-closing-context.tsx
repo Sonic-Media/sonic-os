@@ -26,6 +26,7 @@ import {
   approveCloseDayApi,
   fetchDayClosings,
   openWithShiftApi,
+  rejectCloseRequestApi,
   reopenDayApi,
   submitCloseRequestApi,
 } from "@/lib/api/day-closings";
@@ -38,6 +39,7 @@ import {
   getActiveOpenDayRecord,
   getCloseRequestedRecord as findCloseRequestedRecord,
   getCloseRequestedRecords as listCloseRequestedRecords,
+  getNeedsCorrectionRecord as findNeedsCorrectionRecord,
   getClosedDayRecord as findClosedDayRecord,
   getOpenDayRecord as findOpenDayRecord,
   isBranchDayClosed as checkBranchDayClosed,
@@ -105,6 +107,11 @@ interface DayClosingContextValue {
   ) => Promise<DayClosingValidationResult>;
   submitCloseRequest: (input: CloseDayInput) => Promise<DayClosingValidationResult>;
   approveAndClose: (input: CloseDayInput) => Promise<DayClosingValidationResult>;
+  rejectCloseRequest: (
+    branch: Branch,
+    date: string,
+    reason: string
+  ) => Promise<DayClosingValidationResult>;
   /** @deprecated Use submitCloseRequest (staff) or approveAndClose (management). */
   closeDay: (input: CloseDayInput) => Promise<DayClosingValidationResult>;
   reopenDay: (
@@ -250,6 +257,11 @@ export function DayClosingProvider({ children }: { children: React.ReactNode }) 
         date,
         closingsRef.current
       );
+      const needsCorrection = findNeedsCorrectionRecord(
+        branch.code,
+        date,
+        closingsRef.current
+      );
       const open = findOpenDayRecord(branch.code, date, closingsRef.current);
       const activeOpen = getActiveOpenDayRecord(branch.code, closingsRef.current);
       const isOpen = checkBranchDayOpened(branch.code, date, closingsRef.current);
@@ -257,11 +269,15 @@ export function DayClosingProvider({ children }: { children: React.ReactNode }) 
         ? "closed"
         : closeRequested
           ? "close_requested"
-          : isOpen
-            ? "open"
-            : activeOpen?.status === "close_requested"
-              ? "close_requested"
-              : "waiting";
+          : needsCorrection
+            ? "needs_correction"
+            : isOpen
+              ? "open"
+              : activeOpen?.status === "close_requested"
+                ? "close_requested"
+                : activeOpen?.status === "needs_correction"
+                  ? "needs_correction"
+                  : "waiting";
 
       return {
         branch: branch.code,
@@ -650,6 +666,47 @@ export function DayClosingProvider({ children }: { children: React.ReactNode }) 
     [refreshClosingsFromApi, session, settings.ownerName]
   );
 
+  const rejectCloseRequest = useCallback(
+    async (
+      branch: Branch,
+      date: string,
+      reason: string
+    ): Promise<DayClosingValidationResult> => {
+      if (!session) {
+        return createValidationResult({
+          form: "You must be signed in to reject a closing request.",
+        });
+      }
+
+      const trimmed = reason.trim();
+      if (!trimmed) {
+        return createValidationResult({
+          form: "A rejection reason is required.",
+        });
+      }
+
+      try {
+        const saved = await runOnApi(() =>
+          rejectCloseRequestApi({ branch, date, reason: trimmed })
+        );
+        try {
+          await refreshClosingsFromApi();
+        } catch (refreshError) {
+          console.error(
+            "Reject persisted but closings refresh failed:",
+            getDataSourceErrorMessage(refreshError)
+          );
+        }
+        return createValidationResult({}, saved);
+      } catch (error) {
+        return createValidationResult({
+          form: toCloseDayFacingError(error),
+        });
+      }
+    },
+    [refreshClosingsFromApi, session]
+  );
+
   const value = useMemo(
     () => ({
       closings,
@@ -668,6 +725,7 @@ export function DayClosingProvider({ children }: { children: React.ReactNode }) 
       openDay,
       submitCloseRequest,
       approveAndClose,
+      rejectCloseRequest,
       closeDay,
       reopenDay,
     }),
@@ -688,6 +746,7 @@ export function DayClosingProvider({ children }: { children: React.ReactNode }) 
       openDay,
       submitCloseRequest,
       approveAndClose,
+      rejectCloseRequest,
       closeDay,
       reopenDay,
     ]

@@ -51,7 +51,8 @@ function TodayOperationsContent() {
   const hasActiveBusinessDay = Boolean(
     activeOpenRecord &&
       (activeOpenRecord.status === "open" ||
-        activeOpenRecord.status === "close_requested")
+        activeOpenRecord.status === "close_requested" ||
+        activeOpenRecord.status === "needs_correction")
   );
   const businessDate = hasActiveBusinessDay ? activeOpenRecord!.date : today;
 
