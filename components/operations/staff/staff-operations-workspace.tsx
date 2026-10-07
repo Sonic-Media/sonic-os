@@ -17,6 +17,7 @@ import { useLinkedStaff } from "@/hooks/use-linked-staff";
 import { useStaffCloseDay } from "@/hooks/use-staff-close-day";
 import { useStaffOperationsRefresh } from "@/hooks/use-staff-operations-refresh";
 import { useStaffPaymentsModule } from "@/context/staff-payments-context";
+import { useDayClosing } from "@/context/day-closing-context";
 import {
   computeStaffPayoutTotalForStaffBranchDate,
   findStaffDailyWagePayment,
@@ -68,6 +69,8 @@ export function StaffOperationsWorkspace({
   const { getBranchName } = useBranches();
   const { payments } = useStaffPaymentsModule();
   const { linkedStaff } = useLinkedStaff(branch);
+  const { getActiveOpenRecord } = useDayClosing();
+  const activeDayRecord = getActiveOpenRecord(branch);
   const { success: toastSuccess } = useToast();
   const [closeFlowError, setCloseFlowError] = useState<string | null>(null);
 
@@ -227,11 +230,8 @@ export function StaffOperationsWorkspace({
         <StaffActiveBusinessDayBanner
           businessDate={resolvedBusinessDate}
           calendarDate={calendarDate}
-          status={
-            activeBusinessDayStatus === "close_requested"
-              ? "close_requested"
-              : "open"
-          }
+          status={activeBusinessDayStatus ?? activeDayRecord?.status ?? "open"}
+          record={activeDayRecord}
         />
       ) : null}
 

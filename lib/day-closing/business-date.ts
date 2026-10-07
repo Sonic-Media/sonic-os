@@ -1,10 +1,11 @@
+import { isActiveBusinessDayStatus } from "@/lib/day-closing/status";
 import { branchCodesReferToSameInventory } from "@/lib/branch/codes";
 import type { Branch } from "@/types";
 import type { DayClosingRecord } from "@/types/day-closing";
 
 function isActiveBusinessDayRecord(record: DayClosingRecord): boolean {
   return (
-    (record.status === "open" || record.status === "close_requested") &&
+    isActiveBusinessDayStatus(record.status) &&
     !!(record.openedAt || record.reopenedAt)
   );
 }

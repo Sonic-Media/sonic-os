@@ -5,6 +5,7 @@ import { ReviewClosingRequestDialog } from "@/components/dashboard/closing-reque
 import { useBranches } from "@/context/branches-context";
 import { useDayClosing } from "@/context/day-closing-context";
 import { useManagementApproveClose } from "@/hooks/use-management-approve-close";
+import { useManagementRejectClose } from "@/hooks/use-management-reject-close";
 import { readCloseRequest } from "@/lib/day-closing/close-request";
 import { formatEntryDisplayDate } from "@/lib/dates";
 import { formatCurrency } from "@/lib/format";
@@ -107,11 +108,23 @@ export function ClosingRequestsPanel() {
     selectedRecord?.branch ?? "main",
     selectedRecord?.date ?? ""
   );
+  const { rejectClose, isRejecting, error: rejectError } = useManagementRejectClose();
 
   async function handleConfirmApprove() {
     if (!selectedRecord) return;
-
     const result = await approveClose(selectedRecord.closingNotes);
+    if (result.success) {
+      setSelectedRecord(null);
+    }
+  }
+
+  async function handleConfirmReject(reason: string) {
+    if (!selectedRecord) return;
+    const result = await rejectClose(
+      selectedRecord.branch,
+      selectedRecord.date,
+      reason
+    );
     if (result.success) {
       setSelectedRecord(null);
     }
@@ -154,9 +167,12 @@ export function ClosingRequestsPanel() {
           record={selectedRecord}
           branchName={getBranchName(selectedRecord.branch)}
           isSubmitting={isApproving}
+          isRejecting={isRejecting}
+          rejectError={rejectError}
           onApprove={() => void handleConfirmApprove()}
+          onReject={(reason) => void handleConfirmReject(reason)}
           onCancel={() => {
-            if (!isApproving) setSelectedRecord(null);
+            if (!isApproving && !isRejecting) setSelectedRecord(null);
           }}
         />
       ) : null}

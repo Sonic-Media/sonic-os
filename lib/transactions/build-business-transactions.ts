@@ -2,6 +2,7 @@ import { filterByBranchField } from "@/lib/active-branch/filters";
 import { branchCodesReferToSameInventory } from "@/lib/branch/codes";
 import { getTodayISO } from "@/lib/dates";
 import { findMostRecentEntryForDate } from "@/lib/entry-helpers";
+import { isPayrollEntryExpense } from "@/lib/expenses";
 import { formatCurrency } from "@/lib/format";
 import { formatSaleItemsSummary } from "@/lib/sales/format";
 import type { BusinessTransaction } from "@/lib/transactions/types";
@@ -153,7 +154,7 @@ export function buildBusinessTransactions({
       timestamp: expense.createdAt,
       sortKey: parseSortKey(expense.createdAt),
       timeLabel: formatTimeLabel(expense.createdAt),
-      title: "Expense added",
+      title: expense.description,
       detail: `${expense.categoryName} · ${formatCurrency(expense.amount)}`,
       amount: expense.amount,
       actorName: expense.staffName,
@@ -162,6 +163,42 @@ export function buildBusinessTransactions({
         ? "Late Entry"
         : "Today's Operations",
     });
+  }
+
+  const expenseRecordKeys = new Set(
+    expenses
+      .filter(
+        (expense) =>
+          expense.date === date &&
+          branchCodesReferToSameInventory(expense.branch, activeBranch) &&
+          !expense.staffPaymentId
+      )
+      .map(
+        (expense) =>
+          `${expense.description.trim().toLowerCase()}|${expense.amount}`
+      )
+  );
+
+  for (const entry of branchEntries) {
+    if (entry.date !== date) continue;
+    for (const expense of entry.expenses) {
+      if (expense.amount <= 0 || isPayrollEntryExpense(expense)) continue;
+      const key = `${expense.name.trim().toLowerCase()}|${expense.amount}`;
+      if (expenseRecordKeys.has(key)) continue;
+      transactions.push({
+        id: `entry-expense-${expense.id}`,
+        type: "Expense",
+        timestamp: entry.createdAt,
+        sortKey: parseSortKey(entry.createdAt),
+        timeLabel: formatTimeLabel(entry.createdAt),
+        title: expense.name,
+        detail: formatCurrency(expense.amount),
+        amount: expense.amount,
+        actorName: entry.staffName || entry.createdBy?.staffName,
+        branch: activeBranch,
+        source: "Today's Operations",
+      });
+    }
   }
 
   for (const purchase of purchases) {

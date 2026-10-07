@@ -492,6 +492,32 @@ model DayClosing {
   @@index([status])
 }
 
+model FinancialCorrection {
+  id                  String   @id @default(uuid()) @db.Uuid
+  kind                String
+  sourceType          String
+  sourceId            String
+  originalAmount      Int?
+  newAmount           Int?
+  originalDescription String?
+  newDescription      String?
+  changedFields       String[]
+  reason              String
+  actorUserId         String
+  actorName           String
+  actorRole           String
+  branchCode          String
+  businessDate        String
+  metadata            Json?
+  createdAt           DateTime @default(now())
+
+  @@index([sourceType, sourceId])
+  @@index([branchCode, businessDate])
+  @@index([kind])
+  @@index([createdAt])
+  @@index([actorUserId])
+}
+
 model AuditLogEntry {
   id         String   @id @default(uuid()) @db.Uuid
   timestamp  DateTime @default(now())

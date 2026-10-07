@@ -1,7 +1,11 @@
 import type { Branch } from "@/types";
 import type { StaffRoleId } from "@/types/staff-role";
 
-export type DayClosingStatus = "open" | "close_requested" | "closed";
+export type DayClosingStatus =
+  | "open"
+  | "close_requested"
+  | "needs_correction"
+  | "closed";
 
 export type DayClosingLiveStatus = DayClosingStatus | "waiting";
 

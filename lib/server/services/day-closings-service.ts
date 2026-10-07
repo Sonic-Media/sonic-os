@@ -17,13 +17,15 @@ import { requireSession } from "@/lib/server/session";
 import { isRoleGreetingLabel } from "@/lib/ux/user-display";
 import { buildStaffActionRecord } from "@/lib/staff/session";
 import { upsertDailyOperation } from "@/lib/server/services/daily-operations-service";
-import { withCloseRequest } from "@/lib/day-closing/close-request";
+import { withCloseRequest, withCloseRequestRejection } from "@/lib/day-closing/close-request";
 import {
   assertCanApproveAndClose,
   assertCanOpenShop,
+  assertCanRejectCloseRequest,
   assertCanSubmitCloseRequest,
   assertStaffOperationalRole,
 } from "@/lib/server/day-closing-guards";
+import { DAY_CLOSING_STATUS } from "@/lib/day-closing/status";
 import {
   createStartShiftAudit,
   getStaffOnShiftAtBranch,
@@ -52,6 +54,16 @@ const closeDaySchema = z.object({
   summary: z.record(z.string(), z.number()),
   closedBy: z.string().optional(),
   closedByName: z.string().optional(),
+});
+
+const rejectCloseRequestSchema = z.object({
+  branch: z.string().trim().min(1),
+  date: z.string().trim().min(1),
+  reason: z
+    .string()
+    .trim()
+    .min(1, "A rejection reason is required.")
+    .max(2000),
 });
 
 const reopenDaySchema = z.object({
@@ -488,7 +500,7 @@ async function findActiveOpenBusinessDays(branchId: string) {
   return prisma.dayClosing.findMany({
     where: {
       branchId,
-      status: { in: ["open", "close_requested"] },
+      status: { in: ["open", "close_requested", "needs_correction"] },
       OR: [{ openedAt: { not: null } }, { reopenedAt: { not: null } }],
     },
     orderBy: [{ date: "asc" }, { openedAt: "asc" }],
@@ -610,14 +622,14 @@ export async function submitCloseRequest(input: unknown): Promise<DayClosingReco
     },
   });
 
-  if (existing?.status === "closed") {
+  if (existing?.status === DAY_CLOSING_STATUS.CLOSED) {
     throw new ApiError("This branch day is already closed.", {
       status: 409,
       code: "day_already_closed",
     });
   }
 
-  if (existing?.status === "close_requested") {
+  if (existing?.status === DAY_CLOSING_STATUS.CLOSE_REQUESTED) {
     throw new ApiError("A closing request has already been submitted for this business day.", {
       status: 409,
       code: "close_request_already_pending",
@@ -657,7 +669,7 @@ export async function submitCloseRequest(input: unknown): Promise<DayClosingReco
   const record = await prisma.dayClosing.update({
     where: { id: existing!.id },
     data: {
-      status: "close_requested",
+      status: DAY_CLOSING_STATUS.CLOSE_REQUESTED,
       metrics: parsed.metrics as unknown as Prisma.InputJsonValue,
       staffPayouts: parsed.staffPayouts as unknown as Prisma.InputJsonValue,
       expectedCash: parsed.expectedCash,
@@ -701,7 +713,7 @@ export async function approveAndCloseDay(input: unknown): Promise<DayClosingReco
     },
   });
 
-  if (existing?.status !== "close_requested") {
+  if (existing?.status !== DAY_CLOSING_STATUS.CLOSE_REQUESTED) {
     throw new ApiError("No pending closing request exists for this business day.", {
       status: 409,
       code: "close_request_not_pending",
@@ -783,6 +795,97 @@ export async function approveAndCloseDay(input: unknown): Promise<DayClosingReco
   return mapDayClosingRecord(record);
 }
 
+export async function rejectCloseRequest(input: unknown): Promise<DayClosingRecord> {
+  const parsed = rejectCloseRequestSchema.parse(input);
+  const session = await requireSession();
+  assertCanRejectCloseRequest(session);
+
+  const branch = parsed.branch as Branch;
+  const branchId = await getBranchIdForSession(session, branch);
+  const existing = await prisma.dayClosing.findUnique({
+    where: {
+      branchId_date: {
+        branchId,
+        date: parsed.date,
+      },
+    },
+  });
+
+  if (!existing || existing.status !== DAY_CLOSING_STATUS.CLOSE_REQUESTED) {
+    throw new ApiError("No pending closing request exists for this business day.", {
+      status: 409,
+      code: "close_request_not_pending",
+    });
+  }
+
+  const now = new Date();
+  const rejection = {
+    rejectedBy: session.userId,
+    rejectedByName: session.displayName,
+    rejectedAt: now.toISOString(),
+    reason: parsed.reason.trim(),
+  };
+
+  const record = await prisma.$transaction(async (tx) => {
+    const updated = await tx.dayClosing.update({
+      where: { id: existing.id },
+      data: {
+        status: DAY_CLOSING_STATUS.NEEDS_CORRECTION,
+        summary: withCloseRequestRejection(existing.summary, rejection) as unknown as Prisma.InputJsonValue,
+      },
+    });
+
+    await tx.financialCorrection.create({
+      data: {
+        kind: "close_request_rejected",
+        sourceType: "day_closing",
+        sourceId: existing.id,
+        reason: parsed.reason.trim(),
+        actorUserId: session.userId,
+        actorName: session.displayName,
+        actorRole: session.role,
+        branchCode: branch,
+        businessDate: existing.date,
+        metadata: {
+          openedAt: existing.openedAt?.toISOString() ?? null,
+          closedAt: existing.closedAt?.toISOString() ?? null,
+          previousStatus: existing.status,
+          nextStatus: DAY_CLOSING_STATUS.NEEDS_CORRECTION,
+        },
+      },
+    });
+
+    await tx.auditLogEntry.create({
+      data: {
+        userId: session.userId,
+        userName: session.displayName,
+        role: session.role,
+        branchCode: branch,
+        action: "Close Request Rejected",
+        module: "operations",
+        recordId: existing.id,
+        detail: parsed.reason.trim(),
+        oldValues: { status: existing.status },
+        newValues: { status: DAY_CLOSING_STATUS.NEEDS_CORRECTION, reason: parsed.reason.trim() },
+      },
+    });
+
+    await tx.authAuditLog.create({
+      data: {
+        userId: session.userId,
+        username: session.username,
+        branchCode: branch,
+        action: "Close Request Rejected",
+        detail: `${existing.date}: ${parsed.reason.trim()}`,
+      },
+    });
+
+    return updated;
+  });
+
+  return mapDayClosingRecord(record);
+}
+
 /** @deprecated Staff must use submitCloseRequest; management uses approveAndCloseDay. */
 export async function closeDay(input: unknown): Promise<DayClosingRecord> {
   return approveAndCloseDay(input);
@@ -855,7 +958,12 @@ export async function getClosedDayRecord(
   return mapDayClosingRecord(record);
 }
 
-export type BranchDayState = "closed" | "open" | "close_requested" | "waiting";
+export type BranchDayState =
+  | "closed"
+  | "open"
+  | "close_requested"
+  | "needs_correction"
+  | "waiting";
 
 async function findDayClosingRow(branch: Branch, date: string) {
   const branchId = await getBranchIdByCode(branch);
@@ -885,6 +993,10 @@ export async function getBranchDayState(
 
   if (record.status === "close_requested") {
     return "close_requested";
+  }
+
+  if (record.status === "needs_correction") {
+    return "needs_correction";
   }
 
   if (record.openedAt || record.reopenedAt) {

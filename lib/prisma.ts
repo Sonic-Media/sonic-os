@@ -12,6 +12,7 @@ export type {
   DailyOperationExpense,
   ExpenseCategory,
   ExpenseRecord,
+  FinancialCorrection,
   Product,
   Purchase,
   PurchaseLineItem,

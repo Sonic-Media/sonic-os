@@ -18,6 +18,10 @@ export function canApproveAndClose(role: UserRole): boolean {
   return migrateLegacyAuthRole(role) === "branch-manager";
 }
 
+export function canRejectCloseRequest(role: UserRole): boolean {
+  return role === "owner";
+}
+
 export function canReopenDay(role: UserRole): boolean {
   if (role === "owner") return false;
   return migrateLegacyAuthRole(role) === "branch-manager";

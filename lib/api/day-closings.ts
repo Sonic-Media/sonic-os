@@ -30,6 +30,19 @@ export async function submitCloseRequestApi(
   });
 }
 
+export async function rejectCloseRequestApi(
+  input: {
+    branch: DayClosingRecord["branch"];
+    date: string;
+    reason: string;
+  }
+): Promise<DayClosingRecord> {
+  return apiPost<DayClosingRecord>("/api/day-closings", {
+    ...input,
+    action: "reject-close-request",
+  });
+}
+
 export async function approveCloseDayApi(
   input: Omit<DayClosingRecord, "id" | "createdAt" | "updatedAt" | "status"> & {
     status?: DayClosingRecord["status"];

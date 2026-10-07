@@ -51,6 +51,10 @@ Individual fix reports may describe **old behavior before the fix** as part of t
 | [sonic-os-branch-inventory-refactor-report.md](../sonic-os-branch-inventory-refactor-report.md) | HISTORICAL | Aug 2026 inventory refactor certification | Point-in-time build/test output |
 | [sonic-os-terminal-log.md](../sonic-os-terminal-log.md) | TEST | Dev server / API log capture | Runtime logs |
 | [sonic-os-approval-terminal-log.md](../sonic-os-approval-terminal-log.md) | TEST | Approval flow log capture | Runtime logs |
+| [docs/data-integrity/V312-FINANCIAL-CORRECTIONS-AUDITABILITY.md](./data-integrity/V312-FINANCIAL-CORRECTIONS-AUDITABILITY.md) | CURRENT | v3.1.2 financial corrections, reject, single-day wipe, financial detail | Code + verify scripts on this branch |
+| `docs/data-integrity/V312-FINANCIAL-CORRECTIONS-AUDITABILITY.docx` | CURRENT | Matching Word report | Same as the Markdown report |
+| [docs/data-integrity/V312-FINDINGS-FOR-REVIEW.md](./data-integrity/V312-FINDINGS-FOR-REVIEW.md) | CURRENT | Shareable v3.1.2 findings brief for review | Implementation + verify results |
+| `docs/data-integrity/V312-FINDINGS-FOR-REVIEW.docx` | CURRENT | Matching Word brief | Same as the Markdown brief |
 
 ## Verification scripts (code, not prose docs)
 
